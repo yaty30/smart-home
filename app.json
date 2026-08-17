@@ -1,0 +1,20 @@
+{
+  "expo": {
+    "name": "Smart Home AC",
+    "slug": "smart-home-ac-controller",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "dark",
+    "assetBundlePatterns": [
+      "**/*"
+    ],
+    "ios": {
+      "supportsTablet": true
+    },
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#0B0B0D"
+      }
+    }
+  }
+}
