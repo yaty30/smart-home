@@ -1,72 +1,124 @@
-import { Wind } from 'lucide-react-native';
-import { StyleSheet, Switch, Text, View } from 'react-native';
+import { Smartphone, Wind } from "lucide-react-native";
+import { StyleSheet, Switch, Text, View } from "react-native";
 
-import { theme } from '../theme/theme';
-import type { AirflowLevel, ControlOption } from '../types/airConditioner';
-import { ControlButtonGroup } from './ControlButtonGroup';
+import { theme } from "../theme/theme";
+import type {
+  AirflowLevel,
+  ControlIconProps,
+  ControlOption,
+  ControlOptionType,
+} from "../types/airConditioner";
+import { ControlButtonGroup } from "./ControlButtonGroup";
+
+const defaultAirConWindPosition = { top: 5, right: 2, size: 13, pl: 0 };
+
+const RotatingWind = ({ iconRotation = 0, ...props }: ControlIconProps) => {
+  return (
+    <Wind
+      {...props}
+      style={{
+        transform: [{ rotate: `${iconRotation}deg` }],
+      }}
+    />
+  );
+};
+
+const AirCon = ({ color, iconRotation = 0, strokeWidth, type = 3 }: ControlIconProps) => {
+  const types: ControlOptionType[] = [
+    defaultAirConWindPosition,
+    { top: 7, right: 3, size: 13, pl: 4 },
+    { top: 9, right: 4, size: 13, pl: 4 },
+    { top: 10, right: 4, size: 13, pl: 4 },
+    { top: 13, right: 7, size: 12, pl: 5 },
+  ];
+  
+  const option = types[type - 1] ?? defaultAirConWindPosition;
+
+  return (
+    <View style={{ flexDirection: "row", position: 'relative', left: option.pl }}>
+      <Smartphone
+        color={color}
+        size={18}
+        strokeWidth={strokeWidth}
+        style={{ position: "relative", bottom: 3 }}
+      />
+      <Wind
+        color={color}
+        size={option.size}
+        strokeWidth={strokeWidth}
+        style={{
+          position: "relative",
+          top: option.top,
+          right: option.right,
+          transform: [{ rotate: `${iconRotation}deg` }],
+        }}
+      />
+    </View>
+  );
+};
 
 const verticalAirflowOptions: ControlOption<AirflowLevel>[] = [
   {
-    id: 'one',
-    accessibilityLabel: 'Vertical airflow level 1',
-    icon: Wind,
+    id: "one",
+    accessibilityLabel: "Vertical airflow level 1",
+    icon: AirCon,
     iconRotation: 0,
   },
   {
-    id: 'two',
-    accessibilityLabel: 'Vertical airflow level 2',
-    icon: Wind,
-    iconRotation: 30,
+    id: "two",
+    accessibilityLabel: "Vertical airflow level 2",
+    icon: AirCon,
+    iconRotation: 10,
   },
   {
-    id: 'three',
-    accessibilityLabel: 'Vertical airflow level 3',
-    icon: Wind,
+    id: "three",
+    accessibilityLabel: "Vertical airflow level 3",
+    icon: AirCon,
+    iconRotation: 25,
+  },
+  {
+    id: "four",
+    accessibilityLabel: "Vertical airflow level 4",
+    icon: AirCon,
     iconRotation: 40,
   },
   {
-    id: 'four',
-    accessibilityLabel: 'Vertical airflow level 4',
-    icon: Wind,
-    iconRotation: 50,
-  },
-  {
-    id: 'five',
-    accessibilityLabel: 'Vertical airflow level 5',
-    icon: Wind,
+    id: "five",
+    accessibilityLabel: "Vertical airflow level 5",
+    icon: AirCon,
     iconRotation: 60,
   },
 ];
 
 const horizontalAirflowOptions: ControlOption<AirflowLevel>[] = [
   {
-    id: 'one',
-    accessibilityLabel: 'Horizontal airflow level 1',
-    icon: Wind,
+    id: "one",
+    accessibilityLabel: "Horizontal airflow level 1",
+    icon: RotatingWind,
     iconRotation: 150,
   },
   {
-    id: 'two',
-    accessibilityLabel: 'Horizontal airflow level 2',
-    icon: Wind,
+    id: "two",
+    accessibilityLabel: "Horizontal airflow level 2",
+    icon: RotatingWind,
     iconRotation: 120,
   },
   {
-    id: 'three',
-    accessibilityLabel: 'Horizontal airflow level 3',
-    icon: Wind,
+    id: "three",
+    accessibilityLabel: "Horizontal airflow level 3",
+    icon: RotatingWind,
     iconRotation: 90,
   },
   {
-    id: 'four',
-    accessibilityLabel: 'Horizontal airflow level 4',
-    icon: Wind,
+    id: "four",
+    accessibilityLabel: "Horizontal airflow level 4",
+    icon: RotatingWind,
     iconRotation: 50,
   },
   {
-    id: 'five',
-    accessibilityLabel: 'Horizontal airflow level 5',
-    icon: Wind,
+    id: "five",
+    accessibilityLabel: "Horizontal airflow level 5",
+    icon: RotatingWind,
     iconRotation: 30,
   },
 ];
@@ -83,10 +135,15 @@ function AirflowAutoSwitch({
   isAuto,
   isPowered,
   onChangeAuto,
-}: Pick<AirflowSelectorProps, 'isAuto' | 'isPowered' | 'onChangeAuto'>) {
+}: Pick<AirflowSelectorProps, "isAuto" | "isPowered" | "onChangeAuto">) {
   return (
     <View style={styles.autoControl}>
-      <Text style={[styles.autoLabel, isAuto && isPowered && styles.autoLabelActive]}>
+      <Text
+        style={[
+          styles.autoLabel,
+          isAuto && isPowered && styles.autoLabelActive,
+        ]}
+      >
         Auto
       </Text>
       <Switch
@@ -94,7 +151,9 @@ function AirflowAutoSwitch({
         disabled={!isPowered}
         ios_backgroundColor={theme.controlBackground}
         onValueChange={onChangeAuto}
-        thumbColor={isAuto && isPowered ? theme.accentBright : theme.textSecondary}
+        thumbColor={
+          isAuto && isPowered ? theme.accentBright : theme.textSecondary
+        }
         trackColor={{
           false: theme.controlBackgroundPressed,
           true: theme.accentMuted,
@@ -126,6 +185,7 @@ export function HorizontalAirflowSelector({
       onChange={onChangeLevel}
       options={horizontalAirflowOptions}
       selectedValue={selectedLevel}
+      suppressSelection={isAuto}
     />
   );
 }
@@ -151,20 +211,22 @@ export function VerticalAirflowSelector({
       onChange={onChangeLevel}
       options={verticalAirflowOptions}
       selectedValue={selectedLevel}
+      suppressSelection={isAuto}
     />
   );
 }
 
 const styles = StyleSheet.create({
   autoControl: {
-    alignItems: 'center',
-    flexDirection: 'row',
+    alignItems: "center",
+    flexDirection: "row",
     gap: theme.spacing.sm,
+    marginRight: theme.spacing.md,
   },
   autoLabel: {
     color: theme.textSecondary,
     fontSize: theme.typography.label,
-    fontWeight: '700',
+    fontWeight: "700",
     letterSpacing: 0,
   },
   autoLabelActive: {

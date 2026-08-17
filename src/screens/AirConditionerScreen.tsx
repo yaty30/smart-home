@@ -1,6 +1,8 @@
 import * as Haptics from 'expo-haptics';
 import { useCallback, useMemo, useRef, useState } from 'react';
 import {
+  type NativeScrollEvent,
+  type NativeSyntheticEvent,
   SafeAreaView,
   ScrollView,
   StyleSheet,
@@ -58,7 +60,10 @@ export function AirConditionerScreen() {
   const [fanAuto, setFanAuto] = useState(true);
   const [power, setPower] = useState(true);
   const [isAdjustingTemperature, setIsAdjustingTemperature] = useState(false);
+  const [isAdjustingFanSpeed, setIsAdjustingFanSpeed] = useState(false);
+  const [isHeaderScrolled, setIsHeaderScrolled] = useState(false);
   const latestTemperature = useRef(temperature);
+  const latestHeaderScrolled = useRef(false);
   const modeTemperatures = useRef<Partial<Record<AirConditionerMode, number>>>({
     auto: 24,
   });
@@ -159,13 +164,12 @@ export function AirConditionerScreen() {
 
   const handleFanSpeedChange = useCallback(
     (nextSpeed: FanSpeed) => {
-      triggerPressHaptic();
-      setFanAuto(false);
-
       if (fanSpeed === nextSpeed) {
         return;
       }
 
+      triggerPressHaptic();
+      setFanAuto(false);
       setFanSpeed(nextSpeed);
     },
     [fanSpeed, triggerPressHaptic],
@@ -184,16 +188,33 @@ export function AirConditionerScreen() {
     setPower((currentPower) => !currentPower);
   }, [triggerPressHaptic]);
 
+  const handleScroll = useCallback(
+    (event: NativeSyntheticEvent<NativeScrollEvent>) => {
+      const nextIsHeaderScrolled = event.nativeEvent.contentOffset.y > 0;
+
+      if (latestHeaderScrolled.current === nextIsHeaderScrolled) {
+        return;
+      }
+
+      latestHeaderScrolled.current = nextIsHeaderScrolled;
+      setIsHeaderScrolled(nextIsHeaderScrolled);
+    },
+    [],
+  );
+
   return (
     <SafeAreaView style={styles.safeArea}>
       <View style={styles.screen}>
         <ScrollView
           bounces={false}
           contentContainerStyle={styles.content}
-          scrollEnabled={!isAdjustingTemperature}
+          onScroll={handleScroll}
+          scrollEventThrottle={16}
+          scrollEnabled={!isAdjustingTemperature && !isAdjustingFanSpeed}
           showsVerticalScrollIndicator={false}
+          stickyHeaderIndices={[0]}
         >
-          <ACHeader location="Working Space" />
+          <ACHeader isScrolled={isHeaderScrolled} location="Working Space" />
 
           <View style={styles.gaugeSection}>
             <TemperatureGauge
@@ -222,6 +243,8 @@ export function AirConditionerScreen() {
               isPowered={power}
               onChangeAuto={handleFanAutoChange}
               onChangeSpeed={handleFanSpeedChange}
+              onInteractionEnd={() => setIsAdjustingFanSpeed(false)}
+              onInteractionStart={() => setIsAdjustingFanSpeed(true)}
               speed={fanSpeed}
             />
 
@@ -298,7 +321,7 @@ const styles = StyleSheet.create({
   powerArea: {
     justifyContent: 'center',
     minHeight: 128,
-    paddingBottom: theme.spacing.lg,
+    paddingBottom: theme.spacing.xxxl,
     paddingTop: theme.spacing.xl,
   },
 });

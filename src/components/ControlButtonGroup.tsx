@@ -1,8 +1,8 @@
-import type { ReactNode } from 'react';
-import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import type { ReactNode } from "react";
+import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
 
-import { theme } from '../theme/theme';
-import type { ControlOption } from '../types/airConditioner';
+import { theme } from "../theme/theme";
+import type { ControlOption } from "../types/airConditioner";
 
 type ControlButtonGroupProps<T extends string> = {
   label: string;
@@ -34,8 +34,9 @@ export function ControlButtonGroup<T extends string>({
         {labelAccessory}
       </View>
       <View style={[styles.group, disabled && styles.groupDisabled]}>
-        {options.map((option) => {
-          const active = !disabled && !suppressSelection && selectedValue === option.id;
+        {options.map((option, index) => {
+          const active =
+            !disabled && !suppressSelection && selectedValue === option.id;
 
           return (
             <TouchableOpacity
@@ -50,16 +51,7 @@ export function ControlButtonGroup<T extends string>({
             >
               <View style={styles.buttonContent}>
                 {option.icon ? (
-                  <View
-                    style={[
-                      styles.iconFrame,
-                      {
-                        transform: [
-                          { rotate: `${option.iconRotation ?? 0}deg` },
-                        ],
-                      },
-                    ]}
-                  >
+                  <View style={styles.iconFrame}>
                     <option.icon
                       color={
                         active
@@ -68,8 +60,10 @@ export function ControlButtonGroup<T extends string>({
                             ? theme.textSecondary
                             : theme.textMuted
                       }
+                      iconRotation={option.iconRotation ?? 0}
                       size={21}
                       strokeWidth={2.3}
+                      type={index + 1}
                     />
                   </View>
                 ) : null}
@@ -101,41 +95,41 @@ const styles = StyleSheet.create({
     gap: theme.spacing.md,
   },
   header: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+    alignItems: "center",
+    flexDirection: "row",
+    justifyContent: "space-between",
   },
   label: {
     color: theme.textMuted,
     fontSize: theme.typography.label,
-    fontWeight: '600',
+    fontWeight: "600",
     letterSpacing: 0,
-    textTransform: 'uppercase',
+    textTransform: "uppercase",
   },
   group: {
-    flexDirection: 'row',
+    flexDirection: "row",
     gap: theme.spacing.sm,
   },
   groupDisabled: {
     opacity: 0.56,
   },
   button: {
-    alignItems: 'center',
+    alignItems: "center",
     backgroundColor: theme.paperBackground,
     borderColor: theme.border,
     borderRadius: theme.radiusMedium,
     borderWidth: 1,
     flex: 1,
     height: 54,
-    justifyContent: 'center',
+    justifyContent: "center",
     minWidth: 0,
     paddingHorizontal: theme.spacing.sm,
   },
   buttonContent: {
-    alignItems: 'center',
-    flexDirection: 'row',
+    alignItems: "center",
+    flexDirection: "row",
     gap: theme.spacing.xs,
-    justifyContent: 'center',
+    justifyContent: "center",
     minWidth: 0,
   },
   buttonActive: {
@@ -154,13 +148,13 @@ const styles = StyleSheet.create({
     color: theme.textSecondary,
     flexShrink: 1,
     fontSize: 14,
-    fontWeight: '700',
+    fontWeight: "700",
     letterSpacing: 0,
   },
   iconFrame: {
-    alignItems: 'center',
+    alignItems: "center",
     height: 22,
-    justifyContent: 'center',
+    justifyContent: "center",
     width: 22,
   },
   buttonTextActive: {
