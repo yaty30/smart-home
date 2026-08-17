@@ -68,7 +68,7 @@ export function ControlButtonGroup<T extends string>({
                             ? theme.textSecondary
                             : theme.textMuted
                       }
-                      size={17}
+                      size={21}
                       strokeWidth={2.3}
                     />
                   </View>
@@ -77,7 +77,7 @@ export function ControlButtonGroup<T extends string>({
                   <Text
                     numberOfLines={1}
                     adjustsFontSizeToFit
-                    minimumFontScale={0.75}
+                    minimumFontScale={0.68}
                     style={[
                       styles.buttonText,
                       active && styles.buttonTextActive,
@@ -98,7 +98,7 @@ export function ControlButtonGroup<T extends string>({
 
 const styles = StyleSheet.create({
   container: {
-    gap: theme.spacing.sm,
+    gap: theme.spacing.md,
   },
   header: {
     alignItems: 'center',
@@ -110,27 +110,23 @@ const styles = StyleSheet.create({
     fontSize: theme.typography.label,
     fontWeight: '600',
     letterSpacing: 0,
+    textTransform: 'uppercase',
   },
   group: {
-    // backgroundColor: theme.paperBackgroundElevated,
-    // borderColor: theme.border,
-    // borderRadius: theme.radiusMedium,
-    // borderWidth: 1,
     flexDirection: 'row',
-    gap: theme.spacing.xs,
-    padding: theme.spacing.xs,
+    gap: theme.spacing.sm,
   },
   groupDisabled: {
     opacity: 0.56,
   },
   button: {
     alignItems: 'center',
-    backgroundColor: theme.controlBackground,
+    backgroundColor: theme.paperBackground,
     borderColor: theme.border,
-    borderRadius: theme.radiusSmall,
+    borderRadius: theme.radiusMedium,
     borderWidth: 1,
     flex: 1,
-    height: 44,
+    height: 54,
     justifyContent: 'center',
     minWidth: 0,
     paddingHorizontal: theme.spacing.sm,
@@ -157,15 +153,15 @@ const styles = StyleSheet.create({
   buttonText: {
     color: theme.textSecondary,
     flexShrink: 1,
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: '700',
     letterSpacing: 0,
   },
   iconFrame: {
     alignItems: 'center',
-    height: 18,
+    height: 22,
     justifyContent: 'center',
-    width: 18,
+    width: 22,
   },
   buttonTextActive: {
     color: theme.accent,

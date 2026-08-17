@@ -1,5 +1,12 @@
-import { useCallback, useMemo } from 'react';
-import { PanResponder, StyleSheet, Text, View } from 'react-native';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import {
+  Animated,
+  Easing,
+  PanResponder,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
 import Svg, { Circle, Defs, LinearGradient, Path, Stop } from 'react-native-svg';
 
 import { theme } from '../theme/theme';
@@ -34,11 +41,13 @@ export function TemperatureGauge({
   onInteractionEnd,
   onInteractionStart,
 }: TemperatureGaugeProps) {
+  const animatedTemperature = useRef(new Animated.Value(temperature)).current;
+  const [displayedTemperature, setDisplayedTemperature] = useState(temperature);
   const strokeWidth = Math.max(16, size * 0.06);
   const center = size / 2;
   const radius = center - strokeWidth - 12;
   const currentAngle = temperatureToAngle(
-    temperature,
+    displayedTemperature,
     minTemperature,
     maxTemperature,
   );
@@ -57,6 +66,25 @@ export function TemperatureGauge({
     GAUGE_START_ANGLE,
     GAUGE_START_ANGLE + GAUGE_SWEEP_ANGLE,
   );
+
+  useEffect(() => {
+    const listenerId = animatedTemperature.addListener(({ value }) => {
+      setDisplayedTemperature(value);
+    });
+
+    return () => {
+      animatedTemperature.removeListener(listenerId);
+    };
+  }, [animatedTemperature]);
+
+  useEffect(() => {
+    Animated.timing(animatedTemperature, {
+      duration: 240,
+      easing: Easing.out(Easing.cubic),
+      toValue: temperature,
+      useNativeDriver: false,
+    }).start();
+  }, [animatedTemperature, temperature]);
 
   const updateFromPoint = useCallback((locationX: number, locationY: number) => {
     if (!isPowered) {
@@ -161,7 +189,9 @@ export function TemperatureGauge({
 
       <View pointerEvents="none" style={styles.centerContent}>
         <View style={styles.temperatureRow}>
-          <Text style={styles.temperatureValue}>{temperature}</Text>
+          <Text style={styles.temperatureValue}>
+            {Math.round(displayedTemperature)}
+          </Text>
           <Text style={styles.temperatureUnit}>°C</Text>
         </View>
         <Text style={styles.roomLabel}>Room</Text>

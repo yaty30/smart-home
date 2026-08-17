@@ -10,9 +10,9 @@ const modes: ControlOption<AirConditionerMode>[] = [
     icon: Sparkles,
   },
   {
-    id: 'heat',
-    label: 'Heat',
-    icon: Flame,
+    id: 'cold',
+    label: 'Cold',
+    icon: Snowflake,
   },
   {
     id: 'dry',
@@ -20,9 +20,9 @@ const modes: ControlOption<AirConditionerMode>[] = [
     icon: DropletOff,
   },
   {
-    id: 'cold',
-    label: 'Cold',
-    icon: Snowflake,
+    id: 'heat',
+    label: 'Heat',
+    icon: Flame,
   },
 ];
 

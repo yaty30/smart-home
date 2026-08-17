@@ -126,7 +126,6 @@ export function HorizontalAirflowSelector({
       onChange={onChangeLevel}
       options={horizontalAirflowOptions}
       selectedValue={selectedLevel}
-      suppressSelection={isAuto}
     />
   );
 }
@@ -152,7 +151,6 @@ export function VerticalAirflowSelector({
       onChange={onChangeLevel}
       options={verticalAirflowOptions}
       selectedValue={selectedLevel}
-      suppressSelection={isAuto}
     />
   );
 }
@@ -162,7 +160,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     flexDirection: 'row',
     gap: theme.spacing.sm,
-    marginRight: theme.spacing.md,
   },
   autoLabel: {
     color: theme.textSecondary,

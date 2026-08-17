@@ -160,6 +160,7 @@ export function AirConditionerScreen() {
   const handleFanSpeedChange = useCallback(
     (nextSpeed: FanSpeed) => {
       triggerPressHaptic();
+      setFanAuto(false);
 
       if (fanSpeed === nextSpeed) {
         return;
@@ -208,6 +209,14 @@ export function AirConditionerScreen() {
           </View>
 
           <View style={styles.controls}>
+            <ModeSelector
+              isPowered={power}
+              onChangeMode={handleModeChange}
+              selectedMode={mode}
+            />
+
+            <View style={styles.controlDivider} />
+
             <FanSpeedControl
               isAuto={fanAuto}
               isPowered={power}
@@ -216,11 +225,7 @@ export function AirConditionerScreen() {
               speed={fanSpeed}
             />
 
-            <ModeSelector
-              isPowered={power}
-              onChangeMode={handleModeChange}
-              selectedMode={mode}
-            />
+            <View style={styles.controlDivider} />
 
             <HorizontalAirflowSelector
               isAuto={horizontalAirflowAuto}
@@ -229,6 +234,8 @@ export function AirConditionerScreen() {
               onChangeLevel={handleHorizontalAirflowChange}
               selectedLevel={horizontalAirflow}
             />
+
+            <View style={styles.controlDivider} />
 
             <VerticalAirflowSelector
               isAuto={verticalAirflowAuto}
@@ -267,12 +274,30 @@ const styles = StyleSheet.create({
     paddingHorizontal: theme.spacing.xl,
   },
   controls: {
-    gap: theme.spacing.md,
-    paddingHorizontal: theme.spacing.xl,
+    backgroundColor: theme.surfaceLow,
+    borderColor: theme.borderStrong,
+    borderRadius: theme.radiusLarge,
+    borderWidth: 1,
+    gap: theme.spacing.lg,
+    marginHorizontal: theme.spacing.xl,
+    paddingHorizontal: theme.spacing.lg,
+    paddingVertical: theme.spacing.lg,
+    shadowColor: '#000000',
+    shadowOffset: {
+      height: 14,
+      width: 0,
+    },
+    shadowOpacity: 0.22,
+    shadowRadius: 24,
+  },
+  controlDivider: {
+    backgroundColor: theme.border,
+    height: 1,
+    width: '100%',
   },
   powerArea: {
     justifyContent: 'center',
-    minHeight: 124,
+    minHeight: 128,
     paddingBottom: theme.spacing.lg,
     paddingTop: theme.spacing.xl,
   },

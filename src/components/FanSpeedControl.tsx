@@ -1,8 +1,10 @@
 import { Fan } from 'lucide-react-native';
-import { useEffect, useMemo, useRef } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Animated,
-  Pressable,
+  type DimensionValue,
+  type LayoutChangeEvent,
+  PanResponder,
   StyleSheet,
   Switch,
   Text,
@@ -42,7 +44,11 @@ export function FanSpeedControl({
   const duration = useRef(1300);
   const lastFrameTime = useRef<number | null>(null);
   const frame = useRef<number | null>(null);
-  const controlsDisabled = !isPowered || isAuto;
+  const [sliderWidth, setSliderWidth] = useState(0);
+  const controlsDisabled = !isPowered;
+  const activeTrackWidth: DimensionValue =
+    `${((speed - 1) / (fanSteps.length - 1)) * 100}%`;
+  const thumbLeft: DimensionValue = activeTrackWidth;
 
   duration.current = isAuto ? 1300 : fanDurations[speed];
 
@@ -82,6 +88,40 @@ export function FanSpeedControl({
       outputRange: ['0deg', '360deg'],
     });
   }, [rotation]);
+
+  const handleSliderLayout = useCallback((event: LayoutChangeEvent) => {
+    setSliderWidth(event.nativeEvent.layout.width);
+  }, []);
+
+  const handleSpeedFromLocation = useCallback(
+    (locationX: number) => {
+      if (!isPowered || sliderWidth <= 0) {
+        return;
+      }
+
+      const boundedX = Math.min(Math.max(locationX, 0), sliderWidth);
+      const nextStep = Math.round(
+        (boundedX / sliderWidth) * (fanSteps.length - 1),
+      );
+      onChangeSpeed((nextStep + 1) as FanSpeed);
+    },
+    [isPowered, onChangeSpeed, sliderWidth],
+  );
+
+  const sliderPanResponder = useMemo(
+    () =>
+      PanResponder.create({
+        onMoveShouldSetPanResponder: () => isPowered,
+        onStartShouldSetPanResponder: () => isPowered,
+        onPanResponderGrant: (event) => {
+          handleSpeedFromLocation(event.nativeEvent.locationX);
+        },
+        onPanResponderMove: (event) => {
+          handleSpeedFromLocation(event.nativeEvent.locationX);
+        },
+      }),
+    [handleSpeedFromLocation, isPowered],
+  );
 
   return (
     <View style={[styles.container, !isPowered && styles.containerDisabled]}>
@@ -123,33 +163,59 @@ export function FanSpeedControl({
 
         <View
           accessibilityLabel="Fan speed slider"
+          accessibilityRole="adjustable"
           accessibilityState={{ disabled: controlsDisabled }}
-          style={[styles.slider, controlsDisabled && styles.sliderDisabled]}
+          accessibilityValue={{
+            min: 1,
+            max: 5,
+            now: speed,
+            text: `Fan speed ${speed}`,
+          }}
+          onLayout={handleSliderLayout}
+          style={[styles.slider, !isPowered && styles.sliderDisabled]}
+          {...sliderPanResponder.panHandlers}
         >
-          <View style={styles.track} />
-          {fanSteps.map((step) => {
-            const active = isPowered && !isAuto && step <= speed;
-            const selected = isPowered && !isAuto && step === speed;
+          <View pointerEvents="none" style={styles.track}>
+            <View
+              style={[
+                styles.trackActive,
+                { width: isPowered ? activeTrackWidth : 0 },
+              ]}
+            />
+          </View>
+          <View
+            pointerEvents="none"
+            style={[
+              styles.sliderThumb,
+              isPowered && styles.sliderThumbActive,
+              { left: thumbLeft },
+            ]}
+          />
+          <View pointerEvents="none" style={styles.stepRow}>
+            {fanSteps.map((step) => {
+              const active = isPowered && step <= speed;
 
-            return (
-              <Pressable
-                accessibilityRole="button"
-                accessibilityState={{ selected, disabled: controlsDisabled }}
-                disabled={controlsDisabled}
-                key={step}
-                onPress={() => onChangeSpeed(step)}
-                style={styles.stepButton}
-              >
-                <View
-                  style={[
-                    styles.stepDot,
-                    active && styles.stepDotActive,
-                    selected && styles.stepDotSelected,
-                  ]}
-                />
-              </Pressable>
-            );
-          })}
+              return (
+                <View key={step} style={styles.step}>
+                  <View
+                    style={[
+                      styles.stepTick,
+                      active && styles.stepTickActive,
+                    ]}
+                  />
+                  <Text
+                    style={[
+                      styles.stepLabel,
+                      active && styles.stepLabelActive,
+                      !isPowered && styles.stepLabelDisabled,
+                    ]}
+                  >
+                    {step}
+                  </Text>
+                </View>
+              );
+            })}
+          </View>
         </View>
       </View>
     </View>
@@ -158,13 +224,7 @@ export function FanSpeedControl({
 
 const styles = StyleSheet.create({
   container: {
-    backgroundColor: theme.paperBackgroundElevated,
-    borderColor: theme.border,
-    borderRadius: theme.radiusMedium,
-    borderWidth: 1,
-    gap: theme.spacing.md,
-    paddingHorizontal: theme.spacing.md,
-    paddingVertical: theme.spacing.md,
+    gap: theme.spacing.lg,
   },
   containerDisabled: {
     opacity: 0.58,
@@ -179,12 +239,12 @@ const styles = StyleSheet.create({
     fontSize: theme.typography.label,
     fontWeight: '600',
     letterSpacing: 0,
+    textTransform: 'uppercase',
   },
   autoControl: {
     alignItems: 'center',
     flexDirection: 'row',
     gap: theme.spacing.sm,
-    marginRight: theme.spacing.md,
   },
   autoLabel: {
     color: theme.textSecondary,
@@ -206,18 +266,17 @@ const styles = StyleSheet.create({
     borderColor: theme.border,
     borderRadius: theme.radiusRound,
     borderWidth: 1,
-    height: 44,
+    height: 56,
     justifyContent: 'center',
-    width: 44,
+    width: 56,
   },
   fanShellActive: {
     borderColor: theme.borderActive,
   },
   slider: {
     flex: 1,
-    flexDirection: 'row',
-    height: 44,
-    justifyContent: 'space-between',
+    height: 62,
+    justifyContent: 'flex-start',
     position: 'relative',
   },
   sliderDisabled: {
@@ -225,41 +284,67 @@ const styles = StyleSheet.create({
   },
   track: {
     backgroundColor: theme.borderStrong,
-    height: 2,
-    left: 18,
-    position: 'absolute',
-    right: 18,
-    top: 21,
-  },
-  stepButton: {
-    alignItems: 'center',
-    height: 44,
-    justifyContent: 'center',
-    width: 36,
-  },
-  stepDot: {
-    backgroundColor: theme.paperBackground,
-    borderColor: theme.textMuted,
     borderRadius: theme.radiusRound,
-    borderWidth: 2,
-    height: 13,
-    width: 13,
+    height: 4,
+    left: 0,
+    overflow: 'hidden',
+    position: 'absolute',
+    right: 0,
+    top: 18,
   },
-  stepDotActive: {
-    backgroundColor: theme.accentSubtle,
-    borderColor: theme.accent,
+  trackActive: {
+    backgroundColor: theme.accent,
+    height: 4,
   },
-  stepDotSelected: {
+  sliderThumb: {
     backgroundColor: theme.thumb,
     borderColor: theme.accentBright,
-    height: 18,
+    borderRadius: theme.radiusRound,
+    borderWidth: 3,
+    height: 24,
+    marginLeft: -12,
+    position: 'absolute',
+    top: 8,
+    width: 24,
+  },
+  sliderThumbActive: {
     shadowColor: theme.accent,
     shadowOffset: {
       height: 4,
       width: 0,
     },
-    shadowOpacity: 0.22,
+    shadowOpacity: 0.26,
     shadowRadius: 10,
-    width: 18,
+  },
+  stepRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingTop: 36,
+  },
+  step: {
+    alignItems: 'center',
+    width: 24,
+  },
+  stepTick: {
+    backgroundColor: theme.borderStrong,
+    borderRadius: theme.radiusRound,
+    height: 4,
+    width: 4,
+  },
+  stepTickActive: {
+    backgroundColor: theme.accent,
+  },
+  stepLabel: {
+    color: theme.textSecondary,
+    fontSize: 13,
+    fontWeight: '600',
+    letterSpacing: 0,
+    marginTop: theme.spacing.sm,
+  },
+  stepLabelActive: {
+    color: theme.accent,
+  },
+  stepLabelDisabled: {
+    color: theme.textMuted,
   },
 });
