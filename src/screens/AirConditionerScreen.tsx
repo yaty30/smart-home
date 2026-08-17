@@ -1,5 +1,5 @@
-import * as Haptics from 'expo-haptics';
-import { useCallback, useMemo, useRef, useState } from 'react';
+import * as Haptics from "expo-haptics";
+import { useCallback, useMemo, useRef, useState } from "react";
 import {
   type NativeScrollEvent,
   type NativeSyntheticEvent,
@@ -8,33 +8,33 @@ import {
   StyleSheet,
   useWindowDimensions,
   View,
-} from 'react-native';
+} from "react-native";
 
-import { ACHeader } from '../components/ACHeader';
+import { ACHeader } from "../components/ACHeader";
 import {
   HorizontalAirflowSelector,
   VerticalAirflowSelector,
-} from '../components/AirflowSelectors';
-import { FanSpeedControl } from '../components/FanSpeedControl';
-import { ModeSelector } from '../components/ModeSelector';
-import { PowerButton } from '../components/PowerButton';
-import { TemperatureGauge } from '../components/TemperatureGauge';
-import { theme } from '../theme/theme';
+} from "../components/AirflowSelectors";
+import { FanSpeedControl } from "../components/FanSpeedControl";
+import { ModeSelector } from "../components/ModeSelector";
+import { PowerButton } from "../components/PowerButton";
+import { TemperatureGauge } from "../components/TemperatureGauge";
+import { theme } from "../theme/theme";
 import type {
   AirConditionerMode,
   AirflowLevel,
   FanSpeed,
-} from '../types/airConditioner';
+} from "../types/airConditioner";
 import {
   HEAT_MAX_TEMPERATURE,
   HEAT_MIN_TEMPERATURE,
   MAX_TEMPERATURE,
   MIN_TEMPERATURE,
   normalizeTemperature,
-} from '../utils/temperatureGauge';
+} from "../utils/temperatureGauge";
 
 const temperatureRangeForMode = (mode: AirConditionerMode) => {
-  if (mode === 'heat') {
+  if (mode === "heat") {
     return {
       min: HEAT_MIN_TEMPERATURE,
       max: HEAT_MAX_TEMPERATURE,
@@ -50,11 +50,11 @@ const temperatureRangeForMode = (mode: AirConditionerMode) => {
 export function AirConditionerScreen() {
   const { height, width } = useWindowDimensions();
   const [temperature, setTemperature] = useState(24);
-  const [mode, setMode] = useState<AirConditionerMode>('auto');
+  const [mode, setMode] = useState<AirConditionerMode>("auto");
   const [horizontalAirflow, setHorizontalAirflow] =
-    useState<AirflowLevel>('three');
+    useState<AirflowLevel>("three");
   const [horizontalAirflowAuto, setHorizontalAirflowAuto] = useState(true);
-  const [verticalAirflow, setVerticalAirflow] = useState<AirflowLevel>('one');
+  const [verticalAirflow, setVerticalAirflow] = useState<AirflowLevel>("one");
   const [verticalAirflowAuto, setVerticalAirflowAuto] = useState(true);
   const [fanSpeed, setFanSpeed] = useState<FanSpeed>(3);
   const [fanAuto, setFanAuto] = useState(true);
@@ -71,7 +71,11 @@ export function AirConditionerScreen() {
   const gaugeSize = useMemo(() => {
     const availableWidth = width - theme.spacing.xl * 2;
     const availableHeight = height * 0.39;
-    const baseSize = Math.min(Math.max(availableWidth, 278), availableHeight, 372);
+    const baseSize = Math.min(
+      Math.max(availableWidth, 278),
+      availableHeight,
+      372,
+    );
     return baseSize * 0.85;
   }, [height, width]);
 
@@ -113,7 +117,8 @@ export function AirConditionerScreen() {
       const nextRange = temperatureRangeForMode(nextMode);
       modeTemperatures.current[mode] = temperature;
 
-      const savedTemperature = modeTemperatures.current[nextMode] ?? temperature;
+      const savedTemperature =
+        modeTemperatures.current[nextMode] ?? temperature;
       const nextTemperature = normalizeTemperature(
         savedTemperature,
         nextRange.min,
@@ -291,8 +296,8 @@ const styles = StyleSheet.create({
     flexGrow: 1,
   },
   gaugeSection: {
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
     minHeight: 213,
     paddingHorizontal: theme.spacing.xl,
   },
@@ -305,7 +310,7 @@ const styles = StyleSheet.create({
     marginHorizontal: theme.spacing.xl,
     paddingHorizontal: theme.spacing.lg,
     paddingVertical: theme.spacing.lg,
-    shadowColor: '#000000',
+    shadowColor: "#000000",
     shadowOffset: {
       height: 14,
       width: 0,
@@ -316,12 +321,12 @@ const styles = StyleSheet.create({
   controlDivider: {
     backgroundColor: theme.border,
     height: 1,
-    width: '100%',
+    width: "100%",
   },
   powerArea: {
-    justifyContent: 'center',
+    justifyContent: "center",
     minHeight: 128,
-    paddingBottom: theme.spacing.xxxl,
+    paddingBottom: theme.spacing.xxxl + 20,
     paddingTop: theme.spacing.xl,
   },
 });
