@@ -19,6 +19,7 @@ import { FanSpeedControl } from "../components/FanSpeedControl";
 import { ModeSelector } from "../components/ModeSelector";
 import { PowerButton } from "../components/PowerButton";
 import { TemperatureGauge } from "../components/TemperatureGauge";
+import { useDeviceConnection } from "../context/DeviceConnectionContext";
 import { theme } from "../theme/theme";
 import type {
   AirConditionerMode,
@@ -47,7 +48,23 @@ const temperatureRangeForMode = (mode: AirConditionerMode) => {
   };
 };
 
+const modeToEspMode = (mode: AirConditionerMode) => {
+  switch (mode) {
+    case "auto":
+      return "auto";
+    case "cold":
+      return "cool";
+    case "dry":
+      return "dry";
+    case "heat":
+      return "heat";
+    default:
+      return "cool";
+  }
+};
+
 export function AirConditionerScreen() {
+  const { disconnectDevice, pairedDevice } = useDeviceConnection();
   const { height, width } = useWindowDimensions();
   const [temperature, setTemperature] = useState(24);
   const [mode, setMode] = useState<AirConditionerMode>("auto");
@@ -91,6 +108,37 @@ export function AirConditionerScreen() {
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
   }, []);
 
+  const sendAcCommand = useCallback(
+    async (params: Record<string, string | number>) => {
+      if (pairedDevice === null) {
+        return;
+      }
+
+      const host = pairedDevice.host.replace(/\/+$/, "");
+      const searchParams = new URLSearchParams();
+
+      Object.entries(params).forEach(([key, value]) => {
+        searchParams.append(key, String(value));
+      });
+
+      try {
+        const response = await fetch(`${host}/ac?${searchParams.toString()}`, {
+          headers: {
+            Authorization: `Bearer ${pairedDevice.token}`,
+          },
+          method: "GET",
+        });
+
+        if (!response.ok) {
+          console.warn("ESP32 AC request failed", response.status);
+        }
+      } catch (error) {
+        console.warn("ESP32 AC request could not be sent.", error);
+      }
+    },
+    [pairedDevice],
+  );
+
   const handleTemperatureChange = useCallback(
     (nextTemperature: number) => {
       const normalizedTemperature = normalizeTemperature(
@@ -129,8 +177,12 @@ export function AirConditionerScreen() {
       latestTemperature.current = nextTemperature;
       setMode(nextMode);
       setTemperature(nextTemperature);
+      void sendAcCommand({
+        mode: modeToEspMode(nextMode),
+        temp: nextTemperature,
+      });
     },
-    [mode, temperature, triggerPressHaptic],
+    [mode, sendAcCommand, temperature, triggerPressHaptic],
   );
 
   const handleHorizontalAirflowChange = useCallback(
@@ -190,8 +242,27 @@ export function AirConditionerScreen() {
 
   const handleTogglePower = useCallback(() => {
     triggerPressHaptic();
-    setPower((currentPower) => !currentPower);
-  }, [triggerPressHaptic]);
+    setPower((currentPower) => {
+      const nextPower = !currentPower;
+      void sendAcCommand({
+        power: nextPower ? "on" : "off",
+      });
+
+      return nextPower;
+    });
+  }, [sendAcCommand, triggerPressHaptic]);
+
+  const handleDisconnectDevice = useCallback(() => {
+    triggerPressHaptic();
+    void disconnectDevice();
+  }, [disconnectDevice, triggerPressHaptic]);
+
+  const handleTemperatureInteractionEnd = useCallback(() => {
+    setIsAdjustingTemperature(false);
+    void sendAcCommand({
+      temp: latestTemperature.current,
+    });
+  }, [sendAcCommand]);
 
   const handleScroll = useCallback(
     (event: NativeSyntheticEvent<NativeScrollEvent>) => {
@@ -219,7 +290,11 @@ export function AirConditionerScreen() {
           showsVerticalScrollIndicator={false}
           stickyHeaderIndices={[0]}
         >
-          <ACHeader isScrolled={isHeaderScrolled} location="Working Space" />
+          <ACHeader
+            isScrolled={isHeaderScrolled}
+            location="Working Space"
+            onBackPress={handleDisconnectDevice}
+          />
 
           <View style={styles.gaugeSection}>
             <TemperatureGauge
@@ -227,7 +302,7 @@ export function AirConditionerScreen() {
               maxTemperature={temperatureRange.max}
               minTemperature={temperatureRange.min}
               onChangeTemperature={handleTemperatureChange}
-              onInteractionEnd={() => setIsAdjustingTemperature(false)}
+              onInteractionEnd={handleTemperatureInteractionEnd}
               onInteractionStart={() => setIsAdjustingTemperature(true)}
               size={gaugeSize}
               temperature={temperature}

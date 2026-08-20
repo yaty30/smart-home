@@ -15,6 +15,14 @@
       "adaptiveIcon": {
         "backgroundColor": "#0B0B0D"
       }
-    }
+    },
+    "plugins": [
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Allow Smart Home AC to scan pairing QR codes."
+        }
+      ]
+    ]
   }
 }

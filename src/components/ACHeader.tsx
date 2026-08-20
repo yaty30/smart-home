@@ -14,9 +14,10 @@ import { theme } from "../theme/theme";
 type ACHeaderProps = {
   isScrolled: boolean;
   location: string;
+  onBackPress?: () => void;
 };
 
-export function ACHeader({ isScrolled, location }: ACHeaderProps) {
+export function ACHeader({ isScrolled, location, onBackPress }: ACHeaderProps) {
   const glassOpacity = useRef(new Animated.Value(isScrolled ? 1 : 0)).current;
 
   useEffect(() => {
@@ -47,7 +48,8 @@ export function ACHeader({ isScrolled, location }: ACHeaderProps) {
         <TouchableOpacity
           activeOpacity={0.72}
           accessibilityRole="button"
-          accessibilityLabel="Go back"
+          accessibilityLabel="Disconnect device"
+          onPress={onBackPress}
           style={styles.iconButton}
         >
           <ArrowLeft color={theme.text} size={22} strokeWidth={2.35} />
