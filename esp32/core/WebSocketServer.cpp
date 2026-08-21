@@ -1,0 +1,373 @@
+#include "WebSocketServer.h"
+
+#include "ACController.h"
+#include "Config.h"
+#include "Pairing.h"
+#include "State.h"
+#include "WiFiManager.h"
+
+#include <ctype.h>
+
+#if __has_include(<WebSocketsServer.h>)
+#include <WebSocketsServer.h>
+#define SMART_HOME_HAS_WEBSOCKETS 1
+#else
+#define SMART_HOME_HAS_WEBSOCKETS 0
+#endif
+
+const uint8_t MAX_AUTHENTICATED_CLIENTS = 8;
+bool authenticatedClients[MAX_AUTHENTICATED_CLIENTS] = { false };
+
+#if SMART_HOME_HAS_WEBSOCKETS
+WebSocketsServer webSocket(WEBSOCKET_PORT);
+#endif
+
+String webSocketUrl() {
+#if !SMART_HOME_HAS_WEBSOCKETS
+  return "";
+#else
+  if (!isWiFiConnected()) {
+    return "";
+  }
+
+  String url = "ws://";
+  url += currentIPString();
+  if (WEBSOCKET_PORT != 80) {
+    url += ":";
+    url += String(WEBSOCKET_PORT);
+  }
+  url += WEBSOCKET_PATH;
+  return url;
+#endif
+}
+
+String deviceStateJson() {
+  String body = "{";
+  body += "\"type\":\"state\",";
+  body += "\"ac\":" + acStateJson() + ",";
+  body += "\"connection\":{";
+  body += "\"wifi\":" + boolString(isWiFiConnected());
+  body += "}";
+  body += "}";
+  return body;
+}
+
+String commandAckJson(const String& requestId, bool ok, const String& error = "") {
+  String body = "{";
+  body += "\"type\":\"command.ack\",";
+  body += "\"requestId\":\"" + jsonEscape(requestId) + "\",";
+  body += "\"ok\":" + boolString(ok);
+  if (!ok) {
+    body += ",\"error\":\"" + jsonEscape(error) + "\"";
+  }
+  body += "}";
+  return body;
+}
+
+int jsonStringStart(const String& json, const String& key) {
+  String pattern = "\"" + key + "\"";
+  int keyIndex = json.indexOf(pattern);
+  if (keyIndex < 0) {
+    return -1;
+  }
+
+  int colonIndex = json.indexOf(':', keyIndex + pattern.length());
+  if (colonIndex < 0) {
+    return -1;
+  }
+
+  int quoteIndex = json.indexOf('"', colonIndex + 1);
+  if (quoteIndex < 0) {
+    return -1;
+  }
+
+  return quoteIndex + 1;
+}
+
+bool getJsonString(const String& json, const String& key, String& value) {
+  int start = jsonStringStart(json, key);
+  if (start < 0) {
+    return false;
+  }
+
+  String parsed;
+  bool escaped = false;
+  for (int i = start; i < json.length(); i++) {
+    char c = json[i];
+    if (escaped) {
+      parsed += c;
+      escaped = false;
+      continue;
+    }
+
+    if (c == '\\') {
+      escaped = true;
+      continue;
+    }
+
+    if (c == '"') {
+      value = parsed;
+      return true;
+    }
+
+    parsed += c;
+  }
+
+  return false;
+}
+
+String payloadToString(const uint8_t* payload, size_t length) {
+  String message;
+  message.reserve(length);
+
+  for (size_t i = 0; i < length; i++) {
+    message += static_cast<char>(payload[i]);
+  }
+
+  return message;
+}
+
+bool getJsonBool(const String& json, const String& key, bool& value) {
+  String pattern = "\"" + key + "\"";
+  int keyIndex = json.indexOf(pattern);
+  if (keyIndex < 0) {
+    return false;
+  }
+
+  int colonIndex = json.indexOf(':', keyIndex + pattern.length());
+  if (colonIndex < 0) {
+    return false;
+  }
+
+  int valueIndex = colonIndex + 1;
+  while (valueIndex < json.length() && isspace(json[valueIndex])) {
+    valueIndex++;
+  }
+
+  if (json.substring(valueIndex, valueIndex + 4) == "true") {
+    value = true;
+    return true;
+  }
+
+  if (json.substring(valueIndex, valueIndex + 5) == "false") {
+    value = false;
+    return true;
+  }
+
+  return false;
+}
+
+bool getJsonInt(const String& json, const String& key, int& value) {
+  String pattern = "\"" + key + "\"";
+  int keyIndex = json.indexOf(pattern);
+  if (keyIndex < 0) {
+    return false;
+  }
+
+  int colonIndex = json.indexOf(':', keyIndex + pattern.length());
+  if (colonIndex < 0) {
+    return false;
+  }
+
+  int valueIndex = colonIndex + 1;
+  while (valueIndex < json.length() && isspace(json[valueIndex])) {
+    valueIndex++;
+  }
+
+  int endIndex = valueIndex;
+  if (endIndex < json.length() && json[endIndex] == '-') {
+    endIndex++;
+  }
+
+  while (endIndex < json.length() && isDigit(json[endIndex])) {
+    endIndex++;
+  }
+
+  if (endIndex == valueIndex) {
+    return false;
+  }
+
+  value = json.substring(valueIndex, endIndex).toInt();
+  return true;
+}
+
+void markAuthenticated(uint8_t clientId, bool authenticated) {
+  if (clientId < MAX_AUTHENTICATED_CLIENTS) {
+    authenticatedClients[clientId] = authenticated;
+  }
+}
+
+bool isAuthenticated(uint8_t clientId) {
+  return clientId < MAX_AUTHENTICATED_CLIENTS && authenticatedClients[clientId];
+}
+
+void sendText(uint8_t clientId, const String& message) {
+#if SMART_HOME_HAS_WEBSOCKETS
+  webSocket.sendTXT(clientId, message);
+#else
+  (void)clientId;
+  (void)message;
+#endif
+}
+
+void closeClient(uint8_t clientId) {
+#if SMART_HOME_HAS_WEBSOCKETS
+  webSocket.disconnect(clientId);
+#else
+  (void)clientId;
+#endif
+}
+
+void handleAuthMessage(uint8_t clientId, const String& message) {
+  String token;
+  if (!getJsonString(message, "token", token) || !isAuthorizedToken(token)) {
+    sendText(clientId, "{\"type\":\"auth.result\",\"ok\":false,\"error\":\"invalid_token\"}");
+    closeClient(clientId);
+    return;
+  }
+
+  markAuthenticated(clientId, true);
+  sendText(clientId, "{\"type\":\"auth.result\",\"ok\":true}");
+  sendText(clientId, deviceStateJson());
+}
+
+void handleCommandMessage(uint8_t clientId, const String& message) {
+  String requestId;
+  String command;
+  if (!getJsonString(message, "requestId", requestId) || !getJsonString(message, "command", command)) {
+    sendText(clientId, commandAckJson(requestId, false, "invalid_command"));
+    return;
+  }
+
+  AcState nextState = acState;
+
+  if (command == "ac.power") {
+    bool power;
+    if (!getJsonBool(message, "value", power)) {
+      sendText(clientId, commandAckJson(requestId, false, "invalid_power"));
+      return;
+    }
+    nextState.power = power;
+  } else if (command == "ac.setTemperature") {
+    int temp;
+    if (!getJsonInt(message, "value", temp) || !parseTemperatureValue(temp, nextState.temperature)) {
+      sendText(clientId, commandAckJson(requestId, false, "invalid_temperature"));
+      return;
+    }
+  } else if (command == "ac.setMode") {
+    String mode;
+    if (!getJsonString(message, "value", mode) || !parseMode(mode, nextState.mode)) {
+      sendText(clientId, commandAckJson(requestId, false, "invalid_mode"));
+      return;
+    }
+  } else if (command == "ac.setFan") {
+    String fanText;
+    int fanNumber;
+    if (getJsonString(message, "value", fanText)) {
+      if (!parseFan(fanText, nextState.fan)) {
+        sendText(clientId, commandAckJson(requestId, false, "invalid_fan"));
+        return;
+      }
+    } else if (getJsonInt(message, "value", fanNumber)) {
+      if (fanNumber < 1 || fanNumber > 5) {
+        sendText(clientId, commandAckJson(requestId, false, "invalid_fan"));
+        return;
+      }
+      nextState.fan = static_cast<uint8_t>(fanNumber - 1);
+    } else {
+      sendText(clientId, commandAckJson(requestId, false, "invalid_fan"));
+      return;
+    }
+  } else if (command == "ac.setSwing") {
+    String swing;
+    if (!getJsonString(message, "value", swing) || !parseSwing(swing, nextState.swingVertical)) {
+      sendText(clientId, commandAckJson(requestId, false, "invalid_swing"));
+      return;
+    }
+  } else {
+    sendText(clientId, commandAckJson(requestId, false, "unsupported_command"));
+    return;
+  }
+
+  applyACState(nextState);
+  sendText(clientId, commandAckJson(requestId, true));
+  broadcastState();
+}
+
+void handleTextMessage(uint8_t clientId, const String& message) {
+  String type;
+  if (!getJsonString(message, "type", type)) {
+    sendText(clientId, "{\"type\":\"error\",\"error\":\"invalid_message\"}");
+    return;
+  }
+
+  if (!isAuthenticated(clientId)) {
+    if (type != "auth") {
+      sendText(clientId, "{\"type\":\"auth.result\",\"ok\":false,\"error\":\"auth_required\"}");
+      closeClient(clientId);
+      return;
+    }
+
+    handleAuthMessage(clientId, message);
+    return;
+  }
+
+  if (type == "command") {
+    handleCommandMessage(clientId, message);
+    return;
+  }
+
+  if (type == "state.get") {
+    sendText(clientId, deviceStateJson());
+    return;
+  }
+
+  sendText(clientId, "{\"type\":\"error\",\"error\":\"unsupported_type\"}");
+}
+
+#if SMART_HOME_HAS_WEBSOCKETS
+void onWebSocketEvent(uint8_t clientId, WStype_t type, uint8_t* payload, size_t length) {
+  switch (type) {
+    case WStype_DISCONNECTED:
+      markAuthenticated(clientId, false);
+      break;
+    case WStype_CONNECTED:
+      markAuthenticated(clientId, false);
+      break;
+    case WStype_TEXT:
+      handleTextMessage(clientId, payloadToString(payload, length));
+      break;
+    default:
+      break;
+  }
+}
+#endif
+
+void initWebSocketServer() {
+#if SMART_HOME_HAS_WEBSOCKETS
+  webSocket.begin();
+  webSocket.onEvent(onWebSocketEvent);
+
+  Serial.print("WebSocket server started at ");
+  Serial.println(webSocketUrl());
+#else
+  Serial.println("WebSocket server disabled: install the arduinoWebSockets library to enable runtime control");
+#endif
+}
+
+void handleWebSocketServer() {
+#if SMART_HOME_HAS_WEBSOCKETS
+  webSocket.loop();
+#endif
+}
+
+void broadcastState() {
+#if SMART_HOME_HAS_WEBSOCKETS
+  String state = deviceStateJson();
+  for (uint8_t clientId = 0; clientId < MAX_AUTHENTICATED_CLIENTS; clientId++) {
+    if (authenticatedClients[clientId]) {
+      webSocket.sendTXT(clientId, state);
+    }
+  }
+#endif
+}
