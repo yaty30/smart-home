@@ -20,6 +20,7 @@ void sendAC(const AcState& state) {
   ac.setTemp(state.temperature);
   ac.setFan(state.fan);
   ac.setSwingVertical(state.swingVertical);
+  ac.setSwingHorizontal(state.swingHorizontal);
   ac.send();
 
   Serial.print("Panasonic AC IR sent: power=");
@@ -29,7 +30,11 @@ void sendAC(const AcState& state) {
   Serial.print(", mode=");
   Serial.print(modeString(state.mode));
   Serial.print(", fan=");
-  Serial.println(fanString(state.fan));
+  Serial.print(fanString(state.fan));
+  Serial.print(", swingVertical=");
+  Serial.print(swingVerticalString(state.swingVertical));
+  Serial.print(", swingHorizontal=");
+  Serial.println(swingHorizontalString(state.swingHorizontal));
 }
 
 void queueACCommand(const AcState& state) {

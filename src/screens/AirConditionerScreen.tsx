@@ -63,6 +63,14 @@ const modeToEspMode = (mode: AirConditionerMode) => {
   }
 };
 
+const airflowLevelToEspPosition: Record<AirflowLevel, string> = {
+  one: "1",
+  two: "2",
+  three: "3",
+  four: "4",
+  five: "5",
+};
+
 export function AirConditionerScreen() {
   const { disconnectDevice, pairedDevice } = useDeviceConnection();
   const { height, width } = useWindowDimensions();
@@ -80,6 +88,7 @@ export function AirConditionerScreen() {
   const [isAdjustingFanSpeed, setIsAdjustingFanSpeed] = useState(false);
   const [isHeaderScrolled, setIsHeaderScrolled] = useState(false);
   const latestTemperature = useRef(temperature);
+  const latestFanSpeed = useRef<FanSpeed>(fanSpeed);
   const latestHeaderScrolled = useRef(false);
   const modeTemperatures = useRef<Partial<Record<AirConditionerMode, number>>>({
     auto: 24,
@@ -190,8 +199,11 @@ export function AirConditionerScreen() {
       triggerPressHaptic();
       setHorizontalAirflowAuto(false);
       setHorizontalAirflow(nextLevel);
+      void sendAcCommand({
+        swingHorizontal: airflowLevelToEspPosition[nextLevel],
+      });
     },
-    [triggerPressHaptic],
+    [sendAcCommand, triggerPressHaptic],
   );
 
   const handleVerticalAirflowChange = useCallback(
@@ -199,45 +211,62 @@ export function AirConditionerScreen() {
       triggerPressHaptic();
       setVerticalAirflowAuto(false);
       setVerticalAirflow(nextLevel);
+      void sendAcCommand({
+        swingVertical: airflowLevelToEspPosition[nextLevel],
+      });
     },
-    [triggerPressHaptic],
+    [sendAcCommand, triggerPressHaptic],
   );
 
   const handleHorizontalAirflowAutoChange = useCallback(
     (nextAuto: boolean) => {
       triggerPressHaptic();
       setHorizontalAirflowAuto(nextAuto);
+      if (nextAuto) {
+        void sendAcCommand({
+          swingHorizontal: "auto",
+        });
+      }
     },
-    [triggerPressHaptic],
+    [sendAcCommand, triggerPressHaptic],
   );
 
   const handleVerticalAirflowAutoChange = useCallback(
     (nextAuto: boolean) => {
       triggerPressHaptic();
       setVerticalAirflowAuto(nextAuto);
+      if (nextAuto) {
+        void sendAcCommand({
+          swingVertical: "auto",
+        });
+      }
     },
-    [triggerPressHaptic],
+    [sendAcCommand, triggerPressHaptic],
   );
 
   const handleFanSpeedChange = useCallback(
     (nextSpeed: FanSpeed) => {
-      if (fanSpeed === nextSpeed) {
+      if (!fanAuto && fanSpeed === nextSpeed) {
         return;
       }
 
       triggerPressHaptic();
+      latestFanSpeed.current = nextSpeed;
       setFanAuto(false);
       setFanSpeed(nextSpeed);
     },
-    [fanSpeed, triggerPressHaptic],
+    [fanAuto, fanSpeed, triggerPressHaptic],
   );
 
   const handleFanAutoChange = useCallback(
     (nextFanAuto: boolean) => {
       triggerPressHaptic();
       setFanAuto(nextFanAuto);
+      void sendAcCommand({
+        fan: nextFanAuto ? "auto" : latestFanSpeed.current,
+      });
     },
-    [triggerPressHaptic],
+    [sendAcCommand, triggerPressHaptic],
   );
 
   const handleTogglePower = useCallback(() => {
@@ -261,6 +290,13 @@ export function AirConditionerScreen() {
     setIsAdjustingTemperature(false);
     void sendAcCommand({
       temp: latestTemperature.current,
+    });
+  }, [sendAcCommand]);
+
+  const handleFanSpeedInteractionEnd = useCallback(() => {
+    setIsAdjustingFanSpeed(false);
+    void sendAcCommand({
+      fan: latestFanSpeed.current,
     });
   }, [sendAcCommand]);
 
@@ -323,7 +359,7 @@ export function AirConditionerScreen() {
               isPowered={power}
               onChangeAuto={handleFanAutoChange}
               onChangeSpeed={handleFanSpeedChange}
-              onInteractionEnd={() => setIsAdjustingFanSpeed(false)}
+              onInteractionEnd={handleFanSpeedInteractionEnd}
               onInteractionStart={() => setIsAdjustingFanSpeed(true)}
               speed={fanSpeed}
             />

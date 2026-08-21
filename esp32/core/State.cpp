@@ -5,7 +5,8 @@ AcState acState = {
   24,
   kPanasonicAcCool,
   kPanasonicAcFanAuto,
-  kPanasonicAcSwingVAuto
+  kPanasonicAcSwingVAuto,
+  kPanasonicAcSwingHAuto
 };
 
 bool pendingIR = false;
@@ -119,12 +120,40 @@ String fanDisplayLabel(uint8_t fan) {
   return "Fan";
 }
 
-String swingString(uint8_t swingVertical) {
+String swingVerticalString(uint8_t swingVertical) {
   if (swingVertical == kPanasonicAcSwingVAuto) {
     return "auto";
   }
 
   return String(swingVertical);
+}
+
+String swingHorizontalString(uint8_t swingHorizontal) {
+  if (swingHorizontal == kPanasonicAcSwingHAuto) {
+    return "auto";
+  }
+
+  if (swingHorizontal == kPanasonicAcSwingHFullLeft) {
+    return "1";
+  }
+
+  if (swingHorizontal == kPanasonicAcSwingHLeft) {
+    return "2";
+  }
+
+  if (swingHorizontal == kPanasonicAcSwingHMiddle) {
+    return "3";
+  }
+
+  if (swingHorizontal == kPanasonicAcSwingHRight) {
+    return "4";
+  }
+
+  if (swingHorizontal == kPanasonicAcSwingHFullRight) {
+    return "5";
+  }
+
+  return "unknown";
 }
 
 String acStateJson() {
@@ -133,7 +162,9 @@ String acStateJson() {
   body += "\"temperature\":" + String(acState.temperature) + ",";
   body += "\"mode\":\"" + modeString(acState.mode) + "\",";
   body += "\"fan\":\"" + fanString(acState.fan) + "\",";
-  body += "\"swing\":\"" + swingString(acState.swingVertical) + "\"";
+  body += "\"swing\":\"" + swingVerticalString(acState.swingVertical) + "\",";
+  body += "\"swingVertical\":\"" + swingVerticalString(acState.swingVertical) + "\",";
+  body += "\"swingHorizontal\":\"" + swingHorizontalString(acState.swingHorizontal) + "\"";
   body += "}";
   return body;
 }
@@ -229,11 +260,98 @@ bool parseFan(const String& value, uint8_t& fan) {
   return true;
 }
 
-bool parseSwing(const String& value, uint8_t& swingVertical) {
+bool parseSwingVertical(const String& value, uint8_t& swingVertical) {
   if (value == "auto") {
     swingVertical = kPanasonicAcSwingVAuto;
     return true;
   }
 
-  return false;
+  if (value == "highest" || value == "high" || value == "middle" || value == "low" || value == "lowest") {
+    if (value == "highest") {
+      swingVertical = kPanasonicAcSwingVHighest;
+    } else if (value == "high") {
+      swingVertical = kPanasonicAcSwingVHigh;
+    } else if (value == "middle") {
+      swingVertical = kPanasonicAcSwingVMiddle;
+    } else if (value == "low") {
+      swingVertical = kPanasonicAcSwingVLow;
+    } else {
+      swingVertical = kPanasonicAcSwingVLowest;
+    }
+    return true;
+  }
+
+  if (value.length() == 0) {
+    return false;
+  }
+
+  for (size_t i = 0; i < value.length(); i++) {
+    if (!isDigit(value[i])) {
+      return false;
+    }
+  }
+
+  int numericSwing = value.toInt();
+  if (numericSwing < 1 || numericSwing > 5) {
+    return false;
+  }
+
+  swingVertical = static_cast<uint8_t>(numericSwing);
+  return true;
+}
+
+bool parseSwingHorizontal(const String& value, uint8_t& swingHorizontal) {
+  if (value == "auto") {
+    swingHorizontal = kPanasonicAcSwingHAuto;
+    return true;
+  }
+
+  if (value == "full_left" || value == "left" || value == "middle" || value == "right" || value == "full_right") {
+    if (value == "full_left") {
+      swingHorizontal = kPanasonicAcSwingHFullLeft;
+    } else if (value == "left") {
+      swingHorizontal = kPanasonicAcSwingHLeft;
+    } else if (value == "middle") {
+      swingHorizontal = kPanasonicAcSwingHMiddle;
+    } else if (value == "right") {
+      swingHorizontal = kPanasonicAcSwingHRight;
+    } else {
+      swingHorizontal = kPanasonicAcSwingHFullRight;
+    }
+    return true;
+  }
+
+  if (value.length() == 0) {
+    return false;
+  }
+
+  for (size_t i = 0; i < value.length(); i++) {
+    if (!isDigit(value[i])) {
+      return false;
+    }
+  }
+
+  switch (value.toInt()) {
+    case 1:
+      swingHorizontal = kPanasonicAcSwingHFullLeft;
+      return true;
+    case 2:
+      swingHorizontal = kPanasonicAcSwingHLeft;
+      return true;
+    case 3:
+      swingHorizontal = kPanasonicAcSwingHMiddle;
+      return true;
+    case 4:
+      swingHorizontal = kPanasonicAcSwingHRight;
+      return true;
+    case 5:
+      swingHorizontal = kPanasonicAcSwingHFullRight;
+      return true;
+    default:
+      return false;
+  }
+}
+
+bool parseSwing(const String& value, uint8_t& swingVertical) {
+  return parseSwingVertical(value, swingVertical);
 }

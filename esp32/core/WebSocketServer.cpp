@@ -278,9 +278,37 @@ void handleCommandMessage(uint8_t clientId, const String& message) {
       sendText(clientId, commandAckJson(requestId, false, "invalid_fan"));
       return;
     }
-  } else if (command == "ac.setSwing") {
+  } else if (command == "ac.setSwing" || command == "ac.setSwingVertical") {
     String swing;
-    if (!getJsonString(message, "value", swing) || !parseSwing(swing, nextState.swingVertical)) {
+    int swingNumber;
+    if (getJsonString(message, "value", swing)) {
+      if (!parseSwingVertical(swing, nextState.swingVertical)) {
+        sendText(clientId, commandAckJson(requestId, false, "invalid_swing"));
+        return;
+      }
+    } else if (getJsonInt(message, "value", swingNumber)) {
+      if (!parseSwingVertical(String(swingNumber), nextState.swingVertical)) {
+        sendText(clientId, commandAckJson(requestId, false, "invalid_swing"));
+        return;
+      }
+    } else {
+      sendText(clientId, commandAckJson(requestId, false, "invalid_swing"));
+      return;
+    }
+  } else if (command == "ac.setSwingHorizontal") {
+    String swing;
+    int swingNumber;
+    if (getJsonString(message, "value", swing)) {
+      if (!parseSwingHorizontal(swing, nextState.swingHorizontal)) {
+        sendText(clientId, commandAckJson(requestId, false, "invalid_swing"));
+        return;
+      }
+    } else if (getJsonInt(message, "value", swingNumber)) {
+      if (!parseSwingHorizontal(String(swingNumber), nextState.swingHorizontal)) {
+        sendText(clientId, commandAckJson(requestId, false, "invalid_swing"));
+        return;
+      }
+    } else {
       sendText(clientId, commandAckJson(requestId, false, "invalid_swing"));
       return;
     }

@@ -25,7 +25,7 @@ Adafruit_ST7735 tft(TFT_CS, TFT_DC, TFT_RST);
 
 constexpr int16_t HEADER_X = 0;
 constexpr int16_t HEADER_Y = 0;
-constexpr int16_t HEADER_W = SCREEN_WIDTH;
+constexpr int16_t HEADER_W = 100;
 constexpr int16_t HEADER_H = 28;
 constexpr int16_t WIFI_X = 100;
 constexpr int16_t WIFI_Y = 0;
@@ -57,6 +57,7 @@ struct DisplayedState {
   uint8_t mode;
   uint8_t fan;
   uint8_t swingVertical;
+  uint8_t swingHorizontal;
   bool wifiConnected;
 };
 
@@ -68,6 +69,7 @@ DisplayMode displayMode = DISPLAY_QR;
 DisplayedState displayedState = {
   false,
   false,
+  0,
   0,
   0,
   0,
@@ -86,6 +88,7 @@ void syncDisplayedState() {
   displayedState.mode = acState.mode;
   displayedState.fan = acState.fan;
   displayedState.swingVertical = acState.swingVertical;
+  displayedState.swingHorizontal = acState.swingHorizontal;
   displayedState.wifiConnected = isWiFiConnected();
 }
 
@@ -257,6 +260,24 @@ void drawFanIcon(int16_t x, int16_t y, int16_t size, uint16_t color) {
   tft.drawLine(cx, cy, cx - blade / 2, cy + blade, color);
 }
 
+void drawAirflowIcon(int16_t x, int16_t y, int16_t size, uint16_t color) {
+  drawScaledLine(x, y, size, 4, 7, 16, 7, color);
+  drawScaledLine(x, y, size, 16, 7, 20, 11, color);
+  drawScaledLine(x, y, size, 20, 11, 16, 15, color);
+  drawScaledLine(x, y, size, 4, 12, 13, 12, color);
+  drawScaledLine(x, y, size, 13, 12, 17, 16, color);
+  drawScaledLine(x, y, size, 17, 16, 13, 20, color);
+  drawScaledLine(x, y, size, 4, 17, 10, 17, color);
+}
+
+String airflowDisplayValue(const String& value) {
+  if (value == "auto") {
+    return "A";
+  }
+
+  return value;
+}
+
 void drawModeIcon(uint8_t mode, int16_t x, int16_t y, int16_t size, uint16_t color) {
   switch (mode) {
     case kPanasonicAcAuto:
@@ -283,10 +304,14 @@ void drawModeIcon(uint8_t mode, int16_t x, int16_t y, int16_t size, uint16_t col
 void drawHeader() {
   tft.fillRect(HEADER_X, HEADER_Y, HEADER_W, HEADER_H, BACKGROUND_COLOR);
   tft.setTextWrap(false);
+  drawAirflowIcon(2, 3, 20, ACCENT_COLOR);
   setUIFont(&FreeSans9pt7b);
-  tft.setTextColor(ACCENT_COLOR);
-  tft.setCursor(5, 17);
-  tft.print("SmartHome");
+  tft.setTextColor(PRIMARY_TEXT_COLOR);
+  tft.setCursor(26, 17);
+  tft.print("H");
+  tft.print(airflowDisplayValue(swingHorizontalString(acState.swingHorizontal)));
+  tft.print(" V");
+  tft.print(airflowDisplayValue(swingVerticalString(acState.swingVertical)));
 }
 
 void drawWifi(bool connected) {
@@ -399,7 +424,11 @@ void updateStatusScreen() {
     displayedState.fan = acState.fan;
   }
 
-  displayedState.swingVertical = acState.swingVertical;
+  if (displayedState.swingVertical != acState.swingVertical || displayedState.swingHorizontal != acState.swingHorizontal) {
+    drawHeader();
+    displayedState.swingVertical = acState.swingVertical;
+    displayedState.swingHorizontal = acState.swingHorizontal;
+  }
 }
 
 void drawQRCodeToTFT(esp_qrcode_handle_t qrcode) {
