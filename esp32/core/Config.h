@@ -2,7 +2,7 @@
 
 #include <Arduino.h>
 
-#define IR_PIN 4
+#define IR_PIN 13
 
 #define TFT_SCLK 18
 #define TFT_MOSI 23
