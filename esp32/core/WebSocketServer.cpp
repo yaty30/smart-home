@@ -206,7 +206,7 @@ void handleAuthMessage(uint8_t clientId, const String& message) {
     return;
   }
 
-  if (pairingMode) {
+  if (pairingMode && !isPaired) {
     completePairing();
   }
 

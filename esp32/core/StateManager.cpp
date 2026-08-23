@@ -18,7 +18,9 @@ void initStateManager() {
     Serial.println("Restored state from Preferences");
   }
 
-  pairingMode = !isPaired;
+  // A hardware reset is also a recovery path: always expose the pairing QR
+  // until the QR pairing flow explicitly completes.
+  pairingMode = true;
 
   pendingState = acState;
   pendingIR = false;
