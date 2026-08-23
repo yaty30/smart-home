@@ -36,7 +36,7 @@ export function ControlButtonGroup<T extends string>({
       <View style={[styles.group, disabled && styles.groupDisabled]}>
         {options.map((option, index) => {
           const active =
-            !disabled && !suppressSelection && selectedValue === option.id;
+            isPowered && !suppressSelection && selectedValue === option.id;
 
           return (
             <TouchableOpacity

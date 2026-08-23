@@ -34,16 +34,19 @@ const modes: ControlOption<AirConditionerMode>[] = [
 type ModeSelectorProps = {
   selectedMode: AirConditionerMode;
   isPowered: boolean;
+  isDisabled?: boolean;
   onChangeMode: (mode: AirConditionerMode) => void;
 };
 
 export function ModeSelector({
   selectedMode,
   isPowered,
+  isDisabled = false,
   onChangeMode,
 }: ModeSelectorProps) {
   return (
     <ControlButtonGroup
+      isDisabled={isDisabled}
       isPowered={isPowered}
       label="Mode"
       onChange={onChangeMode}

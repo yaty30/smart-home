@@ -26,6 +26,7 @@ type TemperatureGaugeProps = {
   minTemperature: number;
   maxTemperature: number;
   isPowered: boolean;
+  isDisabled?: boolean;
   onChangeTemperature: (temperature: number) => void;
   onInteractionEnd?: () => void;
   onInteractionStart?: () => void;
@@ -37,6 +38,7 @@ export function TemperatureGauge({
   minTemperature,
   maxTemperature,
   isPowered,
+  isDisabled = false,
   onChangeTemperature,
   onInteractionEnd,
   onInteractionStart,
@@ -45,6 +47,7 @@ export function TemperatureGauge({
   const [displayedTemperature, setDisplayedTemperature] = useState(temperature);
   const strokeWidth = Math.max(16, size * 0.06);
   const center = size / 2;
+  const controlsDisabled = !isPowered || isDisabled;
   const radius = center - strokeWidth - 12;
   const currentAngle = temperatureToAngle(
     displayedTemperature,
@@ -87,7 +90,7 @@ export function TemperatureGauge({
   }, [animatedTemperature, temperature]);
 
   const updateFromPoint = useCallback((locationX: number, locationY: number) => {
-    if (!isPowered) {
+    if (controlsDisabled) {
       return;
     }
 
@@ -97,7 +100,7 @@ export function TemperatureGauge({
     );
   }, [
     center,
-    isPowered,
+    controlsDisabled,
     maxTemperature,
     minTemperature,
     onChangeTemperature,
@@ -106,8 +109,8 @@ export function TemperatureGauge({
   const panResponder = useMemo(
     () =>
       PanResponder.create({
-      onMoveShouldSetPanResponder: () => isPowered,
-      onStartShouldSetPanResponder: () => isPowered,
+      onMoveShouldSetPanResponder: () => !controlsDisabled,
+      onStartShouldSetPanResponder: () => !controlsDisabled,
       onPanResponderGrant: (event) => {
         onInteractionStart?.();
         updateFromPoint(event.nativeEvent.locationX, event.nativeEvent.locationY);
@@ -124,7 +127,7 @@ export function TemperatureGauge({
     }),
     [
       center,
-      isPowered,
+      controlsDisabled,
       maxTemperature,
       minTemperature,
       onInteractionEnd,
@@ -135,8 +138,8 @@ export function TemperatureGauge({
   );
 
   const inactiveStyle = useMemo(() => {
-    return isPowered ? undefined : styles.contentInactive;
-  }, [isPowered]);
+    return controlsDisabled ? styles.contentInactive : undefined;
+  }, [controlsDisabled]);
 
   return (
     <View

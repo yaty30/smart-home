@@ -24,16 +24,23 @@ import type {
 
 type DeviceConnectionContextValue = {
   pairedDevice: PairedDevice | null;
+  deviceConnectionStatus: DeviceConnectionStatus;
   isLoading: boolean;
   isPaired: boolean;
   isDeviceConnected: boolean;
   deviceState: DeviceStateSnapshot | null;
   pairDevice: (device: PairedDevice) => Promise<void>;
   disconnectDevice: () => Promise<void>;
+  reportDeviceUnreachable: () => void;
 };
 
 const DeviceConnectionContext =
   createContext<DeviceConnectionContextValue | null>(null);
+
+export type DeviceConnectionStatus =
+  | "connecting"
+  | "connected"
+  | "disconnected";
 
 const isRecord = (value: unknown): value is Record<string, unknown> => {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -111,9 +118,11 @@ const websocketUrlForDevice = (device: PairedDevice) => {
 export function DeviceConnectionProvider({ children }: PropsWithChildren) {
   const [pairedDevice, setPairedDevice] = useState<PairedDevice | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [isDeviceConnected, setIsDeviceConnected] = useState(false);
+  const [deviceConnectionStatus, setDeviceConnectionStatus] =
+    useState<DeviceConnectionStatus>("disconnected");
   const [deviceState, setDeviceState] = useState<DeviceStateSnapshot | null>(null);
   const reconnectAttempt = useRef(0);
+  const activeSocket = useRef<WebSocket | null>(null);
 
   useEffect(() => {
     let isMounted = true;
@@ -142,7 +151,7 @@ export function DeviceConnectionProvider({ children }: PropsWithChildren) {
   useEffect(() => {
     if (pairedDevice === null) {
       setDeviceState(null);
-      setIsDeviceConnected(false);
+      setDeviceConnectionStatus("disconnected");
       return;
     }
 
@@ -178,8 +187,11 @@ export function DeviceConnectionProvider({ children }: PropsWithChildren) {
         return;
       }
 
+      setDeviceConnectionStatus("connecting");
+
       try {
         socket = new WebSocket(websocketUrlForDevice(pairedDevice));
+        activeSocket.current = socket;
       } catch {
         reconnectAttempt.current += 1;
         const delay = Math.min(1000 * 2 ** reconnectAttempt.current, 10000);
@@ -187,8 +199,10 @@ export function DeviceConnectionProvider({ children }: PropsWithChildren) {
         return;
       }
 
-      socket.onopen = () => {
-        socket?.send(
+      const currentSocket = socket;
+
+      currentSocket.onopen = () => {
+        currentSocket.send(
           JSON.stringify({
             token: pairedDevice.token,
             type: "auth",
@@ -196,13 +210,14 @@ export function DeviceConnectionProvider({ children }: PropsWithChildren) {
         );
       };
 
-      socket.onmessage = (event) => {
+      currentSocket.onmessage = (event) => {
         try {
           const payload = JSON.parse(String(event.data)) as unknown;
           if (isRecord(payload) && payload.type === "auth.result") {
             if (payload.ok === true) {
               reconnectAttempt.current = 0;
-              setIsDeviceConnected(true);
+              console.log("[Device] Reconnected; using authoritative ESP32 state.");
+              setDeviceConnectionStatus("connected");
             }
             return;
           }
@@ -215,16 +230,19 @@ export function DeviceConnectionProvider({ children }: PropsWithChildren) {
         }
       };
 
-      socket.onerror = () => {
-        socket?.close();
+      currentSocket.onerror = () => {
+        currentSocket.close();
       };
 
-      socket.onclose = () => {
+      currentSocket.onclose = () => {
         if (!active) {
           return;
         }
 
-        setIsDeviceConnected(false);
+        if (activeSocket.current === currentSocket) {
+          activeSocket.current = null;
+        }
+        setDeviceConnectionStatus("disconnected");
         reconnectAttempt.current += 1;
         const delay = Math.min(1000 * 2 ** reconnectAttempt.current, 10000);
         reconnectTimer = setTimeout(() => {
@@ -244,6 +262,9 @@ export function DeviceConnectionProvider({ children }: PropsWithChildren) {
         clearTimeout(reconnectTimer);
       }
       socket?.close();
+      if (activeSocket.current === socket) {
+        activeSocket.current = null;
+      }
     };
   }, [pairedDevice]);
 
@@ -257,23 +278,31 @@ export function DeviceConnectionProvider({ children }: PropsWithChildren) {
     setPairedDevice(null);
   }, []);
 
+  const reportDeviceUnreachable = useCallback(() => {
+    setDeviceConnectionStatus("disconnected");
+    activeSocket.current?.close();
+  }, []);
+
   const value = useMemo<DeviceConnectionContextValue>(
     () => ({
       disconnectDevice,
+      deviceConnectionStatus,
       deviceState,
-      isDeviceConnected,
+      isDeviceConnected: deviceConnectionStatus === "connected",
       isLoading,
       isPaired: pairedDevice !== null,
       pairDevice,
       pairedDevice,
+      reportDeviceUnreachable,
     }),
     [
+      deviceConnectionStatus,
       deviceState,
       disconnectDevice,
-      isDeviceConnected,
       isLoading,
       pairDevice,
       pairedDevice,
+      reportDeviceUnreachable,
     ],
   );
 

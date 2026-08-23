@@ -28,6 +28,7 @@ type FanSpeedControlProps = {
   speed: FanSpeed;
   isAuto: boolean;
   isPowered: boolean;
+  isDisabled?: boolean;
   onChangeSpeed: (speed: FanSpeed) => void;
   onChangeAuto: (isAuto: boolean) => void;
   onInteractionEnd?: () => void;
@@ -37,6 +38,7 @@ type FanSpeedControlProps = {
 export function FanSpeedControl({
   speed,
   isAuto,
+  isDisabled = false,
   isPowered,
   onChangeSpeed,
   onChangeAuto,
@@ -49,8 +51,9 @@ export function FanSpeedControl({
   const lastFrameTime = useRef<number | null>(null);
   const frame = useRef<number | null>(null);
   const [sliderWidth, setSliderWidth] = useState(0);
-  const controlsDisabled = !isPowered;
-  const canAdjustSpeed = isPowered;
+  const controlsDisabled = !isPowered || isDisabled;
+  const canAdjustSpeed = !controlsDisabled;
+  const switchOn = isPowered && isAuto;
   const displayedSpeed = isAuto ? fanSteps.length : speed;
   const activeTrackWidth: DimensionValue = `${((displayedSpeed - 1) / (fanSteps.length - 1)) * 100}%`;
   const thumbLeft: DimensionValue = activeTrackWidth;
@@ -58,7 +61,7 @@ export function FanSpeedControl({
   duration.current = isAuto ? 1300 : fanDurations[speed];
 
   useEffect(() => {
-    if (!isPowered) {
+    if (controlsDisabled) {
       lastFrameTime.current = null;
       return;
     }
@@ -85,7 +88,7 @@ export function FanSpeedControl({
       frame.current = null;
       lastFrameTime.current = null;
     };
-  }, [isPowered, rotation]);
+  }, [controlsDisabled, rotation]);
 
   const fanRotation = useMemo(() => {
     return rotation.interpolate({
@@ -143,31 +146,31 @@ export function FanSpeedControl({
   );
 
   return (
-    <View style={[styles.container, !isPowered && styles.containerDisabled]}>
+    <View style={[styles.container, controlsDisabled && styles.containerDisabled]}>
       <View style={styles.header}>
         <Text style={styles.label}>Fan Speed</Text>
         <View style={styles.autoControl}>
           <Text
             style={[
               styles.autoLabel,
-              isAuto && isPowered && styles.autoLabelActive,
+              switchOn && styles.autoLabelActive,
             ]}
           >
             Auto
           </Text>
           <Switch
             accessibilityLabel="Toggle automatic fan speed"
-            disabled={!isPowered}
+            disabled={controlsDisabled}
             ios_backgroundColor={theme.controlBackground}
             onValueChange={onChangeAuto}
             thumbColor={
-              isAuto && isPowered ? theme.accentBright : theme.textSecondary
+              switchOn ? theme.accentBright : theme.textSecondary
             }
             trackColor={{
               false: theme.controlBackgroundPressed,
               true: theme.accentMuted,
             }}
-            value={isPowered && isAuto}
+            value={switchOn}
           />
         </View>
       </View>

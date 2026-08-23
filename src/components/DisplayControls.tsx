@@ -5,6 +5,7 @@ import { theme } from "../theme/theme";
 
 type DisplayControlsProps = {
   canControlQr: boolean;
+  isDisabled?: boolean;
   qrVisible: boolean;
   screenOn: boolean;
   onChangeQrVisible: (visible: boolean) => void;
@@ -16,6 +17,7 @@ type DisplayToggleProps = {
   enabled: boolean;
   icon: typeof Monitor;
   label: string;
+  disabled?: boolean;
   onChange: (enabled: boolean) => void;
 };
 
@@ -24,10 +26,11 @@ function DisplayToggle({
   enabled,
   icon: Icon,
   label,
+  disabled = false,
   onChange,
 }: DisplayToggleProps) {
   return (
-    <View style={styles.row}>
+    <View style={[styles.row, disabled && styles.rowDisabled]}>
       <View style={[styles.iconFrame, enabled && styles.iconFrameActive]}>
         <Icon
           color={enabled ? theme.accent : theme.textSecondary}
@@ -40,6 +43,7 @@ function DisplayToggle({
       </Text>
       <Switch
         accessibilityLabel={accessibilityLabel}
+        disabled={disabled}
         ios_backgroundColor={theme.controlBackground}
         onValueChange={onChange}
         thumbColor={enabled ? theme.accentBright : theme.textSecondary}
@@ -55,6 +59,7 @@ function DisplayToggle({
 
 export function DisplayControls({
   canControlQr,
+  isDisabled = false,
   onChangeQrVisible,
   onChangeScreenOn,
   qrVisible,
@@ -65,6 +70,7 @@ export function DisplayControls({
       <Text style={styles.label}>Display</Text>
       <DisplayToggle
         accessibilityLabel="Toggle ESP32 screen power"
+        disabled={isDisabled}
         enabled={screenOn}
         icon={Monitor}
         label="Screen"
@@ -75,6 +81,7 @@ export function DisplayControls({
           <View style={styles.divider} />
           <DisplayToggle
             accessibilityLabel="Toggle pairing QR code visibility"
+            disabled={isDisabled}
             enabled={qrVisible}
             icon={QrCode}
             label="Pairing QR"
@@ -121,6 +128,9 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     gap: theme.spacing.md,
     minHeight: 44,
+  },
+  rowDisabled: {
+    opacity: 0.52,
   },
   rowLabel: {
     color: theme.textSecondary,

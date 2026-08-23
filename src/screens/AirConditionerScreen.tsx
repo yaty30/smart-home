@@ -6,6 +6,7 @@ import {
   SafeAreaView,
   ScrollView,
   StyleSheet,
+  Text,
   useWindowDimensions,
   View,
 } from "react-native";
@@ -82,12 +83,16 @@ const espPositionToAirflowLevel: Record<"1" | "2" | "3" | "4" | "5", AirflowLeve
   "5": "five",
 };
 
+const DEVICE_COMMAND_TIMEOUT_MS = 1500;
+
 export function AirConditionerScreen() {
   const {
+    deviceConnectionStatus,
     deviceState,
     disconnectDevice,
     isDeviceConnected,
     pairedDevice,
+    reportDeviceUnreachable,
   } = useDeviceConnection();
   const { height, width } = useWindowDimensions();
   const [temperature, setTemperature] = useState(24);
@@ -126,6 +131,19 @@ export function AirConditionerScreen() {
   const temperatureRange = useMemo(() => {
     return temperatureRangeForMode(mode);
   }, [mode]);
+  const canControlDevice =
+    isDeviceConnected && pairedDevice !== null && deviceState !== null;
+  const unavailableStatusText = useMemo(() => {
+    if (deviceConnectionStatus === "connecting") {
+      return "Reconnecting to ESP32";
+    }
+
+    if (deviceConnectionStatus === "connected" && deviceState === null) {
+      return "Syncing ESP32 state";
+    }
+
+    return "Device offline";
+  }, [deviceConnectionStatus, deviceState]);
 
   useEffect(() => {
     if (deviceState === null) {
@@ -180,47 +198,82 @@ export function AirConditionerScreen() {
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
   }, []);
 
+  const logDroppedCommand = useCallback((description: string) => {
+    console.log(
+      `[Device] Dropped command because ESP32 is offline: ${description}`,
+    );
+  }, []);
+
   const sendAcCommand = useCallback(
     async (params: Record<string, string | number>) => {
-      if (pairedDevice === null) {
-        return;
+      const description = Object.entries(params)
+        .map(([key, value]) => `${key}=${String(value)}`)
+        .join(",");
+
+      if (!canControlDevice || pairedDevice === null) {
+        logDroppedCommand(description);
+        return false;
       }
 
       const host = pairedDevice.host.replace(/\/+$/, "");
       const searchParams = new URLSearchParams();
+      const controller = new AbortController();
+      const timeout = setTimeout(
+        () => controller.abort(),
+        DEVICE_COMMAND_TIMEOUT_MS,
+      );
 
       Object.entries(params).forEach(([key, value]) => {
         searchParams.append(key, String(value));
       });
 
       try {
+        console.log(`[Device] Command sent immediately: ${description}`);
         const response = await fetch(`${host}/ac?${searchParams.toString()}`, {
           headers: {
             Authorization: `Bearer ${pairedDevice.token}`,
           },
           method: "GET",
+          signal: controller.signal,
         });
 
         if (!response.ok) {
           console.warn("ESP32 AC request failed", response.status);
+          return false;
         }
+        return true;
       } catch (error) {
-        console.warn("ESP32 AC request could not be sent.", error);
+        console.warn("ESP32 AC request failed without retry.", error);
+        reportDeviceUnreachable();
+        return false;
+      } finally {
+        clearTimeout(timeout);
       }
     },
-    [pairedDevice],
+    [canControlDevice, logDroppedCommand, pairedDevice, reportDeviceUnreachable],
   );
 
   const sendDisplayCommand = useCallback(
     async (params: Record<string, string>) => {
-      if (pairedDevice === null) {
-        return;
+      const description = Object.entries(params)
+        .map(([key, value]) => `${key}=${String(value)}`)
+        .join(",");
+
+      if (!canControlDevice || pairedDevice === null) {
+        logDroppedCommand(description);
+        return false;
       }
 
       const host = pairedDevice.host.replace(/\/+$/, "");
       const searchParams = new URLSearchParams(params);
+      const controller = new AbortController();
+      const timeout = setTimeout(
+        () => controller.abort(),
+        DEVICE_COMMAND_TIMEOUT_MS,
+      );
 
       try {
+        console.log(`[Device] Command sent immediately: ${description}`);
         const response = await fetch(
           `${host}/display?${searchParams.toString()}`,
           {
@@ -228,21 +281,32 @@ export function AirConditionerScreen() {
               Authorization: `Bearer ${pairedDevice.token}`,
             },
             method: "GET",
+            signal: controller.signal,
           },
         );
 
         if (!response.ok) {
           console.warn("ESP32 display request failed", response.status);
+          return false;
         }
+        return true;
       } catch (error) {
-        console.warn("ESP32 display request could not be sent.", error);
+        console.warn("ESP32 display request failed without retry.", error);
+        reportDeviceUnreachable();
+        return false;
+      } finally {
+        clearTimeout(timeout);
       }
     },
-    [pairedDevice],
+    [canControlDevice, logDroppedCommand, pairedDevice, reportDeviceUnreachable],
   );
 
   const handleTemperatureChange = useCallback(
     (nextTemperature: number) => {
+      if (!canControlDevice) {
+        return;
+      }
+
       const normalizedTemperature = normalizeTemperature(
         nextTemperature,
         temperatureRange.min,
@@ -258,11 +322,22 @@ export function AirConditionerScreen() {
       triggerSelectionHaptic();
       setTemperature(normalizedTemperature);
     },
-    [mode, temperatureRange.max, temperatureRange.min, triggerSelectionHaptic],
+    [
+      canControlDevice,
+      mode,
+      temperatureRange.max,
+      temperatureRange.min,
+      triggerSelectionHaptic,
+    ],
   );
 
   const handleModeChange = useCallback(
     (nextMode: AirConditionerMode) => {
+      if (!canControlDevice) {
+        logDroppedCommand(`mode=${modeToEspMode(nextMode)}`);
+        return;
+      }
+
       triggerPressHaptic();
       const nextRange = temperatureRangeForMode(nextMode);
       modeTemperatures.current[mode] = temperature;
@@ -284,11 +359,25 @@ export function AirConditionerScreen() {
         temp: nextTemperature,
       });
     },
-    [mode, sendAcCommand, temperature, triggerPressHaptic],
+    [
+      canControlDevice,
+      logDroppedCommand,
+      mode,
+      sendAcCommand,
+      temperature,
+      triggerPressHaptic,
+    ],
   );
 
   const handleHorizontalAirflowChange = useCallback(
     (nextLevel: AirflowLevel) => {
+      if (!canControlDevice) {
+        logDroppedCommand(
+          `swingHorizontal=${airflowLevelToEspPosition[nextLevel]}`,
+        );
+        return;
+      }
+
       triggerPressHaptic();
       setHorizontalAirflowAuto(false);
       setHorizontalAirflow(nextLevel);
@@ -296,11 +385,16 @@ export function AirConditionerScreen() {
         swingHorizontal: airflowLevelToEspPosition[nextLevel],
       });
     },
-    [sendAcCommand, triggerPressHaptic],
+    [canControlDevice, logDroppedCommand, sendAcCommand, triggerPressHaptic],
   );
 
   const handleVerticalAirflowChange = useCallback(
     (nextLevel: AirflowLevel) => {
+      if (!canControlDevice) {
+        logDroppedCommand(`swingVertical=${airflowLevelToEspPosition[nextLevel]}`);
+        return;
+      }
+
       triggerPressHaptic();
       setVerticalAirflowAuto(false);
       setVerticalAirflow(nextLevel);
@@ -308,37 +402,65 @@ export function AirConditionerScreen() {
         swingVertical: airflowLevelToEspPosition[nextLevel],
       });
     },
-    [sendAcCommand, triggerPressHaptic],
+    [canControlDevice, logDroppedCommand, sendAcCommand, triggerPressHaptic],
   );
 
   const handleHorizontalAirflowAutoChange = useCallback(
     (nextAuto: boolean) => {
+      const nextSwing = nextAuto
+        ? "auto"
+        : airflowLevelToEspPosition[horizontalAirflow];
+
+      if (!canControlDevice) {
+        logDroppedCommand(`swingHorizontal=${nextSwing}`);
+        return;
+      }
+
       triggerPressHaptic();
       setHorizontalAirflowAuto(nextAuto);
       void sendAcCommand({
-        swingHorizontal: nextAuto
-          ? "auto"
-          : airflowLevelToEspPosition[horizontalAirflow],
+        swingHorizontal: nextSwing,
       });
     },
-    [horizontalAirflow, sendAcCommand, triggerPressHaptic],
+    [
+      canControlDevice,
+      horizontalAirflow,
+      logDroppedCommand,
+      sendAcCommand,
+      triggerPressHaptic,
+    ],
   );
 
   const handleVerticalAirflowAutoChange = useCallback(
     (nextAuto: boolean) => {
+      const nextSwing = nextAuto ? "auto" : airflowLevelToEspPosition[verticalAirflow];
+
+      if (!canControlDevice) {
+        logDroppedCommand(`swingVertical=${nextSwing}`);
+        return;
+      }
+
       triggerPressHaptic();
       setVerticalAirflowAuto(nextAuto);
       void sendAcCommand({
-        swingVertical: nextAuto
-          ? "auto"
-          : airflowLevelToEspPosition[verticalAirflow],
+        swingVertical: nextSwing,
       });
     },
-    [sendAcCommand, triggerPressHaptic, verticalAirflow],
+    [
+      canControlDevice,
+      logDroppedCommand,
+      sendAcCommand,
+      triggerPressHaptic,
+      verticalAirflow,
+    ],
   );
 
   const handleFanSpeedChange = useCallback(
     (nextSpeed: FanSpeed) => {
+      if (!canControlDevice) {
+        return;
+      }
+
       if (!fanAuto && fanSpeed === nextSpeed) {
         return;
       }
@@ -348,21 +470,31 @@ export function AirConditionerScreen() {
       setFanAuto(false);
       setFanSpeed(nextSpeed);
     },
-    [fanAuto, fanSpeed, triggerPressHaptic],
+    [canControlDevice, fanAuto, fanSpeed, triggerPressHaptic],
   );
 
   const handleFanAutoChange = useCallback(
     (nextFanAuto: boolean) => {
+      if (!canControlDevice) {
+        logDroppedCommand(`fan=${nextFanAuto ? "auto" : latestFanSpeed.current}`);
+        return;
+      }
+
       triggerPressHaptic();
       setFanAuto(nextFanAuto);
       void sendAcCommand({
         fan: nextFanAuto ? "auto" : latestFanSpeed.current,
       });
     },
-    [sendAcCommand, triggerPressHaptic],
+    [canControlDevice, logDroppedCommand, sendAcCommand, triggerPressHaptic],
   );
 
   const handleTogglePower = useCallback(() => {
+    if (!canControlDevice) {
+      logDroppedCommand(`power=${power ? "off" : "on"}`);
+      return;
+    }
+
     triggerPressHaptic();
     setPower((currentPower) => {
       const nextPower = !currentPower;
@@ -372,7 +504,7 @@ export function AirConditionerScreen() {
 
       return nextPower;
     });
-  }, [sendAcCommand, triggerPressHaptic]);
+  }, [canControlDevice, logDroppedCommand, power, sendAcCommand, triggerPressHaptic]);
 
   const handleDisconnectDevice = useCallback(() => {
     triggerPressHaptic();
@@ -381,34 +513,56 @@ export function AirConditionerScreen() {
 
   const handleTemperatureInteractionEnd = useCallback(() => {
     setIsAdjustingTemperature(false);
+
+    if (!canControlDevice) {
+      logDroppedCommand(`temp=${latestTemperature.current}`);
+      return;
+    }
+
     void sendAcCommand({
       temp: latestTemperature.current,
     });
-  }, [sendAcCommand]);
+  }, [canControlDevice, logDroppedCommand, sendAcCommand]);
 
   const handleFanSpeedInteractionEnd = useCallback(() => {
     setIsAdjustingFanSpeed(false);
+
+    if (!canControlDevice) {
+      logDroppedCommand(`fan=${latestFanSpeed.current}`);
+      return;
+    }
+
     void sendAcCommand({
       fan: latestFanSpeed.current,
     });
-  }, [sendAcCommand]);
+  }, [canControlDevice, logDroppedCommand, sendAcCommand]);
 
   const handleScreenPowerChange = useCallback(
     (nextScreenOn: boolean) => {
+      if (!canControlDevice) {
+        logDroppedCommand(`screen=${nextScreenOn ? "on" : "off"}`);
+        return;
+      }
+
       triggerPressHaptic();
       setScreenOn(nextScreenOn);
       void sendDisplayCommand({ screen: nextScreenOn ? "on" : "off" });
     },
-    [sendDisplayCommand, triggerPressHaptic],
+    [canControlDevice, logDroppedCommand, sendDisplayCommand, triggerPressHaptic],
   );
 
   const handleQrVisibilityChange = useCallback(
     (nextQrVisible: boolean) => {
+      if (!canControlDevice) {
+        logDroppedCommand(`qr=${nextQrVisible ? "show" : "hide"}`);
+        return;
+      }
+
       triggerPressHaptic();
       setQrVisible(nextQrVisible);
       void sendDisplayCommand({ qr: nextQrVisible ? "show" : "hide" });
     },
-    [sendDisplayCommand, triggerPressHaptic],
+    [canControlDevice, logDroppedCommand, sendDisplayCommand, triggerPressHaptic],
   );
 
   const handleScroll = useCallback(
@@ -445,6 +599,7 @@ export function AirConditionerScreen() {
 
           <View style={styles.gaugeSection}>
             <TemperatureGauge
+              isDisabled={!canControlDevice}
               isPowered={power}
               maxTemperature={temperatureRange.max}
               minTemperature={temperatureRange.min}
@@ -457,7 +612,12 @@ export function AirConditionerScreen() {
           </View>
 
           <View style={styles.controls}>
+            {!canControlDevice ? (
+              <Text style={styles.connectionStatus}>{unavailableStatusText}</Text>
+            ) : null}
+
             <ModeSelector
+              isDisabled={!canControlDevice}
               isPowered={power}
               onChangeMode={handleModeChange}
               selectedMode={mode}
@@ -467,6 +627,7 @@ export function AirConditionerScreen() {
 
             <FanSpeedControl
               isAuto={fanAuto}
+              isDisabled={!canControlDevice}
               isPowered={power}
               onChangeAuto={handleFanAutoChange}
               onChangeSpeed={handleFanSpeedChange}
@@ -479,6 +640,7 @@ export function AirConditionerScreen() {
 
             <HorizontalAirflowSelector
               isAuto={horizontalAirflowAuto}
+              isDisabled={!canControlDevice}
               isPowered={power}
               onChangeAuto={handleHorizontalAirflowAutoChange}
               onChangeLevel={handleHorizontalAirflowChange}
@@ -489,6 +651,7 @@ export function AirConditionerScreen() {
 
             <VerticalAirflowSelector
               isAuto={verticalAirflowAuto}
+              isDisabled={!canControlDevice}
               isPowered={power}
               onChangeAuto={handleVerticalAirflowAutoChange}
               onChangeLevel={handleVerticalAirflowChange}
@@ -502,6 +665,7 @@ export function AirConditionerScreen() {
                 isDeviceConnected &&
                 deviceState?.display.pairingMode !== true
               }
+              isDisabled={!canControlDevice}
               onChangeQrVisible={handleQrVisibilityChange}
               onChangeScreenOn={handleScreenPowerChange}
               qrVisible={qrVisible}
@@ -510,7 +674,11 @@ export function AirConditionerScreen() {
           </View>
 
           <View style={styles.powerArea}>
-            <PowerButton isPowered={power} onTogglePower={handleTogglePower} />
+            <PowerButton
+              isDisabled={!canControlDevice}
+              isPowered={power}
+              onTogglePower={handleTogglePower}
+            />
           </View>
         </ScrollView>
       </View>
@@ -557,6 +725,13 @@ const styles = StyleSheet.create({
     backgroundColor: theme.border,
     height: 1,
     width: "100%",
+  },
+  connectionStatus: {
+    color: theme.textSecondary,
+    fontSize: theme.typography.body,
+    fontWeight: "700",
+    letterSpacing: 0,
+    textAlign: "center",
   },
   powerArea: {
     justifyContent: "center",

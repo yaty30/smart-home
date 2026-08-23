@@ -127,38 +127,46 @@ type AirflowSelectorProps = {
   selectedLevel: AirflowLevel;
   isAuto: boolean;
   isPowered: boolean;
+  isDisabled?: boolean;
   onChangeLevel: (level: AirflowLevel) => void;
   onChangeAuto: (isAuto: boolean) => void;
 };
 
 function AirflowAutoSwitch({
   isAuto,
+  isDisabled = false,
   isPowered,
   onChangeAuto,
-}: Pick<AirflowSelectorProps, "isAuto" | "isPowered" | "onChangeAuto">) {
+}: Pick<
+  AirflowSelectorProps,
+  "isAuto" | "isDisabled" | "isPowered" | "onChangeAuto"
+>) {
+  const disabled = !isPowered || isDisabled;
+  const switchOn = isPowered && isAuto;
+
   return (
     <View style={styles.autoControl}>
       <Text
         style={[
           styles.autoLabel,
-          isAuto && isPowered && styles.autoLabelActive,
+          switchOn && styles.autoLabelActive,
         ]}
       >
         Auto
       </Text>
       <Switch
         accessibilityLabel="Toggle automatic airflow"
-        disabled={!isPowered}
+        disabled={disabled}
         ios_backgroundColor={theme.controlBackground}
         onValueChange={onChangeAuto}
         thumbColor={
-          isAuto && isPowered ? theme.accentBright : theme.textSecondary
+          switchOn ? theme.accentBright : theme.textSecondary
         }
         trackColor={{
           false: theme.controlBackgroundPressed,
           true: theme.accentMuted,
         }}
-        value={isPowered && isAuto}
+        value={switchOn}
       />
     </View>
   );
@@ -167,16 +175,19 @@ function AirflowAutoSwitch({
 export function HorizontalAirflowSelector({
   selectedLevel,
   isAuto,
+  isDisabled = false,
   isPowered,
   onChangeLevel,
   onChangeAuto,
 }: AirflowSelectorProps) {
   return (
     <ControlButtonGroup
+      isDisabled={isDisabled}
       isPowered={isPowered}
       labelAccessory={
         <AirflowAutoSwitch
           isAuto={isAuto}
+          isDisabled={isDisabled}
           isPowered={isPowered}
           onChangeAuto={onChangeAuto}
         />
@@ -193,16 +204,19 @@ export function HorizontalAirflowSelector({
 export function VerticalAirflowSelector({
   selectedLevel,
   isAuto,
+  isDisabled = false,
   isPowered,
   onChangeLevel,
   onChangeAuto,
 }: AirflowSelectorProps) {
   return (
     <ControlButtonGroup
+      isDisabled={isDisabled}
       isPowered={isPowered}
       labelAccessory={
         <AirflowAutoSwitch
           isAuto={isAuto}
+          isDisabled={isDisabled}
           isPowered={isPowered}
           onChangeAuto={onChangeAuto}
         />

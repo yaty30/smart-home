@@ -10,7 +10,7 @@
 static const unsigned long PAIRING_BUTTON_HOLD_MS = 3000;
 
 #define TFT_SCLK 18
-#define TFT_MOSI 23
+#define TFT_MOSI 19
 #define TFT_RST 17
 #define TFT_DC 16
 #define TFT_CS 5
