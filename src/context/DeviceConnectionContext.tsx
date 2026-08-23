@@ -74,6 +74,7 @@ const parseDeviceState = (value: unknown): DeviceStateSnapshot | null => {
     !isEspFanSpeed(ac.fan) ||
     !isEspAirflow(ac.swingVertical) ||
     !isEspAirflow(ac.swingHorizontal) ||
+    typeof display.pairingMode !== "boolean" ||
     typeof display.screenOn !== "boolean" ||
     typeof display.qrVisible !== "boolean"
   ) {
@@ -90,6 +91,7 @@ const parseDeviceState = (value: unknown): DeviceStateSnapshot | null => {
       temperature: ac.temperature,
     },
     display: {
+      pairingMode: display.pairingMode,
       qrVisible: display.qrVisible,
       screenOn: display.screenOn,
     },

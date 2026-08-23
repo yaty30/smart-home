@@ -11,13 +11,14 @@ AcState acState = {
 
 DisplayState displayState = {
   true,
-  true
+  false
 };
 
 bool pendingIR = false;
 AcState pendingState = acState;
 unsigned long pendingIRQueuedAt = 0;
 bool isPaired = false;
+bool pairingMode = true;
 
 String jsonEscape(const String& value) {
   String escaped;
@@ -177,7 +178,8 @@ String acStateJson() {
 String displayStateJson() {
   String body = "{";
   body += "\"screenOn\":" + boolString(displayState.screenOn) + ",";
-  body += "\"qrVisible\":" + boolString(displayState.qrVisible);
+  body += "\"qrVisible\":" + boolString(displayState.qrVisible) + ",";
+  body += "\"pairingMode\":" + boolString(pairingMode);
   body += "}";
   return body;
 }

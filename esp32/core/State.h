@@ -23,6 +23,7 @@ extern bool pendingIR;
 extern AcState pendingState;
 extern unsigned long pendingIRQueuedAt;
 extern bool isPaired;
+extern bool pairingMode;
 
 String jsonEscape(const String& value);
 String boolString(bool value);

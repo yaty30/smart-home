@@ -83,7 +83,12 @@ const espPositionToAirflowLevel: Record<"1" | "2" | "3" | "4" | "5", AirflowLeve
 };
 
 export function AirConditionerScreen() {
-  const { deviceState, disconnectDevice, pairedDevice } = useDeviceConnection();
+  const {
+    deviceState,
+    disconnectDevice,
+    isDeviceConnected,
+    pairedDevice,
+  } = useDeviceConnection();
   const { height, width } = useWindowDimensions();
   const [temperature, setTemperature] = useState(24);
   const [mode, setMode] = useState<AirConditionerMode>("auto");
@@ -493,6 +498,10 @@ export function AirConditionerScreen() {
             <View style={styles.controlDivider} />
 
             <DisplayControls
+              canControlQr={
+                isDeviceConnected &&
+                deviceState?.display.pairingMode !== true
+              }
               onChangeQrVisible={handleQrVisibilityChange}
               onChangeScreenOn={handleScreenPowerChange}
               qrVisible={qrVisible}

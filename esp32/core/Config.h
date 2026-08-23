@@ -3,6 +3,8 @@
 #include <Arduino.h>
 
 #define IR_PIN 13
+#define BOOT_BUTTON_PIN 0
+static const unsigned long PAIRING_BUTTON_HOLD_MS = 3000;
 
 #define TFT_SCLK 18
 #define TFT_MOSI 23

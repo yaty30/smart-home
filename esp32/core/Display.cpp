@@ -93,6 +93,14 @@ void syncDisplayedState() {
   displayedState.wifiConnected = isWiFiConnected();
 }
 
+bool effectiveScreenOn() {
+  return pairingMode || displayState.screenOn;
+}
+
+bool effectiveQrVisible() {
+  return pairingMode || displayState.qrVisible;
+}
+
 void setBacklight(bool on) {
   if (TFT_BL < 0) {
     return;
@@ -135,7 +143,7 @@ void initDisplay() {
   displayHardwareOn = true;
   qrIsDisplayed = false;
   invalidateDisplayedState();
-  setDisplayHardwarePower(displayState.screenOn);
+  setDisplayHardwarePower(effectiveScreenOn());
 }
 
 void setUIFont(const GFXfont* font) {
@@ -170,7 +178,7 @@ void drawRightAlignedText(const String& text, const GFXfont* font, int16_t right
 }
 
 void showDisplayMessage(const char* line1, const char* line2) {
-  if (!displayState.screenOn) {
+  if (!effectiveScreenOn()) {
     return;
   }
 
@@ -417,7 +425,7 @@ void drawFan(uint8_t fan) {
 }
 
 void renderStatusScreenFull() {
-  if (!displayState.screenOn) {
+  if (!effectiveScreenOn()) {
     invalidateDisplayedState();
     return;
   }
@@ -440,7 +448,7 @@ void renderStatusScreen() {
 }
 
 void updateStatusScreen() {
-  if (!displayState.screenOn) {
+  if (!effectiveScreenOn()) {
     invalidateDisplayedState();
     return;
   }
@@ -522,7 +530,7 @@ void drawEspQRCode(const char* text) {
 }
 
 void displayQRCodeForIP() {
-  if (!displayState.screenOn) {
+  if (!effectiveScreenOn()) {
     return;
   }
 
@@ -548,7 +556,7 @@ void showStatusScreen() {
 }
 
 void updateDisplayForWiFi() {
-  if (!displayState.screenOn) {
+  if (!effectiveScreenOn()) {
     wasWiFiConnected = isWiFiConnected();
     return;
   }
@@ -556,7 +564,7 @@ void updateDisplayForWiFi() {
   bool connected = isWiFiConnected();
 
   if (!connected) {
-    if (displayState.qrVisible) {
+    if (effectiveQrVisible()) {
       if (displayMode != DISPLAY_CLEAR) {
         showDisplayMessage("No WiFi");
       }
@@ -568,7 +576,7 @@ void updateDisplayForWiFi() {
   }
 
   IPAddress currentIP = WiFi.localIP();
-  if (!displayState.qrVisible) {
+  if (!effectiveQrVisible()) {
     updateStatusScreen();
   } else if (!wasWiFiConnected || !(currentIP == displayedIP) || !qrIsDisplayed) {
     displayQRCodeForIP();
@@ -585,7 +593,7 @@ void clearDisplay() {
 }
 
 void renderDisplayState() {
-  if (!displayState.screenOn) {
+  if (!effectiveScreenOn()) {
     invalidateDisplayedState();
     qrIsDisplayed = false;
     setDisplayHardwarePower(false);
@@ -593,7 +601,7 @@ void renderDisplayState() {
   }
 
   setDisplayHardwarePower(true);
-  if (displayState.qrVisible) {
+  if (effectiveQrVisible()) {
     displayQRCodeForIP();
   } else {
     renderStatusScreenFull();

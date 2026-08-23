@@ -206,6 +206,10 @@ void handleAuthMessage(uint8_t clientId, const String& message) {
     return;
   }
 
+  if (pairingMode) {
+    completePairing();
+  }
+
   markAuthenticated(clientId, true);
   sendText(clientId, "{\"type\":\"auth.result\",\"ok\":true}");
   sendText(clientId, deviceStateJson());

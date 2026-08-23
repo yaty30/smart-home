@@ -18,6 +18,8 @@ void initStateManager() {
     Serial.println("Restored state from Preferences");
   }
 
+  pairingMode = !isPaired;
+
   pendingState = acState;
   pendingIR = false;
 }

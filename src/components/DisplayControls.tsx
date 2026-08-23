@@ -4,6 +4,7 @@ import { StyleSheet, Switch, Text, View } from "react-native";
 import { theme } from "../theme/theme";
 
 type DisplayControlsProps = {
+  canControlQr: boolean;
   qrVisible: boolean;
   screenOn: boolean;
   onChangeQrVisible: (visible: boolean) => void;
@@ -53,6 +54,7 @@ function DisplayToggle({
 }
 
 export function DisplayControls({
+  canControlQr,
   onChangeQrVisible,
   onChangeScreenOn,
   qrVisible,
@@ -68,14 +70,18 @@ export function DisplayControls({
         label="Screen"
         onChange={onChangeScreenOn}
       />
-      <View style={styles.divider} />
-      <DisplayToggle
-        accessibilityLabel="Toggle pairing QR code visibility"
-        enabled={qrVisible}
-        icon={QrCode}
-        label="Pairing QR"
-        onChange={onChangeQrVisible}
-      />
+      {canControlQr ? (
+        <>
+          <View style={styles.divider} />
+          <DisplayToggle
+            accessibilityLabel="Toggle pairing QR code visibility"
+            enabled={qrVisible}
+            icon={QrCode}
+            label="Pairing QR"
+            onChange={onChangeQrVisible}
+          />
+        </>
+      ) : null}
     </View>
   );
 }
