@@ -5,7 +5,6 @@
 #include <ir_Panasonic.h>
 
 #include "Config.h"
-#include "Display.h"
 
 IRPanasonicAc ac(IR_PIN);
 
@@ -55,10 +54,4 @@ void processQueuedIR() {
   AcState state = pendingState;
   pendingIR = false;
   sendAC(state);
-}
-
-void applyACState(const AcState& nextState) {
-  acState = nextState;
-  updateStatusScreen();
-  queueACCommand(acState);
 }

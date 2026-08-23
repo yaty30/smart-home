@@ -38,5 +38,5 @@ void connectWiFi() {
   Serial.println(WiFi.localIP());
 
   noteWiFiConnectedForDisplay();
-  displayQRCodeForIP();
+  renderDisplayState();
 }

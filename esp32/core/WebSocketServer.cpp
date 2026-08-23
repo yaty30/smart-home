@@ -1,31 +1,20 @@
 #include "WebSocketServer.h"
 
-#include "ACController.h"
 #include "Config.h"
 #include "Pairing.h"
 #include "State.h"
+#include "StateManager.h"
 #include "WiFiManager.h"
 
 #include <ctype.h>
-
-#if __has_include(<WebSocketsServer.h>)
 #include <WebSocketsServer.h>
-#define SMART_HOME_HAS_WEBSOCKETS 1
-#else
-#define SMART_HOME_HAS_WEBSOCKETS 0
-#endif
 
 const uint8_t MAX_AUTHENTICATED_CLIENTS = 8;
 bool authenticatedClients[MAX_AUTHENTICATED_CLIENTS] = { false };
 
-#if SMART_HOME_HAS_WEBSOCKETS
 WebSocketsServer webSocket(WEBSOCKET_PORT);
-#endif
 
 String webSocketUrl() {
-#if !SMART_HOME_HAS_WEBSOCKETS
-  return "";
-#else
   if (!isWiFiConnected()) {
     return "";
   }
@@ -38,13 +27,13 @@ String webSocketUrl() {
   }
   url += WEBSOCKET_PATH;
   return url;
-#endif
 }
 
 String deviceStateJson() {
   String body = "{";
   body += "\"type\":\"state\",";
   body += "\"ac\":" + acStateJson() + ",";
+  body += "\"display\":" + displayStateJson() + ",";
   body += "\"connection\":{";
   body += "\"wifi\":" + boolString(isWiFiConnected());
   body += "}";
@@ -201,21 +190,12 @@ bool isAuthenticated(uint8_t clientId) {
   return clientId < MAX_AUTHENTICATED_CLIENTS && authenticatedClients[clientId];
 }
 
-void sendText(uint8_t clientId, const String& message) {
-#if SMART_HOME_HAS_WEBSOCKETS
+void sendText(uint8_t clientId, String message) {
   webSocket.sendTXT(clientId, message);
-#else
-  (void)clientId;
-  (void)message;
-#endif
 }
 
 void closeClient(uint8_t clientId) {
-#if SMART_HOME_HAS_WEBSOCKETS
   webSocket.disconnect(clientId);
-#else
-  (void)clientId;
-#endif
 }
 
 void handleAuthMessage(uint8_t clientId, const String& message) {
@@ -240,6 +220,34 @@ void handleCommandMessage(uint8_t clientId, const String& message) {
   }
 
   AcState nextState = acState;
+
+  if (command == "display.screenPower" || command == "display.setScreen") {
+    bool screenOn;
+    if (!getJsonBool(message, "value", screenOn)) {
+      sendText(clientId, commandAckJson(requestId, false, "invalid_screen_power"));
+      return;
+    }
+
+    DisplayState nextDisplayState = displayState;
+    nextDisplayState.screenOn = screenOn;
+    applyDisplayState(nextDisplayState);
+    sendText(clientId, commandAckJson(requestId, true));
+    return;
+  }
+
+  if (command == "display.qrVisibility" || command == "display.setQrVisible") {
+    bool qrVisible;
+    if (!getJsonBool(message, "value", qrVisible)) {
+      sendText(clientId, commandAckJson(requestId, false, "invalid_qr_visibility"));
+      return;
+    }
+
+    DisplayState nextDisplayState = displayState;
+    nextDisplayState.qrVisible = qrVisible;
+    applyDisplayState(nextDisplayState);
+    sendText(clientId, commandAckJson(requestId, true));
+    return;
+  }
 
   if (command == "ac.power") {
     bool power;
@@ -319,7 +327,6 @@ void handleCommandMessage(uint8_t clientId, const String& message) {
 
   applyACState(nextState);
   sendText(clientId, commandAckJson(requestId, true));
-  broadcastState();
 }
 
 void handleTextMessage(uint8_t clientId, const String& message) {
@@ -353,7 +360,6 @@ void handleTextMessage(uint8_t clientId, const String& message) {
   sendText(clientId, "{\"type\":\"error\",\"error\":\"unsupported_type\"}");
 }
 
-#if SMART_HOME_HAS_WEBSOCKETS
 void onWebSocketEvent(uint8_t clientId, WStype_t type, uint8_t* payload, size_t length) {
   switch (type) {
     case WStype_DISCONNECTED:
@@ -369,33 +375,24 @@ void onWebSocketEvent(uint8_t clientId, WStype_t type, uint8_t* payload, size_t 
       break;
   }
 }
-#endif
 
 void initWebSocketServer() {
-#if SMART_HOME_HAS_WEBSOCKETS
   webSocket.begin();
   webSocket.onEvent(onWebSocketEvent);
 
   Serial.print("WebSocket server started at ");
   Serial.println(webSocketUrl());
-#else
-  Serial.println("WebSocket server disabled: install the arduinoWebSockets library to enable runtime control");
-#endif
 }
 
 void handleWebSocketServer() {
-#if SMART_HOME_HAS_WEBSOCKETS
   webSocket.loop();
-#endif
 }
 
 void broadcastState() {
-#if SMART_HOME_HAS_WEBSOCKETS
   String state = deviceStateJson();
   for (uint8_t clientId = 0; clientId < MAX_AUTHENTICATED_CLIENTS; clientId++) {
     if (authenticatedClients[clientId]) {
       webSocket.sendTXT(clientId, state);
     }
   }
-#endif
 }

@@ -7,6 +7,7 @@
 #include "Display.h"
 #include "Pairing.h"
 #include "State.h"
+#include "StateManager.h"
 #include "WebSocketServer.h"
 #include "WiFiManager.h"
 
@@ -87,11 +88,27 @@ void applyACStateAndRespond(const AcState& nextState) {
   body += "}";
 
   sendJson(200, body);
-  broadcastState();
+}
+
+void applyDisplayStateAndRespond(const DisplayState& nextState) {
+  applyDisplayState(nextState);
+
+  String body = "{";
+  body += "\"success\":true,";
+  body += "\"display\":" + displayStateJson();
+  body += "}";
+  sendJson(200, body);
 }
 
 String statusJson() {
   String body = "{";
+  body += "\"ac\":" + acStateJson() + ",";
+  body += "\"display\":" + displayStateJson() + ",";
+  body += "\"wifi\":{";
+  body += "\"connected\":" + boolString(isWiFiConnected()) + ",";
+  body += "\"rssi\":" + String(isWiFiConnected() ? WiFi.RSSI() : 0) + ",";
+  body += "\"ip\":\"" + currentIPString() + "\"";
+  body += "},";
   body += "\"power\":\"" + powerString(acState.power) + "\",";
   body += "\"temperature\":" + String(acState.temperature) + ",";
   body += "\"mode\":\"" + modeString(acState.mode) + "\",";
@@ -127,7 +144,8 @@ void handleRoot() {
   body += "\"POST /pair/complete\",";
   body += "\"GET /display/qr\",";
   body += "\"GET /display/status\",";
-  body += "\"GET /display/clear\"";
+  body += "\"GET /display/clear\",";
+  body += "\"GET /display?screen=on|off&qr=show|hide\"";
   body += "]";
   body += "}";
 
@@ -294,22 +312,61 @@ void handleMode() {
 void handleDisplayQR() {
   logRequestContent("handleDisplayQR");
 
-  resetPairing();
-  sendJson(200, "{\"success\":true,\"display\":\"qr\"}");
+  DisplayState nextState = displayState;
+  nextState.qrVisible = true;
+  applyDisplayStateAndRespond(nextState);
 }
 
 void handleDisplayStatus() {
   logRequestContent("handleDisplayStatus");
 
-  showStatusScreen();
-  sendJson(200, "{\"success\":true,\"display\":\"status\"}");
+  DisplayState nextState = displayState;
+  nextState.qrVisible = false;
+  applyDisplayStateAndRespond(nextState);
 }
 
 void handleDisplayClear() {
   logRequestContent("handleDisplayClear");
 
-  clearDisplay();
-  sendJson(200, "{\"success\":true,\"display\":\"clear\"}");
+  DisplayState nextState = displayState;
+  nextState.screenOn = false;
+  applyDisplayStateAndRespond(nextState);
+}
+
+void handleDisplay() {
+  logRequestContent("handleDisplay");
+
+  if (!server.hasArg("screen") && !server.hasArg("qr")) {
+    sendJson(400, "{\"success\":false,\"error\":\"Provide screen=on|off and/or qr=show|hide\"}");
+    return;
+  }
+
+  DisplayState nextState = displayState;
+  if (server.hasArg("screen")) {
+    String value = server.arg("screen");
+    if (value == "on") {
+      nextState.screenOn = true;
+    } else if (value == "off") {
+      nextState.screenOn = false;
+    } else {
+      sendJson(400, "{\"success\":false,\"error\":\"Invalid screen value. Use on or off\"}");
+      return;
+    }
+  }
+
+  if (server.hasArg("qr")) {
+    String value = server.arg("qr");
+    if (value == "show" || value == "on") {
+      nextState.qrVisible = true;
+    } else if (value == "hide" || value == "off") {
+      nextState.qrVisible = false;
+    } else {
+      sendJson(400, "{\"success\":false,\"error\":\"Invalid qr value. Use show or hide\"}");
+      return;
+    }
+  }
+
+  applyDisplayStateAndRespond(nextState);
 }
 
 void handleDynamicRoute() {
@@ -340,6 +397,7 @@ void setupRoutes() {
   server.on("/display/qr", HTTP_GET, handleDisplayQR);
   server.on("/display/status", HTTP_GET, handleDisplayStatus);
   server.on("/display/clear", HTTP_GET, handleDisplayClear);
+  server.on("/display", HTTP_GET, handleDisplay);
   server.onNotFound(handleDynamicRoute);
 }
 

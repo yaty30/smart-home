@@ -9,6 +9,11 @@ AcState acState = {
   kPanasonicAcSwingHAuto
 };
 
+DisplayState displayState = {
+  true,
+  true
+};
+
 bool pendingIR = false;
 AcState pendingState = acState;
 unsigned long pendingIRQueuedAt = 0;
@@ -165,6 +170,14 @@ String acStateJson() {
   body += "\"swing\":\"" + swingVerticalString(acState.swingVertical) + "\",";
   body += "\"swingVertical\":\"" + swingVerticalString(acState.swingVertical) + "\",";
   body += "\"swingHorizontal\":\"" + swingHorizontalString(acState.swingHorizontal) + "\"";
+  body += "}";
+  return body;
+}
+
+String displayStateJson() {
+  String body = "{";
+  body += "\"screenOn\":" + boolString(displayState.screenOn) + ",";
+  body += "\"qrVisible\":" + boolString(displayState.qrVisible);
   body += "}";
   return body;
 }

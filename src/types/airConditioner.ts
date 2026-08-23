@@ -1,6 +1,6 @@
 import type { ComponentType } from "react";
 
-export type AirConditionerMode = "auto" | "heat" | "dry" | "cold";
+export type AirConditionerMode = "auto" | "heat" | "dry" | "cold" | "fan";
 
 export type AirflowLevel = "one" | "two" | "three" | "four" | "five";
 

@@ -62,6 +62,7 @@ struct DisplayedState {
 };
 
 bool qrIsDisplayed = false;
+bool displayHardwareOn = true;
 bool wasWiFiConnected = false;
 bool lastRenderedWiFiConnected = false;
 IPAddress displayedIP;
@@ -92,14 +93,49 @@ void syncDisplayedState() {
   displayedState.wifiConnected = isWiFiConnected();
 }
 
+void setBacklight(bool on) {
+  if (TFT_BL < 0) {
+    return;
+  }
+
+  digitalWrite(TFT_BL, on ? HIGH : LOW);
+}
+
+void setDisplayHardwarePower(bool on) {
+  if (displayHardwareOn == on) {
+    setBacklight(on);
+    return;
+  }
+
+  if (on) {
+    tft.enableSleep(false);
+    delay(120);
+    tft.enableDisplay(true);
+    setBacklight(true);
+  } else {
+    setBacklight(false);
+    tft.enableDisplay(false);
+    tft.enableSleep(true);
+  }
+
+  displayHardwareOn = on;
+}
+
 void initDisplay() {
+  if (TFT_BL >= 0) {
+    pinMode(TFT_BL, OUTPUT);
+    setBacklight(true);
+  }
+
   SPI.begin(TFT_SCLK, -1, TFT_MOSI, TFT_CS);
   tft.initR(INITR_144GREENTAB);
   tft.setRotation(0);
   tft.fillScreen(BACKGROUND_COLOR);
   tft.setTextWrap(true);
+  displayHardwareOn = true;
   qrIsDisplayed = false;
   invalidateDisplayedState();
+  setDisplayHardwarePower(displayState.screenOn);
 }
 
 void setUIFont(const GFXfont* font) {
@@ -134,6 +170,10 @@ void drawRightAlignedText(const String& text, const GFXfont* font, int16_t right
 }
 
 void showDisplayMessage(const char* line1, const char* line2) {
+  if (!displayState.screenOn) {
+    return;
+  }
+
   tft.fillScreen(BACKGROUND_COLOR);
 
   int16_t baseline = line2 == nullptr ? 68 : 56;
@@ -377,6 +417,11 @@ void drawFan(uint8_t fan) {
 }
 
 void renderStatusScreenFull() {
+  if (!displayState.screenOn) {
+    invalidateDisplayedState();
+    return;
+  }
+
   displayMode = DISPLAY_STATUS;
   qrIsDisplayed = false;
   lastRenderedWiFiConnected = isWiFiConnected();
@@ -395,6 +440,11 @@ void renderStatusScreen() {
 }
 
 void updateStatusScreen() {
+  if (!displayState.screenOn) {
+    invalidateDisplayedState();
+    return;
+  }
+
   if (displayMode != DISPLAY_STATUS || !displayedState.initialized) {
     renderStatusScreenFull();
     return;
@@ -472,6 +522,10 @@ void drawEspQRCode(const char* text) {
 }
 
 void displayQRCodeForIP() {
+  if (!displayState.screenOn) {
+    return;
+  }
+
   if (!isWiFiConnected()) {
     showDisplayMessage("No WiFi");
     return;
@@ -494,23 +548,29 @@ void showStatusScreen() {
 }
 
 void updateDisplayForWiFi() {
+  if (!displayState.screenOn) {
+    wasWiFiConnected = isWiFiConnected();
+    return;
+  }
+
   bool connected = isWiFiConnected();
 
   if (!connected) {
-    if (displayMode == DISPLAY_STATUS) {
+    if (displayState.qrVisible) {
+      if (displayMode != DISPLAY_CLEAR) {
+        showDisplayMessage("No WiFi");
+      }
+    } else {
       updateStatusScreen();
     }
-
     wasWiFiConnected = false;
     return;
   }
 
   IPAddress currentIP = WiFi.localIP();
-  if (displayMode == DISPLAY_STATUS) {
+  if (!displayState.qrVisible) {
     updateStatusScreen();
-  }
-
-  if (!isPaired && (!wasWiFiConnected || !(currentIP == displayedIP))) {
+  } else if (!wasWiFiConnected || !(currentIP == displayedIP) || !qrIsDisplayed) {
     displayQRCodeForIP();
   }
 
@@ -522,6 +582,22 @@ void clearDisplay() {
   displayMode = DISPLAY_CLEAR;
   qrIsDisplayed = false;
   invalidateDisplayedState();
+}
+
+void renderDisplayState() {
+  if (!displayState.screenOn) {
+    invalidateDisplayedState();
+    qrIsDisplayed = false;
+    setDisplayHardwarePower(false);
+    return;
+  }
+
+  setDisplayHardwarePower(true);
+  if (displayState.qrVisible) {
+    displayQRCodeForIP();
+  } else {
+    renderStatusScreenFull();
+  }
 }
 
 void noteWiFiConnectedForDisplay() {

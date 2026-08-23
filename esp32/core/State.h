@@ -12,7 +12,13 @@ struct AcState {
   uint8_t swingHorizontal;
 };
 
+struct DisplayState {
+  bool screenOn;
+  bool qrVisible;
+};
+
 extern AcState acState;
+extern DisplayState displayState;
 extern bool pendingIR;
 extern AcState pendingState;
 extern unsigned long pendingIRQueuedAt;
@@ -29,6 +35,7 @@ String fanDisplayLabel(uint8_t fan);
 String swingVerticalString(uint8_t swingVertical);
 String swingHorizontalString(uint8_t swingHorizontal);
 String acStateJson();
+String displayStateJson();
 
 bool parsePower(const String& value, bool& power);
 bool parseTemperature(const String& value, int& temp);

@@ -3,6 +3,7 @@
 #include <Arduino.h>
 
 void initDisplay();
+void renderDisplayState();
 void showDisplayMessage(const char* line1, const char* line2 = nullptr);
 void renderStatusScreenFull();
 void renderStatusScreen();

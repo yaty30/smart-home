@@ -3,6 +3,7 @@
 #include "Config.h"
 #include "Display.h"
 #include "State.h"
+#include "StateManager.h"
 
 bool isAuthorizedToken(const String& token) {
   return token == PAIRING_TOKEN;
@@ -16,11 +17,15 @@ bool isAuthorizedBearer(const String& authorizationHeader) {
 }
 
 void completePairing() {
-  isPaired = true;
-  renderStatusScreen();
+  applyPairingState(true);
+  DisplayState nextDisplayState = displayState;
+  nextDisplayState.qrVisible = false;
+  applyDisplayState(nextDisplayState);
 }
 
 void resetPairing() {
-  isPaired = false;
-  displayQRCodeForIP();
+  applyPairingState(false);
+  DisplayState nextDisplayState = displayState;
+  nextDisplayState.qrVisible = true;
+  applyDisplayState(nextDisplayState);
 }

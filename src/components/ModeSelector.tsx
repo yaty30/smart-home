@@ -1,4 +1,4 @@
-import { DropletOff, Flame, Snowflake, Sparkles } from 'lucide-react-native';
+import { DropletOff, Fan, Flame, Snowflake, Sparkles } from 'lucide-react-native';
 
 import type { AirConditionerMode, ControlOption } from '../types/airConditioner';
 import { ControlButtonGroup } from './ControlButtonGroup';
@@ -23,6 +23,11 @@ const modes: ControlOption<AirConditionerMode>[] = [
     id: 'heat',
     label: 'Heat',
     icon: Flame,
+  },
+  {
+    id: 'fan',
+    label: 'Fan',
+    icon: Fan,
   },
 ];
 
