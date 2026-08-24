@@ -2,14 +2,11 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 
 import type { AcSchedule, ScheduleAirflow } from "../types/acSchedule";
 import type { AirConditionerMode, AirflowLevel } from "../types/airConditioner";
-import type { PairedDevice } from "../types/device";
 
 const AC_SCHEDULE_STORAGE_KEY_PREFIX = "smartHome.acSchedule";
 
-const scheduleStorageKeyForDevice = (device: PairedDevice) => {
-  return `${AC_SCHEDULE_STORAGE_KEY_PREFIX}.${encodeURIComponent(
-    device.host,
-  )}.${encodeURIComponent(device.token)}`;
+const scheduleStorageKeyForDevice = (deviceId: string) => {
+  return `${AC_SCHEDULE_STORAGE_KEY_PREFIX}.${encodeURIComponent(deviceId)}`;
 };
 
 const isScheduleMode = (
@@ -54,10 +51,10 @@ const isAcSchedule = (value: unknown): value is AcSchedule => {
 };
 
 export async function getAcSchedule(
-  device: PairedDevice,
+  deviceId: string,
 ): Promise<AcSchedule | null> {
   const storedSchedule = await AsyncStorage.getItem(
-    scheduleStorageKeyForDevice(device),
+    scheduleStorageKeyForDevice(deviceId),
   );
 
   if (storedSchedule === null) {
@@ -73,15 +70,15 @@ export async function getAcSchedule(
 }
 
 export async function saveAcSchedule(
-  device: PairedDevice,
+  deviceId: string,
   schedule: AcSchedule,
 ): Promise<void> {
   await AsyncStorage.setItem(
-    scheduleStorageKeyForDevice(device),
+    scheduleStorageKeyForDevice(deviceId),
     JSON.stringify(schedule),
   );
 }
 
-export async function removeAcSchedule(device: PairedDevice): Promise<void> {
-  await AsyncStorage.removeItem(scheduleStorageKeyForDevice(device));
+export async function removeAcSchedule(deviceId: string): Promise<void> {
+  await AsyncStorage.removeItem(scheduleStorageKeyForDevice(deviceId));
 }

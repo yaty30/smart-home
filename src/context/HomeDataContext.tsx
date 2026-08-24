@@ -3,178 +3,201 @@ import {
   type PropsWithChildren,
   useCallback,
   useContext,
+  useEffect,
   useMemo,
+  useRef,
   useState,
 } from "react";
 
+import { removeAcSchedule } from "../storage/acScheduleStorage";
+import {
+  emptyHomeSnapshot,
+  getHome,
+  saveHome,
+  type HomeSnapshot,
+} from "../storage/homeStorage";
 import type {
   HomeDevice,
   HomeDeviceType,
-  HomeSchedule,
   Scene,
   SceneIconId,
 } from "../types/home";
-
-export const LIVING_ROOM_AC_DEVICE_ID = "living-ac";
-export const LIVING_ROOM_AC_SCHEDULE_ID = "living-ac-schedule";
-
-const initialScenes: Scene[] = [
-  { icon: "sofa", id: "living", name: "Living Room", temperature: 24 },
-  { icon: "bed", id: "bedroom", name: "Master Bedroom", temperature: 25 },
-  { icon: "lamp", id: "study", name: "Study Room", temperature: 23 },
-];
-
-// The living room AC is not part of this list; it mirrors the paired
-// device state and is composed into the device list by HomeScreen.
-const initialDevices: HomeDevice[] = [
-  {
-    id: "living-light",
-    name: "Light",
-    onDetail: "On · 70%",
-    powered: false,
-    sceneId: "living",
-    type: "light",
-  },
-  {
-    id: "living-tv",
-    name: "TV",
-    onDetail: "On · HDMI 1",
-    powered: false,
-    sceneId: "living",
-    type: "tv",
-  },
-  {
-    id: "bedroom-ac",
-    name: "Air Conditioner",
-    onDetail: "25°C · Cool",
-    powered: false,
-    sceneId: "bedroom",
-    type: "ac",
-  },
-  {
-    id: "bedroom-light",
-    name: "Light",
-    onDetail: "On · 70%",
-    powered: false,
-    sceneId: "bedroom",
-    type: "light",
-  },
-  {
-    id: "study-ac",
-    name: "Air Conditioner",
-    onDetail: "23°C · Cool",
-    powered: true,
-    sceneId: "study",
-    type: "ac",
-  },
-  {
-    id: "study-light",
-    name: "Light",
-    onDetail: "On · 70%",
-    powered: true,
-    sceneId: "study",
-    type: "light",
-  },
-];
-
-const initialSchedules: HomeSchedule[] = [
-  {
-    deviceName: "Air Conditioner",
-    endTime: "23:30",
-    id: LIVING_ROOM_AC_SCHEDULE_ID,
-    sceneId: "living",
-    startTime: "09:30",
-  },
-  {
-    deviceName: "Air Conditioner",
-    endTime: "07:00",
-    id: "bedroom-ac-schedule",
-    sceneId: "bedroom",
-    startTime: "22:00",
-  },
-  {
-    deviceName: "Light",
-    endTime: "23:00",
-    id: "study-light-schedule",
-    sceneId: "study",
-    startTime: "18:30",
-  },
-];
-
-const defaultOnDetailByType: Record<HomeDeviceType, string> = {
-  ac: "24°C · Cool",
-  light: "On · 100%",
-  tv: "On · HDMI 1",
-};
 
 type AddDeviceInput = {
   name: string;
   sceneId: string;
   type: HomeDeviceType;
+  host: string;
+  token: string;
 };
 
 type HomeDataContextValue = {
+  isLoading: boolean;
   scenes: Scene[];
   devices: HomeDevice[];
-  schedules: HomeSchedule[];
   addScene: (name: string, icon: SceneIconId) => Scene;
+  renameScene: (sceneId: string, name: string) => void;
+  removeScene: (sceneId: string) => void;
   addDevice: (input: AddDeviceInput) => HomeDevice;
-  toggleDevice: (deviceId: string) => void;
+  removeDevice: (deviceId: string) => void;
+  findDeviceByHost: (host: string) => HomeDevice | undefined;
 };
 
 const HomeDataContext = createContext<HomeDataContextValue | null>(null);
 
+const normalizeHost = (host: string) => host.replace(/\/+$/, "").toLowerCase();
+
 export function HomeDataProvider({ children }: PropsWithChildren) {
-  const [scenes, setScenes] = useState<Scene[]>(initialScenes);
-  const [devices, setDevices] = useState<HomeDevice[]>(initialDevices);
-  const [schedules] = useState<HomeSchedule[]>(initialSchedules);
+  const [home, setHome] = useState<HomeSnapshot>(emptyHomeSnapshot);
+  const [isLoading, setIsLoading] = useState(true);
+  const hasLoadedHome = useRef(false);
+  const pendingSave = useRef<Promise<void>>(Promise.resolve());
+
+  useEffect(() => {
+    let isMounted = true;
+
+    const loadHome = async () => {
+      try {
+        const storedHome = await getHome();
+
+        if (isMounted) {
+          setHome(storedHome);
+        }
+      } finally {
+        if (isMounted) {
+          hasLoadedHome.current = true;
+          setIsLoading(false);
+        }
+      }
+    };
+
+    void loadHome();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!hasLoadedHome.current) {
+      return;
+    }
+
+    // Chain writes so a slower earlier save cannot overwrite a newer snapshot.
+    pendingSave.current = pendingSave.current
+      .then(() => saveHome(home))
+      .catch(() => {
+        console.warn("Home layout could not be saved.");
+      });
+  }, [home]);
 
   const addScene = useCallback((name: string, icon: SceneIconId) => {
     const newScene: Scene = {
       icon,
       id: `scene-${Date.now()}`,
       name,
-      temperature: 24,
     };
 
-    setScenes((currentScenes) => [...currentScenes, newScene]);
+    setHome((currentHome) => ({
+      ...currentHome,
+      scenes: [...currentHome.scenes, newScene],
+    }));
+
     return newScene;
   }, []);
 
+  const renameScene = useCallback((sceneId: string, name: string) => {
+    setHome((currentHome) => ({
+      ...currentHome,
+      scenes: currentHome.scenes.map((scene) =>
+        scene.id === sceneId ? { ...scene, name } : scene,
+      ),
+    }));
+  }, []);
+
+  const removeScene = useCallback(
+    (sceneId: string) => {
+      home.devices
+        .filter((device) => device.sceneId === sceneId)
+        .forEach((device) => {
+          void removeAcSchedule(device.id).catch(() => {
+            console.warn("Schedule for a removed device could not be cleared.");
+          });
+        });
+
+      setHome((currentHome) => ({
+        devices: currentHome.devices.filter(
+          (device) => device.sceneId !== sceneId,
+        ),
+        scenes: currentHome.scenes.filter((scene) => scene.id !== sceneId),
+      }));
+    },
+    [home.devices],
+  );
+
   const addDevice = useCallback((input: AddDeviceInput) => {
     const newDevice: HomeDevice = {
+      host: input.host.replace(/\/+$/, ""),
       id: `device-${Date.now()}`,
       name: input.name,
-      onDetail: defaultOnDetailByType[input.type],
-      powered: false,
       sceneId: input.sceneId,
+      token: input.token,
       type: input.type,
     };
 
-    setDevices((currentDevices) => [...currentDevices, newDevice]);
+    setHome((currentHome) => ({
+      ...currentHome,
+      devices: [...currentHome.devices, newDevice],
+    }));
+
     return newDevice;
   }, []);
 
-  const toggleDevice = useCallback((deviceId: string) => {
-    setDevices((currentDevices) =>
-      currentDevices.map((device) =>
-        device.id === deviceId
-          ? { ...device, powered: !device.powered }
-          : device,
-      ),
-    );
+  const removeDevice = useCallback((deviceId: string) => {
+    setHome((currentHome) => ({
+      ...currentHome,
+      devices: currentHome.devices.filter((device) => device.id !== deviceId),
+    }));
+
+    void removeAcSchedule(deviceId).catch(() => {
+      console.warn("Schedule for the removed device could not be cleared.");
+    });
   }, []);
 
-  const value = useMemo(
+  const findDeviceByHost = useCallback(
+    (host: string) => {
+      const normalizedHost = normalizeHost(host);
+
+      return home.devices.find(
+        (device) => normalizeHost(device.host) === normalizedHost,
+      );
+    },
+    [home.devices],
+  );
+
+  const value = useMemo<HomeDataContextValue>(
     () => ({
       addDevice,
       addScene,
-      devices,
-      scenes,
-      schedules,
-      toggleDevice,
+      devices: home.devices,
+      findDeviceByHost,
+      isLoading,
+      removeDevice,
+      removeScene,
+      renameScene,
+      scenes: home.scenes,
     }),
-    [addDevice, addScene, devices, scenes, schedules, toggleDevice],
+    [
+      addDevice,
+      addScene,
+      findDeviceByHost,
+      home.devices,
+      home.scenes,
+      isLoading,
+      removeDevice,
+      removeScene,
+      renameScene,
+    ],
   );
 
   return (

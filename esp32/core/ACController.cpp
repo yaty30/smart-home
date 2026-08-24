@@ -19,6 +19,7 @@ void applyACState(const AcState& state) {
   ac.setFan(state.fan);
   ac.setSwingVertical(state.swingVertical);
   ac.setSwingHorizontal(state.swingHorizontal);
+  ac.setQuiet(state.quiet);
 }
 
 void logHorizontalEncodingCheck() {
@@ -86,7 +87,9 @@ void sendAC(const AcState& state) {
   Serial.print(", swingVertical=");
   Serial.print(swingVerticalString(state.swingVertical));
   Serial.print(", swingHorizontal=");
-  Serial.println(swingHorizontalString(state.swingHorizontal));
+  Serial.print(swingHorizontalString(state.swingHorizontal));
+  Serial.print(", quiet=");
+  Serial.println(powerString(state.quiet));
 }
 
 void queueACCommand(const AcState& state) {

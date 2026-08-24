@@ -2,6 +2,7 @@ import * as Haptics from "expo-haptics";
 import {
   AirVent,
   AlertCircle,
+  CheckCircle2,
   Lightbulb,
   QrCode,
   Tv,
@@ -9,7 +10,6 @@ import {
 } from "lucide-react-native";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
-  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -29,31 +29,33 @@ import type { PairedDevice } from "../types/device";
 import type { HomeDeviceType } from "../types/home";
 
 const deviceTypeOptions: {
-  id: HomeDeviceType;
+  id: HomeDeviceType | "light" | "tv";
   label: string;
   Icon: typeof AirVent;
+  supported: boolean;
 }[] = [
-  { Icon: AirVent, id: "ac", label: "Air Conditioner" },
-  { Icon: Lightbulb, id: "light", label: "Light" },
-  { Icon: Tv, id: "tv", label: "TV" },
+  { Icon: AirVent, id: "ac", label: "Air Conditioner", supported: true },
+  { Icon: Lightbulb, id: "light", label: "Light", supported: false },
+  { Icon: Tv, id: "tv", label: "TV", supported: false },
 ];
 
 export function NewDeviceSheet({
   navigation,
+  route,
 }: RootStackScreenProps<"NewDevice">) {
-  const { addDevice, scenes } = useHomeData();
-  const {
-    closeScanner,
-    isScannerOpen,
-    openScanner,
-    permissionError,
-  } = usePairingScanner();
+  const { addDevice, findDeviceByHost, scenes } = useHomeData();
+  const { closeScanner, isScannerOpen, openScanner, permissionError } =
+    usePairingScanner();
+  const preselectedSceneId = route.params?.sceneId;
   const [scannedDevice, setScannedDevice] = useState<PairedDevice | null>(null);
-  const [deviceName, setDeviceName] = useState("");
+  const [deviceName, setDeviceName] = useState("Air Conditioner");
   const [selectedSceneId, setSelectedSceneId] = useState<string>(
-    scenes[0]?.id ?? "",
+    (preselectedSceneId !== undefined &&
+    scenes.some((scene) => scene.id === preselectedSceneId)
+      ? preselectedSceneId
+      : scenes[0]?.id) ?? "",
   );
-  const [selectedType, setSelectedType] = useState<HomeDeviceType>("ac");
+  const [selectedType] = useState<HomeDeviceType>("ac");
   const hasAutoOpenedScanner = useRef(false);
 
   useEffect(() => {
@@ -67,26 +69,49 @@ export function NewDeviceSheet({
     navigation.goBack();
   }, [navigation]);
 
-  const handlePaired = useCallback((device: PairedDevice) => {
-    void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    setScannedDevice(device);
-  }, []);
+  const handlePaired = useCallback(
+    (device: PairedDevice) => {
+      const existingDevice = findDeviceByHost(device.host);
+
+      if (existingDevice !== undefined) {
+        return `${existingDevice.name} already uses this controller.`;
+      }
+
+      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      setScannedDevice(device);
+      return null;
+    },
+    [findDeviceByHost],
+  );
 
   const handleSave = useCallback(() => {
     const trimmedName = deviceName.trim();
 
-    if (trimmedName.length === 0 || selectedSceneId.length === 0) {
+    if (
+      scannedDevice === null ||
+      trimmedName.length === 0 ||
+      selectedSceneId.length === 0
+    ) {
       return;
     }
 
     addDevice({
+      host: scannedDevice.host,
       name: trimmedName,
       sceneId: selectedSceneId,
+      token: scannedDevice.token,
       type: selectedType,
     });
     void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     navigation.goBack();
-  }, [addDevice, deviceName, navigation, selectedSceneId, selectedType]);
+  }, [
+    addDevice,
+    deviceName,
+    navigation,
+    scannedDevice,
+    selectedSceneId,
+    selectedType,
+  ]);
 
   return (
     <View style={styles.sheet}>
@@ -127,11 +152,7 @@ export function NewDeviceSheet({
           <AppButton
             label="Scan QR Code"
             leftIcon={
-              <QrCode
-                color={theme.accentStrong}
-                size={22}
-                strokeWidth={2.6}
-              />
+              <QrCode color={theme.accentStrong} size={22} strokeWidth={2.6} />
             }
             onPress={() => {
               void openScanner();
@@ -141,9 +162,15 @@ export function NewDeviceSheet({
         </View>
       ) : (
         <View>
+          <View style={styles.pairedNotice}>
+            <CheckCircle2 color={theme.accent} size={18} strokeWidth={2.4} />
+            <Text style={styles.pairedNoticeText} numberOfLines={1}>
+              Controller found at {scannedDevice.host}
+            </Text>
+          </View>
+
           <Text style={styles.fieldLabel}>Name</Text>
           <TextInput
-            autoFocus
             onChangeText={setDeviceName}
             placeholder="e.g. Air Conditioner"
             placeholderTextColor={theme.textMuted}
@@ -154,12 +181,7 @@ export function NewDeviceSheet({
           />
 
           <Text style={styles.fieldLabel}>Scene</Text>
-          <ScrollView
-            horizontal
-            contentContainerStyle={styles.scenePillList}
-            showsHorizontalScrollIndicator={false}
-            style={styles.scenePillScroll}
-          >
+          <View style={styles.scenePillList}>
             {scenes.map((scene) => {
               const selected = selectedSceneId === scene.id;
 
@@ -186,21 +208,23 @@ export function NewDeviceSheet({
                 </TouchableOpacity>
               );
             })}
-          </ScrollView>
+          </View>
 
           <Text style={styles.fieldLabel}>Device Type</Text>
           <View style={styles.typeRow}>
-            {deviceTypeOptions.map(({ Icon, id, label }) => {
-              const selected = selectedType === id;
+            {deviceTypeOptions.map(({ Icon, id, label, supported }) => {
+              const selected = supported && selectedType === id;
 
               return (
-                <TouchableOpacity
-                  activeOpacity={0.78}
+                <View
                   accessibilityRole="button"
-                  accessibilityState={{ selected }}
+                  accessibilityState={{ disabled: !supported, selected }}
                   key={id}
-                  onPress={() => setSelectedType(id)}
-                  style={[styles.typeCard, selected && styles.typeCardSelected]}
+                  style={[
+                    styles.typeCard,
+                    selected && styles.typeCardSelected,
+                    !supported && styles.typeCardDisabled,
+                  ]}
                 >
                   <Icon
                     color={selected ? theme.accent : theme.textSecondary}
@@ -215,7 +239,10 @@ export function NewDeviceSheet({
                   >
                     {label}
                   </Text>
-                </TouchableOpacity>
+                  {supported ? null : (
+                    <Text style={styles.typeCardBadge}>Soon</Text>
+                  )}
+                </View>
               );
             })}
           </View>
@@ -244,13 +271,14 @@ const styles = StyleSheet.create({
   sheet: {
     paddingBottom: theme.spacing.xxl,
     paddingHorizontal: theme.spacing.lg,
-    paddingTop: theme.spacing.lg,
+    paddingTop: theme.spacing.xxxl,
   },
   sheetHeader: {
     alignItems: "center",
     flexDirection: "row",
     justifyContent: "space-between",
-    marginBottom: theme.spacing.lg,
+    marginBottom: theme.spacing.xl,
+    minHeight: 46,
   },
   sheetTitle: {
     color: theme.text,
@@ -311,6 +339,25 @@ const styles = StyleSheet.create({
     letterSpacing: 0,
     lineHeight: 20,
   },
+  pairedNotice: {
+    alignItems: "center",
+    backgroundColor: theme.accentSubtle,
+    borderColor: theme.borderActive,
+    borderRadius: theme.radiusMedium,
+    borderWidth: 1,
+    flexDirection: "row",
+    gap: theme.spacing.sm,
+    marginBottom: theme.spacing.lg,
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: theme.spacing.md,
+  },
+  pairedNoticeText: {
+    color: theme.textSecondary,
+    flex: 1,
+    fontSize: theme.typography.label,
+    fontWeight: "700",
+    letterSpacing: 0,
+  },
   fieldLabel: {
     color: theme.textSecondary,
     fontSize: 13,
@@ -331,20 +378,21 @@ const styles = StyleSheet.create({
     minHeight: 54,
     paddingHorizontal: theme.spacing.md,
   },
-  scenePillScroll: {
-    flexGrow: 0,
-    marginBottom: theme.spacing.lg,
-  },
   scenePillList: {
+    flexDirection: "row",
+    flexWrap: "wrap",
     gap: theme.spacing.sm,
+    marginBottom: theme.spacing.xl,
   },
   scenePill: {
     backgroundColor: "rgba(255, 255, 255, 0.04)",
     borderColor: "rgba(255, 255, 255, 0.06)",
     borderRadius: theme.radiusRound,
     borderWidth: 1,
+    justifyContent: "center",
+    minHeight: 38,
     paddingHorizontal: theme.spacing.md,
-    paddingVertical: 10,
+    paddingVertical: 8,
   },
   scenePillSelected: {
     backgroundColor: theme.accentMuted,
@@ -379,6 +427,9 @@ const styles = StyleSheet.create({
     backgroundColor: theme.accentMuted,
     borderColor: theme.borderActive,
   },
+  typeCardDisabled: {
+    opacity: 0.4,
+  },
   typeCardText: {
     color: theme.textSecondary,
     fontSize: 11,
@@ -388,6 +439,13 @@ const styles = StyleSheet.create({
   },
   typeCardTextSelected: {
     color: theme.accent,
+  },
+  typeCardBadge: {
+    color: theme.textMuted,
+    fontSize: 10,
+    fontWeight: "800",
+    letterSpacing: 0.6,
+    textTransform: "uppercase",
   },
   saveButton: {
     alignSelf: "stretch",

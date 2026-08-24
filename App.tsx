@@ -9,20 +9,15 @@ import {
   View,
 } from "react-native";
 
-import {
-  DeviceConnectionProvider,
-  useDeviceConnection,
-} from "./src/context/DeviceConnectionContext";
-import { HomeDataProvider } from "./src/context/HomeDataContext";
+import { DeviceConnectionProvider } from "./src/context/DeviceConnectionContext";
+import { HomeDataProvider, useHomeData } from "./src/context/HomeDataContext";
 import type { RootStackParamList } from "./src/navigation/types";
 import { AirConditionerScreen } from "./src/screens/AirConditionerScreen";
-import { ConnectDeviceScreen } from "./src/screens/ConnectDeviceScreen";
 import { HomeScreen } from "./src/screens/HomeScreen";
 import { NewDeviceSheet } from "./src/screens/NewDeviceSheet";
 import { NewSceneSheet } from "./src/screens/NewSceneSheet";
+import { SceneScreen } from "./src/screens/SceneScreen";
 import { theme } from "./src/theme/theme";
-
-const DEBUG_MODE = true;
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
@@ -38,7 +33,7 @@ const navigationTheme = {
   },
 };
 
-function PairedStack() {
+function RootStack() {
   return (
     <Stack.Navigator
       screenOptions={{
@@ -47,11 +42,8 @@ function PairedStack() {
       }}
     >
       <Stack.Screen component={HomeScreen} name="Home" />
-      <Stack.Screen name="AirConditioner">
-        {({ navigation }) => (
-          <AirConditionerScreen onBackPress={() => navigation.goBack()} />
-        )}
-      </Stack.Screen>
+      <Stack.Screen component={SceneScreen} name="Scene" />
+      <Stack.Screen component={AirConditionerScreen} name="AirConditioner" />
       <Stack.Group
         screenOptions={{
           contentStyle: { backgroundColor: theme.paperBackground },
@@ -69,27 +61,25 @@ function PairedStack() {
 }
 
 function StartupGate() {
-  const { isLoading, isPaired } = useDeviceConnection();
+  const { isLoading } = useHomeData();
 
   if (isLoading) {
     return (
       <SafeAreaView style={styles.safeArea}>
         <View style={styles.loadingScreen}>
           <ActivityIndicator color={theme.accentBright} size="large" />
-          <Text style={styles.loadingText}>Checking device connection...</Text>
+          <Text style={styles.loadingText}>Loading your home...</Text>
         </View>
       </SafeAreaView>
     );
   }
 
-  if (!isPaired) {
-    return <ConnectDeviceScreen />;
-  }
-
   return (
-    <NavigationContainer theme={navigationTheme}>
-      <PairedStack />
-    </NavigationContainer>
+    <DeviceConnectionProvider>
+      <NavigationContainer theme={navigationTheme}>
+        <RootStack />
+      </NavigationContainer>
+    </DeviceConnectionProvider>
   );
 }
 
@@ -101,11 +91,9 @@ export default function App() {
         barStyle="light-content"
         translucent={false}
       />
-      <DeviceConnectionProvider debugMode={DEBUG_MODE}>
-        <HomeDataProvider>
-          <StartupGate />
-        </HomeDataProvider>
-      </DeviceConnectionProvider>
+      <HomeDataProvider>
+        <StartupGate />
+      </HomeDataProvider>
     </>
   );
 }

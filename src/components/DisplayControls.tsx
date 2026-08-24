@@ -1,5 +1,5 @@
 import type { ComponentType } from "react";
-import { Hexagon, Moon, QrCode } from "lucide-react-native";
+import { Hexagon, Monitor, Moon, QrCode } from "lucide-react-native";
 import { StyleSheet, Switch, Text, View } from "react-native";
 
 import { theme } from "../theme/theme";
@@ -9,8 +9,10 @@ type DisplayControlsProps = {
   isDisabled?: boolean;
   quiet: boolean;
   qrVisible: boolean;
+  screenOn: boolean;
   onChangeQuiet: (quiet: boolean) => void;
   onChangeQrVisible: (visible: boolean) => void;
+  onChangeScreenOn: (screenOn: boolean) => void;
 };
 
 type ToggleIcon = ComponentType<{
@@ -69,8 +71,10 @@ export function DisplayControls({
   isDisabled = false,
   onChangeQuiet,
   onChangeQrVisible,
+  onChangeScreenOn,
   quiet,
   qrVisible,
+  screenOn,
 }: DisplayControlsProps) {
   return (
     <View style={styles.container}>
@@ -78,6 +82,15 @@ export function DisplayControls({
         <Hexagon color={theme.text} size={18} />
         <Text style={styles.label}>Others</Text>
       </View>
+      <DisplayToggle
+        accessibilityLabel="Toggle controller screen"
+        disabled={isDisabled}
+        enabled={screenOn}
+        icon={Monitor}
+        label="Screen"
+        onChange={onChangeScreenOn}
+      />
+      <View style={styles.divider} />
       {canControlQr ? (
         <>
           <DisplayToggle

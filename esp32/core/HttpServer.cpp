@@ -84,6 +84,7 @@ void applyACStateAndRespond(const AcState& nextState) {
   body += "\"fan\":\"" + fanString(acState.fan) + "\",";
   body += "\"swingVertical\":\"" + swingVerticalString(acState.swingVertical) + "\",";
   body += "\"swingHorizontal\":\"" + swingHorizontalString(acState.swingHorizontal) + "\",";
+  body += "\"quiet\":" + boolString(acState.quiet) + ",";
   body += "\"message\":\"IR command queued\"";
   body += "}";
 
@@ -115,6 +116,7 @@ String statusJson() {
   body += "\"fan\":\"" + fanString(acState.fan) + "\",";
   body += "\"swingVertical\":\"" + swingVerticalString(acState.swingVertical) + "\",";
   body += "\"swingHorizontal\":\"" + swingHorizontalString(acState.swingHorizontal) + "\",";
+  body += "\"quiet\":" + boolString(acState.quiet) + ",";
   body += "\"paired\":" + boolString(isPaired) + ",";
   body += "\"pendingIR\":" + boolString(pendingIR) + ",";
   body += "\"wifiConnected\":" + boolString(isWiFiConnected()) + ",";
@@ -135,7 +137,7 @@ void handleRoot() {
   body += "\"endpoints\":[";
   body += "\"GET /\",";
   body += "\"GET /status\",";
-  body += "\"GET /ac?power=on|off&temp=16-30&mode=auto|cool|dry|fan|heat&fan=auto|1..5&swingVertical=auto|1..5&swingHorizontal=auto|1..5\",";
+  body += "\"GET /ac?power=on|off&temp=16-30&mode=auto|cool|dry|fan|heat&fan=auto|1..5&swingVertical=auto|1..5&swingHorizontal=auto|1..5&quiet=on|off\",";
   body += "\"GET /power/on\",";
   body += "\"GET /power/off\",";
   body += "\"GET /temp/16..30\",";
@@ -157,13 +159,18 @@ void handleAC() {
 
   AcState nextState = acState;
 
-  if (!server.hasArg("power") && !server.hasArg("temp") && !server.hasArg("mode") && !server.hasArg("fan") && !server.hasArg("swing") && !server.hasArg("swingVertical") && !server.hasArg("swingHorizontal") && !server.hasArg("verticalAirflow") && !server.hasArg("horizontalAirflow")) {
-    sendJson(400, "{\"success\":false,\"error\":\"Provide power=on|off, temp=16-30, mode=auto|cool|dry|fan|heat, fan=auto|1..5, swingVertical=auto|1..5, and/or swingHorizontal=auto|1..5\"}");
+  if (!server.hasArg("power") && !server.hasArg("temp") && !server.hasArg("mode") && !server.hasArg("fan") && !server.hasArg("swing") && !server.hasArg("swingVertical") && !server.hasArg("swingHorizontal") && !server.hasArg("verticalAirflow") && !server.hasArg("horizontalAirflow") && !server.hasArg("quiet")) {
+    sendJson(400, "{\"success\":false,\"error\":\"Provide power=on|off, temp=16-30, mode=auto|cool|dry|fan|heat, fan=auto|1..5, swingVertical=auto|1..5, swingHorizontal=auto|1..5, and/or quiet=on|off\"}");
     return;
   }
 
   if (server.hasArg("power") && !parsePower(server.arg("power"), nextState.power)) {
     sendJson(400, "{\"success\":false,\"error\":\"Invalid power. Use on or off\"}");
+    return;
+  }
+
+  if (server.hasArg("quiet") && !parseQuiet(server.arg("quiet"), nextState.quiet)) {
+    sendJson(400, "{\"success\":false,\"error\":\"Invalid quiet. Use on or off\"}");
     return;
   }
 

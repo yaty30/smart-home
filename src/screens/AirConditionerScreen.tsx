@@ -38,6 +38,8 @@ import {
 import { Section } from "../components/Section";
 import { TemperatureGauge } from "../components/TemperatureGauge";
 import { useDeviceConnection } from "../context/DeviceConnectionContext";
+import { useHomeData } from "../context/HomeDataContext";
+import type { RootStackScreenProps } from "../navigation/types";
 import {
   getAcSchedule,
   removeAcSchedule,
@@ -50,7 +52,7 @@ import type {
   AirflowLevel,
   FanSpeed,
 } from "../types/airConditioner";
-import type { DeviceStateSnapshot, EspAirflow, EspFanSpeed } from "../types/device";
+import type { EspAirflow, EspFanSpeed } from "../types/device";
 import { normalizeTemperature } from "../utils/temperatureGauge";
 
 const temperatureRanges: Record<
@@ -104,7 +106,6 @@ const espPositionToAirflowLevel: Record<"1" | "2" | "3" | "4" | "5", AirflowLeve
   "5": "five",
 };
 
-const DEVICE_COMMAND_TIMEOUT_MS = 1500;
 type ActiveTab = "control" | "schedule";
 type TimeField = "start" | "end";
 type SchedulerViewState = "empty" | "summary" | "editor" | "confirmDelete";
@@ -155,22 +156,26 @@ const displayAirflow = (airflow: ScheduleAirflow) => {
   return airflowLevelToEspPosition[airflow];
 };
 
-type AirConditionerScreenProps = {
-  onBackPress: () => void;
-};
-
 export function AirConditionerScreen({
-  onBackPress,
-}: AirConditionerScreenProps) {
+  navigation,
+  route,
+}: RootStackScreenProps<"AirConditioner">) {
+  const { deviceId } = route.params;
+  const { devices, scenes } = useHomeData();
   const {
-    deviceConnectionStatus,
-    debugMode,
-    deviceState,
-    isDeviceConnected,
-    pairedDevice,
-    reportDeviceUnreachable,
-    updateDeviceState,
+    getRuntime,
+    sendAcCommand: sendAcCommandToDevice,
+    sendDisplayCommand: sendDisplayCommandToDevice,
+    updateAcState,
+    updateDisplayState,
   } = useDeviceConnection();
+  const device = devices.find((currentDevice) => currentDevice.id === deviceId);
+  const scene = scenes.find(
+    (currentScene) => currentScene.id === device?.sceneId,
+  );
+  const { state: deviceState, status: deviceConnectionStatus } =
+    getRuntime(deviceId);
+  const isDeviceConnected = deviceConnectionStatus === "connected";
   const { width } = useWindowDimensions();
   const [activeTab, setActiveTab] = useState<ActiveTab>("control");
   const [temperature, setTemperature] = useState(24);
@@ -216,9 +221,13 @@ export function AirConditionerScreen({
     return temperatureRangeForMode(draftSchedule?.mode ?? "cold");
   }, [draftSchedule?.mode]);
   const canControlDevice =
-    isDeviceConnected && pairedDevice !== null && deviceState !== null;
+    isDeviceConnected && device !== undefined && deviceState !== null;
   const liveControlsEnabled = canControlDevice && power;
   const unavailableStatusText = useMemo(() => {
+    if (device === undefined) {
+      return "This device was removed";
+    }
+
     if (deviceConnectionStatus === "connecting") {
       return "Reconnecting to ESP32";
     }
@@ -228,7 +237,7 @@ export function AirConditionerScreen({
     }
 
     return "Device offline";
-  }, [deviceConnectionStatus, deviceState]);
+  }, [device, deviceConnectionStatus, deviceState]);
 
   useEffect(() => {
     Animated.timing(controlEnabledProgress, {
@@ -249,14 +258,7 @@ export function AirConditionerScreen({
     let isMounted = true;
 
     const loadSchedule = async () => {
-      if (pairedDevice === null) {
-        setSavedSchedule(null);
-        setDraftSchedule(null);
-        setSchedulerViewState("empty");
-        return;
-      }
-
-      const storedSchedule = await getAcSchedule(pairedDevice);
+      const storedSchedule = await getAcSchedule(deviceId);
 
       if (!isMounted) {
         return;
@@ -274,7 +276,7 @@ export function AirConditionerScreen({
     return () => {
       isMounted = false;
     };
-  }, [pairedDevice]);
+  }, [deviceId]);
 
   useEffect(() => {
     if (deviceState === null) {
@@ -336,156 +338,49 @@ export function AirConditionerScreen({
   }, []);
 
   const updateAcSnapshot = useCallback(
-    (acPatch: Partial<DeviceStateSnapshot["ac"]>) => {
-      updateDeviceState((currentState) =>
-        currentState === null
-          ? currentState
-          : {
-              ...currentState,
-              ac: {
-                ...currentState.ac,
-                ...acPatch,
-              },
-            },
-      );
+    (acPatch: Parameters<typeof updateAcState>[1]) => {
+      updateAcState(deviceId, acPatch);
     },
-    [updateDeviceState],
+    [deviceId, updateAcState],
   );
 
   const updateDisplaySnapshot = useCallback(
-    (displayPatch: Partial<DeviceStateSnapshot["display"]>) => {
-      updateDeviceState((currentState) =>
-        currentState === null
-          ? currentState
-          : {
-              ...currentState,
-              display: {
-                ...currentState.display,
-                ...displayPatch,
-              },
-            },
-      );
+    (displayPatch: Parameters<typeof updateDisplayState>[1]) => {
+      updateDisplayState(deviceId, displayPatch);
     },
-    [updateDeviceState],
+    [deviceId, updateDisplayState],
   );
 
   const sendAcCommand = useCallback(
-    async (params: Record<string, string | number>) => {
-      const description = Object.entries(params)
-        .map(([key, value]) => `${key}=${String(value)}`)
-        .join(",");
-
-      if (!canControlDevice || pairedDevice === null) {
-        logDroppedCommand(description);
-        return false;
+    (params: Record<string, string | number>) => {
+      if (!canControlDevice) {
+        logDroppedCommand(
+          Object.entries(params)
+            .map(([key, value]) => `${key}=${String(value)}`)
+            .join(","),
+        );
+        return Promise.resolve(false);
       }
 
-      if (debugMode) {
-        console.log(`[Device] Debug command accepted: ${description}`);
-        return true;
-      }
-
-      const host = pairedDevice.host.replace(/\/+$/, "");
-      const searchParams = new URLSearchParams();
-      const controller = new AbortController();
-      const timeout = setTimeout(
-        () => controller.abort(),
-        DEVICE_COMMAND_TIMEOUT_MS,
-      );
-
-      Object.entries(params).forEach(([key, value]) => {
-        searchParams.append(key, String(value));
-      });
-
-      try {
-        console.log(`[Device] Command sent immediately: ${description}`);
-        const response = await fetch(`${host}/ac?${searchParams.toString()}`, {
-          headers: {
-            Authorization: `Bearer ${pairedDevice.token}`,
-          },
-          method: "GET",
-          signal: controller.signal,
-        });
-
-        if (!response.ok) {
-          console.warn("ESP32 AC request failed", response.status);
-          return false;
-        }
-        return true;
-      } catch (error) {
-        console.warn("ESP32 AC request failed without retry.", error);
-        reportDeviceUnreachable();
-        return false;
-      } finally {
-        clearTimeout(timeout);
-      }
+      return sendAcCommandToDevice(deviceId, params);
     },
-    [
-      canControlDevice,
-      debugMode,
-      logDroppedCommand,
-      pairedDevice,
-      reportDeviceUnreachable,
-    ],
+    [canControlDevice, deviceId, logDroppedCommand, sendAcCommandToDevice],
   );
 
   const sendDisplayCommand = useCallback(
-    async (params: Record<string, string>) => {
-      const description = Object.entries(params)
-        .map(([key, value]) => `${key}=${String(value)}`)
-        .join(",");
-
-      if (!canControlDevice || pairedDevice === null) {
-        logDroppedCommand(description);
-        return false;
-      }
-
-      if (debugMode) {
-        console.log(`[Device] Debug display command accepted: ${description}`);
-        return true;
-      }
-
-      const host = pairedDevice.host.replace(/\/+$/, "");
-      const searchParams = new URLSearchParams(params);
-      const controller = new AbortController();
-      const timeout = setTimeout(
-        () => controller.abort(),
-        DEVICE_COMMAND_TIMEOUT_MS,
-      );
-
-      try {
-        console.log(`[Device] Command sent immediately: ${description}`);
-        const response = await fetch(
-          `${host}/display?${searchParams.toString()}`,
-          {
-            headers: {
-              Authorization: `Bearer ${pairedDevice.token}`,
-            },
-            method: "GET",
-            signal: controller.signal,
-          },
+    (params: Record<string, string>) => {
+      if (!canControlDevice) {
+        logDroppedCommand(
+          Object.entries(params)
+            .map(([key, value]) => `${key}=${value}`)
+            .join(","),
         );
-
-        if (!response.ok) {
-          console.warn("ESP32 display request failed", response.status);
-          return false;
-        }
-        return true;
-      } catch (error) {
-        console.warn("ESP32 display request failed without retry.", error);
-        reportDeviceUnreachable();
-        return false;
-      } finally {
-        clearTimeout(timeout);
+        return Promise.resolve(false);
       }
+
+      return sendDisplayCommandToDevice(deviceId, params);
     },
-    [
-      canControlDevice,
-      debugMode,
-      logDroppedCommand,
-      pairedDevice,
-      reportDeviceUnreachable,
-    ],
+    [canControlDevice, deviceId, logDroppedCommand, sendDisplayCommandToDevice],
   );
 
   const handleTemperatureChange = useCallback(
@@ -758,8 +653,8 @@ export function AirConditionerScreen({
 
   const handleBackPress = useCallback(() => {
     triggerPressHaptic();
-    onBackPress();
-  }, [onBackPress, triggerPressHaptic]);
+    navigation.goBack();
+  }, [navigation, triggerPressHaptic]);
 
   const handleTemperatureInteractionEnd = useCallback(() => {
     setIsAdjustingTemperature(false);
@@ -785,6 +680,26 @@ export function AirConditionerScreen({
       setQrVisible(nextQrVisible);
       updateDisplaySnapshot({ qrVisible: nextQrVisible });
       void sendDisplayCommand({ qr: nextQrVisible ? "show" : "hide" });
+    },
+    [
+      canControlDevice,
+      logDroppedCommand,
+      sendDisplayCommand,
+      triggerPressHaptic,
+      updateDisplaySnapshot,
+    ],
+  );
+
+  const handleScreenOnChange = useCallback(
+    (nextScreenOn: boolean) => {
+      if (!canControlDevice) {
+        logDroppedCommand(`screen=${nextScreenOn ? "on" : "off"}`);
+        return;
+      }
+
+      triggerPressHaptic();
+      updateDisplaySnapshot({ screenOn: nextScreenOn });
+      void sendDisplayCommand({ screen: nextScreenOn ? "on" : "off" });
     },
     [
       canControlDevice,
@@ -925,23 +840,18 @@ export function AirConditionerScreen({
       return;
     }
 
-    if (pairedDevice === null) {
-      setScheduleValidationError("Device is not available.");
-      return;
-    }
-
     triggerPressHaptic();
-    await saveAcSchedule(pairedDevice, draftSchedule);
+    await saveAcSchedule(deviceId, draftSchedule);
     setSavedSchedule(draftSchedule);
     setDraftSchedule(null);
     setScheduleValidationError(null);
     setActiveTimePicker(null);
     setSchedulerViewState("summary");
-  }, [draftSchedule, pairedDevice, triggerPressHaptic]);
+  }, [deviceId, draftSchedule, triggerPressHaptic]);
 
   const handleToggleScheduleEnabled = useCallback(
     async (nextEnabled: boolean) => {
-      if (savedSchedule === null || pairedDevice === null) {
+      if (savedSchedule === null) {
         return;
       }
 
@@ -950,10 +860,10 @@ export function AirConditionerScreen({
         ...savedSchedule,
         enabled: nextEnabled,
       };
-      await saveAcSchedule(pairedDevice, nextSchedule);
+      await saveAcSchedule(deviceId, nextSchedule);
       setSavedSchedule(nextSchedule);
     },
-    [pairedDevice, savedSchedule, triggerPressHaptic],
+    [deviceId, savedSchedule, triggerPressHaptic],
   );
 
   const handleRequestDeleteSchedule = useCallback(() => {
@@ -967,18 +877,14 @@ export function AirConditionerScreen({
   }, [savedSchedule, triggerPressHaptic]);
 
   const handleDeleteSchedule = useCallback(async () => {
-    if (pairedDevice === null) {
-      return;
-    }
-
     triggerPressHaptic();
-    await removeAcSchedule(pairedDevice);
+    await removeAcSchedule(deviceId);
     setSavedSchedule(null);
     setDraftSchedule(null);
     setScheduleValidationError(null);
     setActiveTimePicker(null);
     setSchedulerViewState("empty");
-  }, [pairedDevice, triggerPressHaptic]);
+  }, [deviceId, triggerPressHaptic]);
 
   const handleScroll = useCallback(
     (event: NativeSyntheticEvent<NativeScrollEvent>) => {
@@ -1006,10 +912,10 @@ export function AirConditionerScreen({
         stickyHeaderIndices={[0]}
       >
         <ACHeader
-          eyebrow="Living Room"
+          eyebrow={scene?.name}
           isScrolled={isHeaderScrolled}
           onBackPress={handleBackPress}
-          title="Air Conditioner"
+          title={device?.name ?? "Air Conditioner"}
           rightAccessory={
             <PowerButton
               isPowered={power}
@@ -1118,8 +1024,10 @@ export function AirConditionerScreen({
                   isDisabled={!canControlDevice}
                   onChangeQuiet={handleQuietChange}
                   onChangeQrVisible={handleQrVisibilityChange}
+                  onChangeScreenOn={handleScreenOnChange}
                   quiet={quiet}
                   qrVisible={qrVisible}
+                  screenOn={deviceState?.display.screenOn ?? false}
                 />
               </Section>
             </>

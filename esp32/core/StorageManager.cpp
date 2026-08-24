@@ -37,7 +37,8 @@ bool loadStoredState(AcState& storedAcState, DisplayState& storedDisplayState, b
     preferences.getUChar("ac_mode", storedAcState.mode),
     preferences.getUChar("ac_fan", storedAcState.fan),
     preferences.getUChar("ac_swing_v", storedAcState.swingVertical),
-    preferences.getUChar("ac_swing_h", storedAcState.swingHorizontal)
+    preferences.getUChar("ac_swing_h", storedAcState.swingHorizontal),
+    preferences.getBool("ac_quiet", storedAcState.quiet)
   };
 
   if (!isValidACState(candidate)) {
@@ -64,6 +65,7 @@ void saveACState(const AcState& state) {
   preferences.putUChar("ac_fan", state.fan);
   preferences.putUChar("ac_swing_v", state.swingVertical);
   preferences.putUChar("ac_swing_h", state.swingHorizontal);
+  preferences.putBool("ac_quiet", state.quiet);
 }
 
 void saveDisplayState(const DisplayState& state) {

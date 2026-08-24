@@ -10,6 +10,7 @@ struct AcState {
   uint8_t fan;
   uint8_t swingVertical;
   uint8_t swingHorizontal;
+  bool quiet;
 };
 
 struct DisplayState {
@@ -39,6 +40,7 @@ String acStateJson();
 String displayStateJson();
 
 bool parsePower(const String& value, bool& power);
+bool parseQuiet(const String& value, bool& quiet);
 bool parseTemperature(const String& value, int& temp);
 bool parseTemperatureValue(int value, int& temp);
 bool parseMode(const String& value, uint8_t& mode);

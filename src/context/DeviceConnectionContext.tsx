@@ -9,68 +9,56 @@ import {
   useState,
 } from "react";
 
-import {
-  getPairedDevice,
-  removePairedDevice,
-  savePairedDevice,
-} from "../storage/deviceStorage";
 import type {
   DeviceStateSnapshot,
   EspAcMode,
   EspAirflow,
   EspFanSpeed,
-  PairedDevice,
 } from "../types/device";
-
-type DeviceConnectionContextValue = {
-  pairedDevice: PairedDevice | null;
-  deviceConnectionStatus: DeviceConnectionStatus;
-  debugMode: boolean;
-  isLoading: boolean;
-  isPaired: boolean;
-  isDeviceConnected: boolean;
-  deviceState: DeviceStateSnapshot | null;
-  updateDeviceState: (
-    updater: (currentState: DeviceStateSnapshot | null) => DeviceStateSnapshot | null,
-  ) => void;
-  pairDevice: (device: PairedDevice) => Promise<void>;
-  disconnectDevice: () => Promise<void>;
-  reportDeviceUnreachable: () => void;
-};
-
-const DeviceConnectionContext =
-  createContext<DeviceConnectionContextValue | null>(null);
+import type { HomeDevice } from "../types/home";
+import { useHomeData } from "./HomeDataContext";
 
 export type DeviceConnectionStatus =
   | "connecting"
   | "connected"
   | "disconnected";
 
-type DeviceConnectionProviderProps = PropsWithChildren<{
-  debugMode?: boolean;
-}>;
-
-const debugPairedDevice: PairedDevice = {
-  host: "http://debug-device.local",
-  token: "debug-token",
+export type DeviceRuntime = {
+  status: DeviceConnectionStatus;
+  state: DeviceStateSnapshot | null;
 };
 
-const debugDeviceState: DeviceStateSnapshot = {
-  ac: {
-    fan: "auto",
-    mode: "auto",
-    power: true,
-    quiet: false,
-    swingHorizontal: "auto",
-    swingVertical: "auto",
-    temperature: 24,
-  },
-  display: {
-    pairingMode: false,
-    qrVisible: false,
-    screenOn: true,
-  },
+export const OFFLINE_RUNTIME: DeviceRuntime = {
+  state: null,
+  status: "disconnected",
 };
+
+type CommandParams = Record<string, string | number>;
+
+type DeviceConnectionContextValue = {
+  runtimeById: Record<string, DeviceRuntime>;
+  getRuntime: (deviceId: string) => DeviceRuntime;
+  updateAcState: (
+    deviceId: string,
+    patch: Partial<DeviceStateSnapshot["ac"]>,
+  ) => void;
+  updateDisplayState: (
+    deviceId: string,
+    patch: Partial<DeviceStateSnapshot["display"]>,
+  ) => void;
+  sendAcCommand: (deviceId: string, params: CommandParams) => Promise<boolean>;
+  sendDisplayCommand: (
+    deviceId: string,
+    params: CommandParams,
+  ) => Promise<boolean>;
+};
+
+const DeviceConnectionContext =
+  createContext<DeviceConnectionContextValue | null>(null);
+
+const COMMAND_TIMEOUT_MS = 1500;
+const STATUS_POLL_INTERVAL_MS = 10000;
+const MAX_RECONNECT_DELAY_MS = 10000;
 
 const isRecord = (value: unknown): value is Record<string, unknown> => {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -136,8 +124,10 @@ const parseDeviceState = (value: unknown): DeviceStateSnapshot | null => {
   };
 };
 
-const websocketUrlForDevice = (device: PairedDevice) => {
-  const url = new URL(device.host);
+const baseUrlForHost = (host: string) => host.replace(/\/+$/, "");
+
+const websocketUrlForHost = (host: string) => {
+  const url = new URL(host);
   url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
   url.port = "81";
   url.pathname = "/ws";
@@ -146,136 +136,124 @@ const websocketUrlForDevice = (device: PairedDevice) => {
   return url.toString();
 };
 
-export function DeviceConnectionProvider({
-  children,
-  debugMode = false,
-}: DeviceConnectionProviderProps) {
-  const [pairedDevice, setPairedDevice] = useState<PairedDevice | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [deviceConnectionStatus, setDeviceConnectionStatus] =
-    useState<DeviceConnectionStatus>("disconnected");
-  const [deviceState, setDeviceState] = useState<DeviceStateSnapshot | null>(null);
-  const reconnectAttempt = useRef(0);
-  const activeSocket = useRef<WebSocket | null>(null);
+type DeviceSocketProps = {
+  device: HomeDevice;
+  onStateChange: (deviceId: string, state: DeviceStateSnapshot) => void;
+  onStatusChange: (deviceId: string, status: DeviceConnectionStatus) => void;
+};
+
+/**
+ * Keeps one ESP32 in sync: the WebSocket pushes state changes instantly while
+ * the periodic /status poll doubles as a liveness check.
+ */
+function DeviceSocket({
+  device,
+  onStateChange,
+  onStatusChange,
+}: DeviceSocketProps) {
+  const { host, id, token } = device;
 
   useEffect(() => {
-    if (debugMode) {
-      setPairedDevice(debugPairedDevice);
-      setDeviceState(debugDeviceState);
-      setDeviceConnectionStatus("connected");
-      setIsLoading(false);
-      return;
-    }
-
-    let isMounted = true;
-
-    const loadPairedDevice = async () => {
-      try {
-        const storedDevice = await getPairedDevice();
-
-        if (isMounted) {
-          setPairedDevice(storedDevice);
-        }
-      } finally {
-        if (isMounted) {
-          setIsLoading(false);
-        }
-      }
-    };
-
-    void loadPairedDevice();
-
-    return () => {
-      isMounted = false;
-    };
-  }, [debugMode]);
-
-  useEffect(() => {
-    if (debugMode) {
-      setPairedDevice(debugPairedDevice);
-      setDeviceState(debugDeviceState);
-      setDeviceConnectionStatus("connected");
-      return;
-    }
-
-    if (pairedDevice === null) {
-      setDeviceState(null);
-      setDeviceConnectionStatus("disconnected");
-      return;
-    }
-
-    let active = true;
+    let isActive = true;
     let socket: WebSocket | null = null;
     let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
-    const host = pairedDevice.host.replace(/\/+$/, "");
+    let reconnectAttempt = 0;
+    let isSocketOpen = false;
+    const baseUrl = baseUrlForHost(host);
 
-    const applyIncomingState = (payload: unknown) => {
-      const snapshot = parseDeviceState(payload);
-      if (snapshot !== null && active) {
-        setDeviceState(snapshot);
+    // Reaching the REST API is what actually makes a device controllable, so
+    // the WebSocket dropping alone must not report the device as offline.
+    const pollStatus = async () => {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), COMMAND_TIMEOUT_MS);
+
+      try {
+        const response = await fetch(`${baseUrl}/status`, {
+          headers: { Authorization: `Bearer ${token}` },
+          signal: controller.signal,
+        });
+
+        if (!isActive) {
+          return;
+        }
+
+        if (!response.ok) {
+          onStatusChange(id, "disconnected");
+          return;
+        }
+
+        const snapshot = parseDeviceState((await response.json()) as unknown);
+
+        if (snapshot !== null && !isSocketOpen) {
+          onStateChange(id, snapshot);
+        }
+
+        onStatusChange(id, "connected");
+      } catch {
+        if (isActive) {
+          onStatusChange(id, "disconnected");
+        }
+      } finally {
+        clearTimeout(timeout);
       }
     };
 
-    const loadRestStatus = async () => {
-      try {
-        const response = await fetch(`${host}/status`, {
-          headers: {
-            Authorization: `Bearer ${pairedDevice.token}`,
-          },
-        });
-        if (response.ok) {
-          applyIncomingState((await response.json()) as unknown);
-        }
-      } catch {
-        // The WebSocket retry loop remains responsible for recovery.
-      }
+    const scheduleReconnect = () => {
+      reconnectAttempt += 1;
+      const delay = Math.min(
+        1000 * 2 ** reconnectAttempt,
+        MAX_RECONNECT_DELAY_MS,
+      );
+      reconnectTimer = setTimeout(() => {
+        void pollStatus();
+        connect();
+      }, delay);
     };
 
     const connect = () => {
-      if (!active) {
+      if (!isActive) {
         return;
       }
 
-      setDeviceConnectionStatus("connecting");
-
       try {
-        socket = new WebSocket(websocketUrlForDevice(pairedDevice));
-        activeSocket.current = socket;
+        socket = new WebSocket(websocketUrlForHost(host));
       } catch {
-        reconnectAttempt.current += 1;
-        const delay = Math.min(1000 * 2 ** reconnectAttempt.current, 10000);
-        reconnectTimer = setTimeout(connect, delay);
+        scheduleReconnect();
         return;
       }
 
       const currentSocket = socket;
 
       currentSocket.onopen = () => {
-        currentSocket.send(
-          JSON.stringify({
-            token: pairedDevice.token,
-            type: "auth",
-          }),
-        );
+        currentSocket.send(JSON.stringify({ token, type: "auth" }));
       };
 
       currentSocket.onmessage = (event) => {
         try {
           const payload = JSON.parse(String(event.data)) as unknown;
-          if (isRecord(payload) && payload.type === "auth.result") {
+
+          if (!isRecord(payload)) {
+            return;
+          }
+
+          if (payload.type === "auth.result") {
             if (payload.ok === true) {
-              reconnectAttempt.current = 0;
-              console.log("[Device] Reconnected; using authoritative ESP32 state.");
-              setDeviceConnectionStatus("connected");
+              reconnectAttempt = 0;
+              isSocketOpen = true;
+              onStatusChange(id, "connected");
             }
             return;
           }
 
-          if (isRecord(payload) && payload.type === "state") {
-            applyIncomingState(payload);
+          if (payload.type === "state") {
+            const snapshot = parseDeviceState(payload);
+
+            if (snapshot !== null && isActive) {
+              onStateChange(id, snapshot);
+            }
           }
         } catch {
-          console.warn("ESP32 sent an invalid WebSocket message.");
+          console.warn(`ESP32 ${host} sent an invalid WebSocket message.`);
         }
       };
 
@@ -284,113 +262,242 @@ export function DeviceConnectionProvider({
       };
 
       currentSocket.onclose = () => {
-        if (!active) {
+        isSocketOpen = false;
+
+        if (!isActive) {
           return;
         }
 
-        if (activeSocket.current === currentSocket) {
-          activeSocket.current = null;
-        }
-        setDeviceConnectionStatus("disconnected");
-        reconnectAttempt.current += 1;
-        const delay = Math.min(1000 * 2 ** reconnectAttempt.current, 10000);
-        reconnectTimer = setTimeout(() => {
-          void loadRestStatus();
-          connect();
-        }, delay);
+        void pollStatus();
+        scheduleReconnect();
       };
     };
 
-    reconnectAttempt.current = 0;
-    void loadRestStatus();
+    onStatusChange(id, "connecting");
+    void pollStatus();
     connect();
 
+    const pollTimer = setInterval(() => {
+      void pollStatus();
+    }, STATUS_POLL_INTERVAL_MS);
+
     return () => {
-      active = false;
+      isActive = false;
+      clearInterval(pollTimer);
+
       if (reconnectTimer !== null) {
         clearTimeout(reconnectTimer);
       }
+
       socket?.close();
-      if (activeSocket.current === socket) {
-        activeSocket.current = null;
-      }
     };
-  }, [debugMode, pairedDevice]);
+  }, [host, id, onStateChange, onStatusChange, token]);
 
-  const pairDevice = useCallback(
-    async (device: PairedDevice) => {
-      if (debugMode) {
-        setPairedDevice(debugPairedDevice);
-        return;
+  return null;
+}
+
+export function DeviceConnectionProvider({ children }: PropsWithChildren) {
+  const { devices } = useHomeData();
+  const [runtimeById, setRuntimeById] = useState<Record<string, DeviceRuntime>>(
+    {},
+  );
+  const devicesRef = useRef(devices);
+  devicesRef.current = devices;
+
+  // Drop runtime entries for devices that are no longer part of the home.
+  useEffect(() => {
+    setRuntimeById((currentRuntimes) => {
+      const deviceIds = new Set(devices.map((device) => device.id));
+      const staleIds = Object.keys(currentRuntimes).filter(
+        (deviceId) => !deviceIds.has(deviceId),
+      );
+
+      if (staleIds.length === 0) {
+        return currentRuntimes;
       }
 
-      await savePairedDevice(device);
-      setPairedDevice(device);
-    },
-    [debugMode],
-  );
+      const nextRuntimes = { ...currentRuntimes };
+      staleIds.forEach((deviceId) => delete nextRuntimes[deviceId]);
+      return nextRuntimes;
+    });
+  }, [devices]);
 
-  const disconnectDevice = useCallback(async () => {
-    if (debugMode) {
-      setPairedDevice(debugPairedDevice);
-      setDeviceState(debugDeviceState);
-      setDeviceConnectionStatus("connected");
-      return;
-    }
-
-    await removePairedDevice();
-    setPairedDevice(null);
-  }, [debugMode]);
-
-  const reportDeviceUnreachable = useCallback(() => {
-    if (debugMode) {
-      return;
-    }
-
-    setDeviceConnectionStatus("disconnected");
-    activeSocket.current?.close();
-  }, [debugMode]);
-
-  const updateDeviceState = useCallback(
-    (
-      updater: (
-        currentState: DeviceStateSnapshot | null,
-      ) => DeviceStateSnapshot | null,
-    ) => {
-      setDeviceState((currentState) => updater(currentState));
+  const handleStateChange = useCallback(
+    (deviceId: string, state: DeviceStateSnapshot) => {
+      setRuntimeById((currentRuntimes) => ({
+        ...currentRuntimes,
+        [deviceId]: {
+          state,
+          status: currentRuntimes[deviceId]?.status ?? "connecting",
+        },
+      }));
     },
     [],
   );
 
+  const handleStatusChange = useCallback(
+    (deviceId: string, status: DeviceConnectionStatus) => {
+      setRuntimeById((currentRuntimes) => {
+        if (currentRuntimes[deviceId]?.status === status) {
+          return currentRuntimes;
+        }
+
+        return {
+          ...currentRuntimes,
+          [deviceId]: {
+            state: currentRuntimes[deviceId]?.state ?? null,
+            status,
+          },
+        };
+      });
+    },
+    [],
+  );
+
+  const getRuntime = useCallback(
+    (deviceId: string) => runtimeById[deviceId] ?? OFFLINE_RUNTIME,
+    [runtimeById],
+  );
+
+  const updateAcState = useCallback(
+    (deviceId: string, patch: Partial<DeviceStateSnapshot["ac"]>) => {
+      setRuntimeById((currentRuntimes) => {
+        const runtime = currentRuntimes[deviceId];
+
+        if (runtime?.state == null) {
+          return currentRuntimes;
+        }
+
+        return {
+          ...currentRuntimes,
+          [deviceId]: {
+            ...runtime,
+            state: { ...runtime.state, ac: { ...runtime.state.ac, ...patch } },
+          },
+        };
+      });
+    },
+    [],
+  );
+
+  const updateDisplayState = useCallback(
+    (deviceId: string, patch: Partial<DeviceStateSnapshot["display"]>) => {
+      setRuntimeById((currentRuntimes) => {
+        const runtime = currentRuntimes[deviceId];
+
+        if (runtime?.state == null) {
+          return currentRuntimes;
+        }
+
+        return {
+          ...currentRuntimes,
+          [deviceId]: {
+            ...runtime,
+            state: {
+              ...runtime.state,
+              display: { ...runtime.state.display, ...patch },
+            },
+          },
+        };
+      });
+    },
+    [],
+  );
+
+  const sendCommand = useCallback(
+    async (deviceId: string, path: string, params: CommandParams) => {
+      const description = Object.entries(params)
+        .map(([key, value]) => `${key}=${String(value)}`)
+        .join(",");
+      const device = devicesRef.current.find(
+        (currentDevice) => currentDevice.id === deviceId,
+      );
+
+      if (device === undefined) {
+        console.log(`[Device] Dropped command for unknown device: ${description}`);
+        return false;
+      }
+
+      const searchParams = new URLSearchParams();
+      Object.entries(params).forEach(([key, value]) => {
+        searchParams.append(key, String(value));
+      });
+
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), COMMAND_TIMEOUT_MS);
+
+      try {
+        const response = await fetch(
+          `${baseUrlForHost(device.host)}${path}?${searchParams.toString()}`,
+          {
+            headers: { Authorization: `Bearer ${device.token}` },
+            method: "GET",
+            signal: controller.signal,
+          },
+        );
+
+        if (!response.ok) {
+          console.warn(
+            `ESP32 ${path} request failed for ${device.name}`,
+            response.status,
+          );
+          return false;
+        }
+
+        handleStatusChange(deviceId, "connected");
+        return true;
+      } catch (error) {
+        console.warn(`ESP32 ${path} request failed without retry.`, error);
+        handleStatusChange(deviceId, "disconnected");
+        return false;
+      } finally {
+        clearTimeout(timeout);
+      }
+    },
+    [handleStatusChange],
+  );
+
+  const sendAcCommand = useCallback(
+    (deviceId: string, params: CommandParams) =>
+      sendCommand(deviceId, "/ac", params),
+    [sendCommand],
+  );
+
+  const sendDisplayCommand = useCallback(
+    (deviceId: string, params: CommandParams) =>
+      sendCommand(deviceId, "/display", params),
+    [sendCommand],
+  );
+
   const value = useMemo<DeviceConnectionContextValue>(
     () => ({
-      debugMode,
-      disconnectDevice,
-      deviceConnectionStatus,
-      deviceState,
-      isDeviceConnected: deviceConnectionStatus === "connected",
-      isLoading,
-      isPaired: pairedDevice !== null,
-      pairDevice,
-      pairedDevice,
-      reportDeviceUnreachable,
-      updateDeviceState,
+      getRuntime,
+      runtimeById,
+      sendAcCommand,
+      sendDisplayCommand,
+      updateAcState,
+      updateDisplayState,
     }),
     [
-      debugMode,
-      deviceConnectionStatus,
-      deviceState,
-      disconnectDevice,
-      isLoading,
-      pairDevice,
-      pairedDevice,
-      reportDeviceUnreachable,
-      updateDeviceState,
+      getRuntime,
+      runtimeById,
+      sendAcCommand,
+      sendDisplayCommand,
+      updateAcState,
+      updateDisplayState,
     ],
   );
 
   return (
     <DeviceConnectionContext.Provider value={value}>
+      {devices.map((device) => (
+        <DeviceSocket
+          device={device}
+          key={device.id}
+          onStateChange={handleStateChange}
+          onStatusChange={handleStatusChange}
+        />
+      ))}
       {children}
     </DeviceConnectionContext.Provider>
   );

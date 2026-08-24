@@ -6,7 +6,6 @@ import {
 import { AlertCircle, X } from "lucide-react-native";
 import { useCallback, useEffect, useState } from "react";
 import {
-  ActivityIndicator,
   Modal,
   Pressable,
   SafeAreaView,
@@ -15,7 +14,6 @@ import {
   View,
 } from "react-native";
 
-import { useDeviceConnection } from "../context/DeviceConnectionContext";
 import { theme } from "../theme/theme";
 import type { PairedDevice } from "../types/device";
 import {
@@ -64,7 +62,8 @@ export function usePairingScanner() {
 type PairingScannerModalProps = {
   visible: boolean;
   onClose: () => void;
-  onPaired?: (device: PairedDevice) => void;
+  /** Return an error message to keep the scanner open and show it inline. */
+  onPaired: (device: PairedDevice) => string | null;
 };
 
 export function PairingScannerModal({
@@ -72,22 +71,19 @@ export function PairingScannerModal({
   onPaired,
   visible,
 }: PairingScannerModalProps) {
-  const { pairDevice } = useDeviceConnection();
-  const [isPairing, setIsPairing] = useState(false);
   const [canScan, setCanScan] = useState(true);
   const [scannerError, setScannerError] = useState<string | null>(null);
 
   useEffect(() => {
     if (visible) {
       setCanScan(true);
-      setIsPairing(false);
       setScannerError(null);
     }
   }, [visible]);
 
   const handleBarcodeScanned = useCallback(
-    async (result: BarcodeScanningResult) => {
-      if (!canScan || isPairing) {
+    (result: BarcodeScanningResult) => {
+      if (!canScan) {
         return;
       }
 
@@ -99,22 +95,18 @@ export function PairingScannerModal({
         return;
       }
 
-      setScannerError(null);
-      setIsPairing(true);
+      const rejectionMessage = onPaired(pairedDevice);
 
-      try {
-        await pairDevice(pairedDevice);
-        void notifyPairingComplete(pairedDevice);
-        onPaired?.(pairedDevice);
-        onClose();
-      } catch {
-        setScannerError("Pairing could not be saved. Try scanning again.");
-        setCanScan(true);
-      } finally {
-        setIsPairing(false);
+      if (rejectionMessage !== null) {
+        setScannerError(rejectionMessage);
+        return;
       }
+
+      setScannerError(null);
+      void notifyPairingComplete(pairedDevice);
+      onClose();
     },
-    [canScan, isPairing, onClose, onPaired, pairDevice],
+    [canScan, onClose, onPaired],
   );
 
   return (
@@ -142,12 +134,7 @@ export function PairingScannerModal({
           <View style={styles.scanFrame} />
 
           <View style={styles.scannerFooter}>
-            {isPairing ? (
-              <View style={styles.scannerMessage}>
-                <ActivityIndicator color={theme.accentBright} />
-                <Text style={styles.scannerMessageText}>Saving device...</Text>
-              </View>
-            ) : scannerError !== null ? (
+            {scannerError !== null ? (
               <View style={styles.scannerMessage}>
                 <AlertCircle
                   color={theme.accentBright}
@@ -194,6 +181,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     flexDirection: "row",
     justifyContent: "space-between",
+    paddingHorizontal: theme.spacing.lg,
   },
   scannerTitle: {
     color: theme.text,

@@ -1,15 +1,5 @@
 import * as Haptics from "expo-haptics";
-import {
-  AirVent,
-  Lightbulb,
-  Monitor,
-  MonitorOff,
-  Plus,
-  Power,
-  PowerOff,
-  Settings,
-  Tv,
-} from "lucide-react-native";
+import { AirVent, Plus, Settings } from "lucide-react-native";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ActionSheetIOS,
@@ -22,36 +12,27 @@ import {
   View,
 } from "react-native";
 
+import { AppButton } from "../components/AppButton";
+import { DeviceCard } from "../components/DeviceCard";
 import {
   SCREEN_BOTTOM_SAFE_PADDING,
   ScreenView,
 } from "../components/ScreenView";
 import { sceneIconById } from "../components/sceneIcons";
 import { useDeviceConnection } from "../context/DeviceConnectionContext";
-import {
-  LIVING_ROOM_AC_DEVICE_ID,
-  LIVING_ROOM_AC_SCHEDULE_ID,
-  useHomeData,
-} from "../context/HomeDataContext";
+import { useHomeData } from "../context/HomeDataContext";
 import type { RootStackScreenProps } from "../navigation/types";
 import { getAcSchedule } from "../storage/acScheduleStorage";
 import { theme } from "../theme/theme";
-import type { AcSchedule } from "../types/acSchedule";
-import type { DeviceStateSnapshot } from "../types/device";
 import type { HomeDevice } from "../types/home";
 
-const iconByDeviceType = {
-  ac: AirVent,
-  light: Lightbulb,
-  tv: Tv,
-};
-
-const formatAcMode = (mode: string) => {
-  if (mode === "cool") {
-    return "Cool";
-  }
-
-  return mode.charAt(0).toUpperCase() + mode.slice(1);
+type ScheduleRow = {
+  deviceId: string;
+  deviceName: string;
+  enabled: boolean;
+  endTime: string;
+  sceneId: string;
+  startTime: string;
 };
 
 const formatTime12h = (time: string) => {
@@ -66,117 +47,56 @@ const formatTime12h = (time: string) => {
   )} ${suffix}`;
 };
 
-const livingRoomAcFallback: HomeDevice = {
-  id: LIVING_ROOM_AC_DEVICE_ID,
-  name: "Air Conditioner",
-  onDetail: "24°C · Cool",
-  powered: true,
-  sceneId: "living",
-  type: "ac",
-};
-
-const DISPLAY_COMMAND_TIMEOUT_MS = 1500;
-
-const getDeviceStatus = (device: HomeDevice) => {
-  return device.powered ? device.onDetail : "Off";
-};
-
-const getSceneChips = (devices: HomeDevice[], sceneId: string) => {
-  const activeDevices = devices.filter(
-    (device) => device.sceneId === sceneId && device.powered,
-  );
-
-  if (activeDevices.length === 0) {
-    return [{ active: false, label: "All Off" }];
-  }
-
-  return activeDevices.map((device) => {
-    if (device.type === "ac") {
-      return { active: true, label: "AC On" };
-    }
-
-    if (device.type === "light") {
-      return { active: true, label: "Light On" };
-    }
-
-    return { active: true, label: "TV On" };
-  });
-};
-
 export function HomeScreen({ navigation }: RootStackScreenProps<"Home">) {
-  const {
-    debugMode,
-    deviceState,
-    isDeviceConnected,
-    pairedDevice,
-    reportDeviceUnreachable,
-    updateDeviceState,
-  } = useDeviceConnection();
-  const {
-    devices: sceneDevices,
-    scenes,
-    schedules,
-    toggleDevice,
-  } = useHomeData();
+  const { devices, removeDevice, scenes } = useHomeData();
+  const { getRuntime, sendAcCommand, updateAcState } = useDeviceConnection();
   const [selectedFilter, setSelectedFilter] = useState<string>("all");
-  const [livingAcSchedule, setLivingAcSchedule] = useState<AcSchedule | null>(
-    null,
-  );
+  const [scheduleRows, setScheduleRows] = useState<ScheduleRow[]>([]);
+  const [deleteVisibleId, setDeleteVisibleId] = useState<string | null>(null);
 
   useEffect(() => {
     let isActive = true;
 
-    const loadLivingAcSchedule = () => {
-      if (pairedDevice === null) {
-        return;
-      }
+    const loadSchedules = async () => {
+      const rows = await Promise.all(
+        devices.map(async (device) => {
+          const schedule = await getAcSchedule(device.id).catch(() => null);
 
-      getAcSchedule(pairedDevice)
-        .then((schedule) => {
-          if (isActive) {
-            setLivingAcSchedule(schedule);
+          if (schedule === null) {
+            return null;
           }
-        })
-        .catch(() => {
-          // Keep the seeded schedule when storage is unavailable.
-        });
+
+          return {
+            deviceId: device.id,
+            deviceName: device.name,
+            enabled: schedule.enabled,
+            endTime: schedule.endTime,
+            sceneId: device.sceneId,
+            startTime: schedule.startTime,
+          };
+        }),
+      );
+
+      if (isActive) {
+        setScheduleRows(rows.filter((row): row is ScheduleRow => row !== null));
+      }
     };
 
-    loadLivingAcSchedule();
-    const unsubscribe = navigation.addListener("focus", loadLivingAcSchedule);
+    void loadSchedules();
+    const unsubscribe = navigation.addListener("focus", () => {
+      void loadSchedules();
+    });
 
     return () => {
       isActive = false;
       unsubscribe();
     };
-  }, [navigation, pairedDevice]);
-
-  const livingRoomAcDevice = useMemo<HomeDevice>(() => {
-    if (deviceState === null) {
-      return livingRoomAcFallback;
-    }
-
-    return {
-      ...livingRoomAcFallback,
-      onDetail: `${deviceState.ac.temperature}°C · ${formatAcMode(
-        deviceState.ac.mode,
-      )}`,
-      powered: deviceState.ac.power,
-    };
-  }, [deviceState]);
-
-  const devices = useMemo(
-    () => [livingRoomAcDevice, ...sceneDevices],
-    [livingRoomAcDevice, sceneDevices],
-  );
+  }, [devices, navigation]);
 
   const sceneNameById = useMemo(
     () =>
       scenes.reduce<Record<string, string>>(
-        (sceneMap, scene) => ({
-          ...sceneMap,
-          [scene.id]: scene.name,
-        }),
+        (sceneMap, scene) => ({ ...sceneMap, [scene.id]: scene.name }),
         {},
       ),
     [scenes],
@@ -198,128 +118,9 @@ export function HomeScreen({ navigation }: RootStackScreenProps<"Home">) {
     return devices.filter((device) => device.sceneId === selectedFilter);
   }, [devices, selectedFilter]);
 
-  const scheduleRows = useMemo(
-    () =>
-      schedules.map((schedule) => {
-        if (
-          schedule.id === LIVING_ROOM_AC_SCHEDULE_ID &&
-          livingAcSchedule !== null
-        ) {
-          return {
-            ...schedule,
-            endTime: livingAcSchedule.endTime,
-            startTime: livingAcSchedule.startTime,
-          };
-        }
-
-        return schedule;
-      }),
-    [livingAcSchedule, schedules],
-  );
-
-  const canControlDisplay =
-    isDeviceConnected && pairedDevice !== null && deviceState !== null;
-  const screenOn = deviceState?.display.screenOn ?? false;
-
   const triggerPressHaptic = useCallback(() => {
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
   }, []);
-
-  const updateDisplaySnapshot = useCallback(
-    (displayPatch: Partial<DeviceStateSnapshot["display"]>) => {
-      updateDeviceState((currentState) =>
-        currentState === null
-          ? currentState
-          : {
-              ...currentState,
-              display: {
-                ...currentState.display,
-                ...displayPatch,
-              },
-            },
-      );
-    },
-    [updateDeviceState],
-  );
-
-  const sendDisplayCommand = useCallback(
-    async (params: Record<string, string>) => {
-      const description = Object.entries(params)
-        .map(([key, value]) => `${key}=${value}`)
-        .join(",");
-
-      if (!canControlDisplay || pairedDevice === null) {
-        console.log(
-          `[Device] Dropped command because ESP32 is offline: ${description}`,
-        );
-        return false;
-      }
-
-      if (debugMode) {
-        console.log(`[Device] Debug display command accepted: ${description}`);
-        return true;
-      }
-
-      const host = pairedDevice.host.replace(/\/+$/, "");
-      const searchParams = new URLSearchParams(params);
-      const controller = new AbortController();
-      const timeout = setTimeout(
-        () => controller.abort(),
-        DISPLAY_COMMAND_TIMEOUT_MS,
-      );
-
-      try {
-        console.log(`[Device] Command sent immediately: ${description}`);
-        const response = await fetch(
-          `${host}/display?${searchParams.toString()}`,
-          {
-            headers: {
-              Authorization: `Bearer ${pairedDevice.token}`,
-            },
-            method: "GET",
-            signal: controller.signal,
-          },
-        );
-
-        if (!response.ok) {
-          console.warn("ESP32 display request failed", response.status);
-          return false;
-        }
-
-        return true;
-      } catch (error) {
-        console.warn("ESP32 display request failed without retry.", error);
-        reportDeviceUnreachable();
-        return false;
-      } finally {
-        clearTimeout(timeout);
-      }
-    },
-    [canControlDisplay, debugMode, pairedDevice, reportDeviceUnreachable],
-  );
-
-  const handleScreenPowerChange = useCallback(() => {
-    const nextScreenOn = !screenOn;
-
-    if (!canControlDisplay) {
-      console.log(
-        `[Device] Dropped command because ESP32 is offline: screen=${
-          nextScreenOn ? "on" : "off"
-        }`,
-      );
-      return;
-    }
-
-    triggerPressHaptic();
-    updateDisplaySnapshot({ screenOn: nextScreenOn });
-    void sendDisplayCommand({ screen: nextScreenOn ? "on" : "off" });
-  }, [
-    canControlDisplay,
-    screenOn,
-    sendDisplayCommand,
-    triggerPressHaptic,
-    updateDisplaySnapshot,
-  ]);
 
   const openAddMenu = useCallback(() => {
     triggerPressHaptic();
@@ -363,42 +164,70 @@ export function HomeScreen({ navigation }: RootStackScreenProps<"Home">) {
     [triggerPressHaptic],
   );
 
-  const handleToggleDevice = useCallback(
-    (deviceId: string) => {
+  const handleOpenScene = useCallback(
+    (sceneId: string) => {
       triggerPressHaptic();
+      navigation.navigate("Scene", { sceneId });
+    },
+    [navigation, triggerPressHaptic],
+  );
 
-      if (deviceId === LIVING_ROOM_AC_DEVICE_ID) {
-        updateDeviceState((currentState) =>
-          currentState === null
-            ? currentState
-            : {
-                ...currentState,
-                ac: {
-                  ...currentState.ac,
-                  power: !currentState.ac.power,
-                },
-              },
+  const handleTogglePower = useCallback(
+    (device: HomeDevice) => {
+      const { state } = getRuntime(device.id);
+
+      if (state === null) {
+        console.log(
+          `[Device] Dropped command because ${device.name} is offline: power`,
         );
         return;
       }
 
-      toggleDevice(deviceId);
+      const nextPower = !state.ac.power;
+      triggerPressHaptic();
+      updateAcState(device.id, { power: nextPower });
+      void sendAcCommand(device.id, { power: nextPower ? "on" : "off" });
     },
-    [toggleDevice, triggerPressHaptic, updateDeviceState],
+    [getRuntime, sendAcCommand, triggerPressHaptic, updateAcState],
   );
 
   const handleOpenDevice = useCallback(
     (device: HomeDevice) => {
+      setDeleteVisibleId(null);
       triggerPressHaptic();
-
-      if (device.type === "ac") {
-        navigation.navigate("AirConditioner");
-        return;
-      }
-
-      toggleDevice(device.id);
+      navigation.navigate("AirConditioner", { deviceId: device.id });
     },
-    [navigation, toggleDevice, triggerPressHaptic],
+    [navigation, triggerPressHaptic],
+  );
+
+  const handleRevealDelete = useCallback((device: HomeDevice) => {
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    setDeleteVisibleId(device.id);
+  }, []);
+
+  const handleRequestDeleteDevice = useCallback(
+    (device: HomeDevice) => {
+      Alert.alert(
+        `Delete ${device.name}?`,
+        "This device will be removed from your home. This action cannot be undone.",
+        [
+          {
+            onPress: () => setDeleteVisibleId(null),
+            style: "cancel",
+            text: "Cancel",
+          },
+          {
+            onPress: () => {
+              removeDevice(device.id);
+              setDeleteVisibleId(null);
+            },
+            style: "destructive",
+            text: "Delete",
+          },
+        ],
+      );
+    },
+    [removeDevice],
   );
 
   return (
@@ -406,6 +235,7 @@ export function HomeScreen({ navigation }: RootStackScreenProps<"Home">) {
       <ScrollView
         bounces={false}
         contentContainerStyle={styles.content}
+        onScrollBeginDrag={() => setDeleteVisibleId(null)}
         showsVerticalScrollIndicator={false}
         style={styles.scrollView}
       >
@@ -452,51 +282,68 @@ export function HomeScreen({ navigation }: RootStackScreenProps<"Home">) {
           showsHorizontalScrollIndicator={false}
         >
           {scenes.map((scene) => {
-            const selected = selectedFilter === scene.id;
-            const chips = getSceneChips(devices, scene.id);
             const SceneIcon = sceneIconById[scene.icon];
+            const sceneDevices = devices.filter(
+              (device) => device.sceneId === scene.id,
+            );
+            const poweredDevices = sceneDevices.filter(
+              (device) => getRuntime(device.id).state?.ac.power === true,
+            );
+            const temperatures = poweredDevices
+              .map((device) => getRuntime(device.id).state?.ac.temperature)
+              .filter((value): value is number => typeof value === "number");
+            const averageTemperature =
+              temperatures.length === 0
+                ? null
+                : Math.round(
+                    temperatures.reduce((total, value) => total + value, 0) /
+                      temperatures.length,
+                  );
 
             return (
               <TouchableOpacity
                 activeOpacity={0.78}
                 accessibilityRole="button"
-                accessibilityState={{ selected }}
                 key={scene.id}
-                onPress={() => handleSelectFilter(scene.id)}
-                style={[styles.sceneCard, selected && styles.sceneCardSelected]}
+                onPress={() => handleOpenScene(scene.id)}
+                style={styles.sceneCard}
               >
                 <View style={styles.sceneCardHeader}>
                   <View style={styles.sceneTitleGroup}>
                     <SceneIcon
-                      color={selected ? theme.accent : theme.textSecondary}
+                      color={theme.textSecondary}
                       size={18}
                       strokeWidth={2.3}
                     />
                     <Text style={styles.sceneName}>{scene.name}</Text>
                   </View>
                   <Text style={styles.sceneTemperature}>
-                    {scene.temperature}°
+                    {averageTemperature === null ? "--" : `${averageTemperature}°`}
                   </Text>
                 </View>
                 <Text style={styles.sceneDeviceCount}>
-                  {devices.filter((device) => device.sceneId === scene.id).length} devices
+                  {sceneDevices.length}{" "}
+                  {sceneDevices.length === 1 ? "device" : "devices"}
                 </Text>
                 <View style={styles.chipRow}>
-                  {chips.map((chip) => (
-                    <View
-                      key={`${scene.id}-${chip.label}`}
-                      style={[styles.chip, chip.active && styles.chipActive]}
-                    >
-                      <Text
-                        style={[
-                          styles.chipText,
-                          chip.active && styles.chipTextActive,
-                        ]}
-                      >
-                        {chip.label}
+                  {poweredDevices.length === 0 ? (
+                    <View style={styles.chip}>
+                      <Text style={styles.chipText}>
+                        {sceneDevices.length === 0 ? "No Devices" : "All Off"}
                       </Text>
                     </View>
-                  ))}
+                  ) : (
+                    poweredDevices.map((device) => (
+                      <View
+                        key={device.id}
+                        style={[styles.chip, styles.chipActive]}
+                      >
+                        <Text style={[styles.chipText, styles.chipTextActive]}>
+                          AC On
+                        </Text>
+                      </View>
+                    ))
+                  )}
                 </View>
               </TouchableOpacity>
             );
@@ -505,147 +352,84 @@ export function HomeScreen({ navigation }: RootStackScreenProps<"Home">) {
 
         <View style={styles.sectionHeader}>
           <Text style={styles.sectionTitle}>Devices</Text>
-          <View style={styles.sectionActions}>
-            <TouchableOpacity
-              activeOpacity={0.76}
-              accessibilityLabel={
-                screenOn ? "Turn screen off" : "Turn screen on"
-              }
-              accessibilityRole="switch"
-              accessibilityState={{
-                checked: screenOn,
-                disabled: !canControlDisplay,
-              }}
-              disabled={!canControlDisplay}
-              onPress={handleScreenPowerChange}
-              style={[
-                styles.screenToggleButton,
-                screenOn && styles.screenToggleButtonActive,
-                !canControlDisplay && styles.screenToggleButtonDisabled,
-              ]}
-            >
-              {screenOn ? (
-                <Monitor
-                  color={theme.accentStrong}
-                  size={17}
-                  strokeWidth={2.4}
-                />
-              ) : (
-                <MonitorOff
-                  color={theme.textSecondary}
-                  size={17}
-                  strokeWidth={2.4}
-                />
-              )}
-            </TouchableOpacity>
-            <TouchableOpacity
-              activeOpacity={0.76}
-              accessibilityRole="button"
-              onPress={openAddMenu}
-              style={styles.addButton}
-            >
-              <Plus color={theme.accent} size={15} strokeWidth={2.8} />
-              <Text style={styles.linkText}>Add</Text>
-            </TouchableOpacity>
+          <TouchableOpacity
+            activeOpacity={0.76}
+            accessibilityRole="button"
+            onPress={openAddMenu}
+            style={styles.addButton}
+          >
+            <Plus color={theme.accent} size={15} strokeWidth={2.8} />
+            <Text style={styles.linkText}>Add</Text>
+          </TouchableOpacity>
+        </View>
+
+        {devices.length > 0 ? (
+          <ScrollView
+            horizontal
+            contentContainerStyle={styles.filterList}
+            showsHorizontalScrollIndicator={false}
+          >
+            {sceneFilters.map((filter) => {
+              const selected = selectedFilter === filter.id;
+
+              return (
+                <TouchableOpacity
+                  activeOpacity={0.78}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected }}
+                  key={filter.id}
+                  onPress={() => handleSelectFilter(filter.id)}
+                  style={[
+                    styles.filterPill,
+                    selected && styles.filterPillSelected,
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.filterPillText,
+                      selected && styles.filterPillTextSelected,
+                    ]}
+                  >
+                    {filter.label}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </ScrollView>
+        ) : null}
+
+        {devices.length === 0 ? (
+          <View style={styles.emptyCard}>
+            <View style={styles.emptyMark}>
+              <AirVent color={theme.accent} size={26} strokeWidth={2.2} />
+            </View>
+            <Text style={styles.emptyTitle}>No devices yet</Text>
+            <Text style={styles.emptyText}>
+              Scan the pairing QR code on your ESP32 controller to add an air
+              conditioner to a scene.
+            </Text>
+            <AppButton
+              label="Add Device"
+              onPress={() => navigation.navigate("NewDevice")}
+              vibe="strong"
+            />
           </View>
-        </View>
-
-        <ScrollView
-          horizontal
-          contentContainerStyle={styles.filterList}
-          showsHorizontalScrollIndicator={false}
-        >
-          {sceneFilters.map((filter) => {
-            const selected = selectedFilter === filter.id;
-
-            return (
-              <TouchableOpacity
-                activeOpacity={0.78}
-                accessibilityRole="button"
-                accessibilityState={{ selected }}
-                key={filter.id}
-                onPress={() => handleSelectFilter(filter.id)}
-                style={[styles.filterPill, selected && styles.filterPillSelected]}
-              >
-                <Text
-                  style={[
-                    styles.filterPillText,
-                    selected && styles.filterPillTextSelected,
-                  ]}
-                >
-                  {filter.label}
-                </Text>
-              </TouchableOpacity>
-            );
-          })}
-        </ScrollView>
-
-        <View style={styles.deviceGrid}>
-          {filteredDevices.map((device) => {
-            const Icon = iconByDeviceType[device.type];
-            const powered = device.powered;
-            const PowerIcon = powered ? PowerOff : Power;
-
-            return (
-              <TouchableOpacity
-                activeOpacity={0.82}
-                accessibilityRole="button"
+        ) : (
+          <View style={styles.deviceGrid}>
+            {filteredDevices.map((device) => (
+              <DeviceCard
+                device={device}
+                isDeleteVisible={deleteVisibleId === device.id}
                 key={device.id}
+                onLongPress={() => handleRevealDelete(device)}
                 onPress={() => handleOpenDevice(device)}
-                style={[styles.deviceCard, powered && styles.deviceCardOn]}
-              >
-                <View style={styles.deviceCardTop}>
-                  <View
-                    style={[
-                      styles.deviceIconFrame,
-                      powered && styles.deviceIconFrameOn,
-                    ]}
-                  >
-                    <Icon
-                      color={powered ? theme.accent : theme.textSecondary}
-                      size={23}
-                      strokeWidth={2.2}
-                    />
-                  </View>
-                  <TouchableOpacity
-                    activeOpacity={0.74}
-                    accessibilityLabel={`Toggle ${device.name}`}
-                    accessibilityRole="switch"
-                    accessibilityState={{ checked: powered }}
-                    onPress={(event) => {
-                      event.stopPropagation();
-                      handleToggleDevice(device.id);
-                    }}
-                    style={[
-                      styles.devicePowerButton,
-                      powered
-                        ? styles.devicePowerButtonShutdown
-                        : styles.devicePowerButtonOn,
-                    ]}
-                  >
-                    <PowerIcon
-                      color={powered ? theme.powerAccent : theme.accent}
-                      size={18}
-                      strokeWidth={2.5}
-                    />
-                  </TouchableOpacity>
-                </View>
-                <Text style={styles.deviceName}>{device.name}</Text>
-                <Text style={styles.deviceScene}>
-                  {sceneNameById[device.sceneId] ?? "Unassigned"}
-                </Text>
-                <Text
-                  style={[
-                    styles.deviceStatus,
-                    powered && styles.deviceStatusOn,
-                  ]}
-                >
-                  {getDeviceStatus(device)}
-                </Text>
-              </TouchableOpacity>
-            );
-          })}
-        </View>
+                onRequestDelete={() => handleRequestDeleteDevice(device)}
+                onTogglePower={() => handleTogglePower(device)}
+                sceneName={sceneNameById[device.sceneId] ?? "Unassigned"}
+              />
+            ))}
+          </View>
+        )}
 
         <View style={[styles.sectionHeader, styles.schedulesSectionHeader]}>
           <Text style={styles.sectionTitle}>Schedules</Text>
@@ -666,7 +450,7 @@ export function HomeScreen({ navigation }: RootStackScreenProps<"Home">) {
 
           {scheduleRows.map((schedule, index) => (
             <View
-              key={schedule.id}
+              key={schedule.deviceId}
               style={[
                 styles.scheduleRow,
                 index === scheduleRows.length - 1 && styles.scheduleRowLast,
@@ -686,9 +470,14 @@ export function HomeScreen({ navigation }: RootStackScreenProps<"Home">) {
               </Text>
               <Text
                 numberOfLines={1}
-                style={[styles.schedulePeriodText, styles.scheduleColPeriod]}
+                style={[
+                  styles.schedulePeriodText,
+                  styles.scheduleColPeriod,
+                  !schedule.enabled && styles.schedulePeriodTextPaused,
+                ]}
               >
-                {formatTime12h(schedule.startTime)} - {formatTime12h(schedule.endTime)}
+                {formatTime12h(schedule.startTime)} -{" "}
+                {formatTime12h(schedule.endTime)}
               </Text>
             </View>
           ))}
@@ -762,11 +551,6 @@ const styles = StyleSheet.create({
     fontWeight: "900",
     letterSpacing: 0,
   },
-  sectionActions: {
-    alignItems: "center",
-    flexDirection: "row",
-    gap: theme.spacing.sm,
-  },
   linkText: {
     color: theme.accent,
     fontSize: 13,
@@ -777,23 +561,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     flexDirection: "row",
     gap: theme.spacing.xs,
-  },
-  screenToggleButton: {
-    alignItems: "center",
-    backgroundColor: theme.surfaceLow,
-    borderColor: theme.border,
-    borderRadius: 13,
-    borderWidth: 1,
-    height: 34,
-    justifyContent: "center",
-    width: 34,
-  },
-  screenToggleButtonActive: {
-    backgroundColor: theme.accentMuted,
-    borderColor: theme.borderActive,
-  },
-  screenToggleButtonDisabled: {
-    opacity: 0.45,
   },
   sceneList: {
     gap: theme.spacing.md,
@@ -807,17 +574,6 @@ const styles = StyleSheet.create({
     minHeight: 140,
     padding: theme.spacing.lg,
     width: 178,
-  },
-  sceneCardSelected: {
-    backgroundColor: theme.surfaceWarm,
-    borderColor: theme.borderActive,
-    shadowColor: theme.accent,
-    shadowOffset: {
-      height: 8,
-      width: 0,
-    },
-    shadowOpacity: 0.1,
-    shadowRadius: 18,
   },
   sceneCardHeader: {
     alignItems: "flex-start",
@@ -905,92 +661,43 @@ const styles = StyleSheet.create({
   filterPillTextSelected: {
     color: theme.accent,
   },
-  deviceGrid: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: theme.spacing.md,
-  },
-  deviceCard: {
+  emptyCard: {
+    alignItems: "center",
     backgroundColor: theme.surfaceLow,
     borderColor: "rgba(255, 255, 255, 0.06)",
     borderRadius: 24,
     borderWidth: 1,
-    minHeight: 174,
-    padding: theme.spacing.md,
-    width: "48.2%",
+    gap: theme.spacing.md,
+    padding: theme.spacing.lg,
   },
-  deviceCardOn: {
-    backgroundColor: theme.surfaceWarm,
-    borderColor: theme.borderStrong,
-    shadowColor: theme.accent,
-    shadowOffset: {
-      height: 8,
-      width: 0,
-    },
-    shadowOpacity: 0.08,
-    shadowRadius: 16,
-  },
-  deviceCardTop: {
+  emptyMark: {
     alignItems: "center",
-    flexDirection: "row",
-    justifyContent: "space-between",
-    marginBottom: theme.spacing.md,
-  },
-  deviceIconFrame: {
-    alignItems: "center",
-    backgroundColor: "rgba(255, 255, 255, 0.04)",
-    borderColor: "rgba(255, 255, 255, 0.06)",
-    borderRadius: 17,
-    borderWidth: 1,
-    height: 45,
-    justifyContent: "center",
-    width: 45,
-  },
-  deviceIconFrameOn: {
     backgroundColor: theme.accentMuted,
     borderColor: theme.borderActive,
-  },
-  devicePowerButton: {
-    alignItems: "center",
-    backgroundColor: theme.surfaceLow,
-    borderColor: theme.border,
-    borderRadius: 15,
+    borderRadius: theme.radiusRound,
     borderWidth: 1,
-    height: 40,
+    height: 62,
     justifyContent: "center",
-    width: 40,
+    width: 62,
   },
-  devicePowerButtonOn: {
-    backgroundColor: theme.accentMuted,
-    borderColor: theme.borderActive,
-  },
-  devicePowerButtonShutdown: {
-    backgroundColor: theme.powerAccentMuted,
-    borderColor: theme.powerAccent,
-  },
-  deviceName: {
+  emptyTitle: {
     color: theme.text,
-    fontSize: 16,
+    fontSize: 18,
     fontWeight: "900",
     letterSpacing: 0,
-    lineHeight: 19,
   },
-  deviceScene: {
-    color: theme.textMuted,
-    fontSize: 12,
-    fontWeight: "800",
+  emptyText: {
+    color: theme.textSecondary,
+    fontSize: theme.typography.label,
+    fontWeight: "600",
     letterSpacing: 0,
-    marginTop: theme.spacing.xs,
+    lineHeight: 21,
+    textAlign: "center",
   },
-  deviceStatus: {
-    color: theme.textMuted,
-    fontSize: 13,
-    fontWeight: "900",
-    letterSpacing: 0,
-    marginTop: theme.spacing.md,
-  },
-  deviceStatusOn: {
-    color: theme.accent,
+  deviceGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: theme.spacing.md,
   },
   scheduleCard: {
     backgroundColor: theme.surfaceLow,
@@ -1052,6 +759,9 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: "800",
     letterSpacing: 0,
+  },
+  schedulePeriodTextPaused: {
+    color: theme.textMuted,
   },
   scheduleEmptyText: {
     color: theme.textMuted,
