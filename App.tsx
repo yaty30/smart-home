@@ -1,3 +1,5 @@
+import { DarkTheme, NavigationContainer } from "@react-navigation/native";
+import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import {
   ActivityIndicator,
   SafeAreaView,
@@ -11,11 +13,60 @@ import {
   DeviceConnectionProvider,
   useDeviceConnection,
 } from "./src/context/DeviceConnectionContext";
+import { HomeDataProvider } from "./src/context/HomeDataContext";
+import type { RootStackParamList } from "./src/navigation/types";
+import { AirConditionerScreen } from "./src/screens/AirConditionerScreen";
 import { ConnectDeviceScreen } from "./src/screens/ConnectDeviceScreen";
-import { AirConditionerScreen } from './src/screens/AirConditionerScreen';
-import { theme } from './src/theme/theme';
+import { HomeScreen } from "./src/screens/HomeScreen";
+import { NewDeviceSheet } from "./src/screens/NewDeviceSheet";
+import { NewSceneSheet } from "./src/screens/NewSceneSheet";
+import { theme } from "./src/theme/theme";
 
 const DEBUG_MODE = true;
+
+const Stack = createNativeStackNavigator<RootStackParamList>();
+
+const navigationTheme = {
+  ...DarkTheme,
+  colors: {
+    ...DarkTheme.colors,
+    background: theme.root,
+    border: theme.border,
+    card: theme.root,
+    primary: theme.accent,
+    text: theme.text,
+  },
+};
+
+function PairedStack() {
+  return (
+    <Stack.Navigator
+      screenOptions={{
+        contentStyle: { backgroundColor: theme.root },
+        headerShown: false,
+      }}
+    >
+      <Stack.Screen component={HomeScreen} name="Home" />
+      <Stack.Screen name="AirConditioner">
+        {({ navigation }) => (
+          <AirConditionerScreen onBackPress={() => navigation.goBack()} />
+        )}
+      </Stack.Screen>
+      <Stack.Group
+        screenOptions={{
+          contentStyle: { backgroundColor: theme.paperBackground },
+          presentation: "formSheet",
+          sheetAllowedDetents: "fitToContents",
+          sheetCornerRadius: 28,
+          sheetGrabberVisible: true,
+        }}
+      >
+        <Stack.Screen component={NewSceneSheet} name="NewScene" />
+        <Stack.Screen component={NewDeviceSheet} name="NewDevice" />
+      </Stack.Group>
+    </Stack.Navigator>
+  );
+}
 
 function StartupGate() {
   const { isLoading, isPaired } = useDeviceConnection();
@@ -31,7 +82,15 @@ function StartupGate() {
     );
   }
 
-  return isPaired ? <AirConditionerScreen /> : <ConnectDeviceScreen />;
+  if (!isPaired) {
+    return <ConnectDeviceScreen />;
+  }
+
+  return (
+    <NavigationContainer theme={navigationTheme}>
+      <PairedStack />
+    </NavigationContainer>
+  );
 }
 
 export default function App() {
@@ -43,7 +102,9 @@ export default function App() {
         translucent={false}
       />
       <DeviceConnectionProvider debugMode={DEBUG_MODE}>
-        <StartupGate />
+        <HomeDataProvider>
+          <StartupGate />
+        </HomeDataProvider>
       </DeviceConnectionProvider>
     </>
   );

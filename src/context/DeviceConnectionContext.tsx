@@ -30,6 +30,9 @@ type DeviceConnectionContextValue = {
   isPaired: boolean;
   isDeviceConnected: boolean;
   deviceState: DeviceStateSnapshot | null;
+  updateDeviceState: (
+    updater: (currentState: DeviceStateSnapshot | null) => DeviceStateSnapshot | null,
+  ) => void;
   pairDevice: (device: PairedDevice) => Promise<void>;
   disconnectDevice: () => Promise<void>;
   reportDeviceUnreachable: () => void;
@@ -346,6 +349,17 @@ export function DeviceConnectionProvider({
     activeSocket.current?.close();
   }, [debugMode]);
 
+  const updateDeviceState = useCallback(
+    (
+      updater: (
+        currentState: DeviceStateSnapshot | null,
+      ) => DeviceStateSnapshot | null,
+    ) => {
+      setDeviceState((currentState) => updater(currentState));
+    },
+    [],
+  );
+
   const value = useMemo<DeviceConnectionContextValue>(
     () => ({
       debugMode,
@@ -358,6 +372,7 @@ export function DeviceConnectionProvider({
       pairDevice,
       pairedDevice,
       reportDeviceUnreachable,
+      updateDeviceState,
     }),
     [
       debugMode,
@@ -368,6 +383,7 @@ export function DeviceConnectionProvider({
       pairDevice,
       pairedDevice,
       reportDeviceUnreachable,
+      updateDeviceState,
     ],
   );
 

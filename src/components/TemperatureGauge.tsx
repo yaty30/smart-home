@@ -103,7 +103,6 @@ export function TemperatureGauge({
       }}
       style={[
         styles.container,
-        { maxWidth: controlWidth },
         animatedContainerStyle,
       ]}
     >
@@ -120,65 +119,67 @@ export function TemperatureGauge({
       </View>
 
       <View style={styles.sliderRow}>
-        <TouchableOpacity
-          activeOpacity={0.74}
-          accessibilityLabel="Decrease target temperature"
-          accessibilityRole="button"
-          accessibilityState={{ disabled: !canDecrease }}
-          disabled={!canDecrease}
-          onPress={() => nudgeTemperature(-1)}
-          style={[styles.stepButton, !canDecrease && styles.stepButtonDisabled]}
-        >
-          <Minus
-            color={canDecrease ? theme.text : theme.textMuted}
-            size={20}
-            strokeWidth={2.5}
-          />
-        </TouchableOpacity>
+        <View style={styles.sliderControlRow}>
+          <TouchableOpacity
+            activeOpacity={0.74}
+            accessibilityLabel="Decrease target temperature"
+            accessibilityRole="button"
+            accessibilityState={{ disabled: !canDecrease }}
+            disabled={!canDecrease}
+            onPress={() => nudgeTemperature(-1)}
+            style={[styles.stepButton, !canDecrease && styles.stepButtonDisabled]}
+          >
+            <Minus
+              color={canDecrease ? theme.text : theme.textMuted}
+              size={20}
+              strokeWidth={2.5}
+            />
+          </TouchableOpacity>
 
-        <View style={styles.sliderWrap}>
-          <Slider
-            disabled={controlsDisabled}
-            maximumTrackTintColor={theme.gaugeTrack}
-            maximumValue={maxTemperature}
-            minimumTrackTintColor={theme.accent}
-            minimumValue={minTemperature}
-            onSlidingComplete={() => onInteractionEnd?.()}
-            onSlidingStart={() => onInteractionStart?.()}
-            onValueChange={updateTemperature}
-            step={1}
-            style={styles.slider}
-            tapToSeek
-            thumbTintColor={theme.accentDeep}
-            value={roundedTemperature}
-          />
-          <View pointerEvents="none" style={styles.rangeLabels}>
-            <View style={styles.rangeValueBlock}>
-              <Text style={styles.rangeText}>{minTemperature}</Text>
-              <Text style={styles.rangeTextUnit}>°C</Text>
-            </View>
-            <View style={styles.rangeValueBlock}>
-              <Text style={styles.rangeText}>{maxTemperature}</Text>
-              <Text style={styles.rangeTextUnit}>°C</Text>
+          <View style={styles.sliderWrap}>
+            <Slider
+              disabled={controlsDisabled}
+              maximumTrackTintColor={theme.gaugeTrack}
+              maximumValue={maxTemperature}
+              minimumTrackTintColor={theme.accent}
+              minimumValue={minTemperature}
+              onSlidingComplete={() => onInteractionEnd?.()}
+              onSlidingStart={() => onInteractionStart?.()}
+              onValueChange={updateTemperature}
+              step={1}
+              style={styles.slider}
+              tapToSeek
+              thumbTintColor={theme.accentDeep}
+              value={roundedTemperature}
+            />
+            <View pointerEvents="none" style={styles.rangeLabels}>
+              <View style={styles.rangeValueBlock}>
+                <Text style={styles.rangeText}>{minTemperature}</Text>
+                <Text style={styles.rangeTextUnit}>°C</Text>
+              </View>
+              <View style={styles.rangeValueBlock}>
+                <Text style={styles.rangeText}>{maxTemperature}</Text>
+                <Text style={styles.rangeTextUnit}>°C</Text>
+              </View>
             </View>
           </View>
-        </View>
 
-        <TouchableOpacity
-          activeOpacity={0.74}
-          accessibilityLabel="Increase target temperature"
-          accessibilityRole="button"
-          accessibilityState={{ disabled: !canIncrease }}
-          disabled={!canIncrease}
-          onPress={() => nudgeTemperature(1)}
-          style={[styles.stepButton, !canIncrease && styles.stepButtonDisabled]}
-        >
-          <Plus
-            color={canIncrease ? theme.text : theme.textMuted}
-            size={20}
-            strokeWidth={2.5}
-          />
-        </TouchableOpacity>
+          <TouchableOpacity
+            activeOpacity={0.74}
+            accessibilityLabel="Increase target temperature"
+            accessibilityRole="button"
+            accessibilityState={{ disabled: !canIncrease }}
+            disabled={!canIncrease}
+            onPress={() => nudgeTemperature(1)}
+            style={[styles.stepButton, !canIncrease && styles.stepButtonDisabled]}
+          >
+            <Plus
+              color={canIncrease ? theme.text : theme.textMuted}
+              size={20}
+              strokeWidth={2.5}
+            />
+          </TouchableOpacity>
+        </View>
       </View>
     </Animated.View>
   );
@@ -228,9 +229,13 @@ const styles = StyleSheet.create({
     letterSpacing: 0,
   },
   sliderRow: {
+    alignSelf: "stretch",
+    width: "100%",
+  },
+  sliderControlRow: {
     alignItems: "center",
     flexDirection: "row",
-    gap: theme.spacing.sm,
+    gap: theme.spacing.md,
     width: "100%",
   },
   sliderWrap: {
@@ -239,7 +244,7 @@ const styles = StyleSheet.create({
     minWidth: 0,
   },
   slider: {
-    height: 34,
+    height: 38,
     width: "100%",
   },
   stepButton: {
@@ -260,7 +265,7 @@ const styles = StyleSheet.create({
   rangeLabels: {
     flexDirection: "row",
     justifyContent: "space-between",
-    paddingHorizontal: theme.spacing.xs,
+    paddingHorizontal: 0,
   },
   rangeValueBlock: {
     alignItems: "flex-start",
