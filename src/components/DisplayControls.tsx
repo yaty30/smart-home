@@ -1,4 +1,5 @@
-import { Cast, Monitor, QrCode } from "lucide-react-native";
+import type { ComponentType } from "react";
+import { Hexagon, Moon, QrCode } from "lucide-react-native";
 import { StyleSheet, Switch, Text, View } from "react-native";
 
 import { theme } from "../theme/theme";
@@ -6,16 +7,22 @@ import { theme } from "../theme/theme";
 type DisplayControlsProps = {
   canControlQr: boolean;
   isDisabled?: boolean;
+  quiet: boolean;
   qrVisible: boolean;
-  screenOn: boolean;
+  onChangeQuiet: (quiet: boolean) => void;
   onChangeQrVisible: (visible: boolean) => void;
-  onChangeScreenOn: (screenOn: boolean) => void;
 };
+
+type ToggleIcon = ComponentType<{
+  color?: string;
+  size?: number;
+  strokeWidth?: number;
+}>;
 
 type DisplayToggleProps = {
   accessibilityLabel: string;
   enabled: boolean;
-  icon: typeof Monitor;
+  icon: ToggleIcon;
   label: string;
   disabled?: boolean;
   onChange: (enabled: boolean) => void;
@@ -60,28 +67,19 @@ function DisplayToggle({
 export function DisplayControls({
   canControlQr,
   isDisabled = false,
+  onChangeQuiet,
   onChangeQrVisible,
-  onChangeScreenOn,
+  quiet,
   qrVisible,
-  screenOn,
 }: DisplayControlsProps) {
   return (
     <View style={styles.container}>
       <View style={styles.title}>
-        <Cast color={theme.text} size={18} />
-        <Text style={styles.label}>Display</Text>
+        <Hexagon color={theme.text} size={18} />
+        <Text style={styles.label}>Others</Text>
       </View>
-      <DisplayToggle
-        accessibilityLabel="Toggle ESP32 screen power"
-        disabled={isDisabled}
-        enabled={screenOn}
-        icon={Monitor}
-        label="Screen"
-        onChange={onChangeScreenOn}
-      />
       {canControlQr ? (
         <>
-          <View style={styles.divider} />
           <DisplayToggle
             accessibilityLabel="Toggle pairing QR code visibility"
             disabled={isDisabled}
@@ -90,8 +88,17 @@ export function DisplayControls({
             label="Pairing QR"
             onChange={onChangeQrVisible}
           />
+          <View style={styles.divider} />
         </>
       ) : null}
+      <DisplayToggle
+        accessibilityLabel="Toggle quiet mode"
+        disabled={isDisabled}
+        enabled={quiet}
+        icon={Moon}
+        label="Quiet"
+        onChange={onChangeQuiet}
+      />
     </View>
   );
 }

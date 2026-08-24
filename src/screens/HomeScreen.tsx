@@ -2,14 +2,19 @@ import * as Haptics from "expo-haptics";
 import {
   AirVent,
   Lightbulb,
+  Monitor,
+  MonitorOff,
   Plus,
   Power,
   PowerOff,
   Settings,
   Tv,
 } from "lucide-react-native";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
+  ActionSheetIOS,
+  Alert,
+  Platform,
   ScrollView,
   StyleSheet,
   Text,
@@ -21,56 +26,19 @@ import {
   SCREEN_BOTTOM_SAFE_PADDING,
   ScreenView,
 } from "../components/ScreenView";
+import { sceneIconById } from "../components/sceneIcons";
 import { useDeviceConnection } from "../context/DeviceConnectionContext";
+import {
+  LIVING_ROOM_AC_DEVICE_ID,
+  LIVING_ROOM_AC_SCHEDULE_ID,
+  useHomeData,
+} from "../context/HomeDataContext";
+import type { RootStackScreenProps } from "../navigation/types";
+import { getAcSchedule } from "../storage/acScheduleStorage";
 import { theme } from "../theme/theme";
-
-type RoomId = "living" | "bedroom" | "study";
-type DeviceType = "ac" | "light" | "tv";
-type DeviceFilter = "all" | RoomId;
-
-type Room = {
-  id: RoomId;
-  name: string;
-  temperature: number;
-};
-
-type HomeDevice = {
-  id: string;
-  name: string;
-  type: DeviceType;
-  roomId: RoomId;
-  powered: boolean;
-  onDetail: string;
-};
-
-type HomeScreenProps = {
-  onOpenAirConditioner: () => void;
-};
-
-const rooms: Room[] = [
-  { id: "living", name: "Living Room", temperature: 24 },
-  { id: "bedroom", name: "Master Bedroom", temperature: 25 },
-  { id: "study", name: "Study Room", temperature: 23 },
-];
-
-const roomFilters: { id: DeviceFilter; label: string }[] = [
-  { id: "all", label: "All" },
-  { id: "living", label: "Living Room" },
-  { id: "bedroom", label: "Master Bedroom" },
-  { id: "study", label: "Study Room" },
-];
-
-const roomNameById = rooms.reduce<Record<RoomId, string>>(
-  (roomMap, room) => ({
-    ...roomMap,
-    [room.id]: room.name,
-  }),
-  {
-    living: "Living Room",
-    bedroom: "Master Bedroom",
-    study: "Study Room",
-  },
-);
+import type { AcSchedule } from "../types/acSchedule";
+import type { DeviceStateSnapshot } from "../types/device";
+import type { HomeDevice } from "../types/home";
 
 const iconByDeviceType = {
   ac: AirVent,
@@ -86,72 +54,36 @@ const formatAcMode = (mode: string) => {
   return mode.charAt(0).toUpperCase() + mode.slice(1);
 };
 
-const initialDevices: HomeDevice[] = [
-  {
-    id: "living-ac",
-    name: "Air Conditioner",
-    onDetail: "24°C · Cool",
-    powered: true,
-    roomId: "living",
-    type: "ac",
-  },
-  {
-    id: "living-light",
-    name: "Light",
-    onDetail: "On · 70%",
-    powered: false,
-    roomId: "living",
-    type: "light",
-  },
-  {
-    id: "living-tv",
-    name: "TV",
-    onDetail: "On · HDMI 1",
-    powered: false,
-    roomId: "living",
-    type: "tv",
-  },
-  {
-    id: "bedroom-ac",
-    name: "Air Conditioner",
-    onDetail: "25°C · Cool",
-    powered: false,
-    roomId: "bedroom",
-    type: "ac",
-  },
-  {
-    id: "bedroom-light",
-    name: "Light",
-    onDetail: "On · 70%",
-    powered: false,
-    roomId: "bedroom",
-    type: "light",
-  },
-  {
-    id: "study-ac",
-    name: "Air Conditioner",
-    onDetail: "23°C · Cool",
-    powered: true,
-    roomId: "study",
-    type: "ac",
-  },
-  {
-    id: "study-light",
-    name: "Light",
-    onDetail: "On · 70%",
-    powered: true,
-    roomId: "study",
-    type: "light",
-  },
-];
+const formatTime12h = (time: string) => {
+  const [hoursPart = "0", minutesPart = "0"] = time.split(":");
+  const hours = Number(hoursPart);
+  const suffix = hours >= 12 ? "PM" : "AM";
+  const hour12 = hours % 12 === 0 ? 12 : hours % 12;
+
+  return `${String(hour12).padStart(2, "0")}:${minutesPart.padStart(
+    2,
+    "0",
+  )} ${suffix}`;
+};
+
+const livingRoomAcFallback: HomeDevice = {
+  id: LIVING_ROOM_AC_DEVICE_ID,
+  name: "Air Conditioner",
+  onDetail: "24°C · Cool",
+  powered: true,
+  sceneId: "living",
+  type: "ac",
+};
+
+const DISPLAY_COMMAND_TIMEOUT_MS = 1500;
 
 const getDeviceStatus = (device: HomeDevice) => {
   return device.powered ? device.onDetail : "Off";
 };
 
-const getRoomChips = (devices: HomeDevice[], roomId: RoomId) => {
+const getSceneChips = (devices: HomeDevice[], sceneId: string) => {
   const activeDevices = devices.filter(
-    (device) => device.roomId === roomId && device.powered,
+    (device) => device.sceneId === sceneId && device.powered,
   );
 
   if (activeDevices.length === 0) {
@@ -171,32 +103,91 @@ const getRoomChips = (devices: HomeDevice[], roomId: RoomId) => {
   });
 };
 
-export function HomeScreen({ onOpenAirConditioner }: HomeScreenProps) {
-  const { deviceState, updateDeviceState } = useDeviceConnection();
-  const [selectedFilter, setSelectedFilter] = useState<DeviceFilter>("all");
-  const [localDevices, setLocalDevices] = useState<HomeDevice[]>(() =>
-    initialDevices.filter((device) => device.id !== "living-ac"),
+export function HomeScreen({ navigation }: RootStackScreenProps<"Home">) {
+  const {
+    debugMode,
+    deviceState,
+    isDeviceConnected,
+    pairedDevice,
+    reportDeviceUnreachable,
+    updateDeviceState,
+  } = useDeviceConnection();
+  const {
+    devices: sceneDevices,
+    scenes,
+    schedules,
+    toggleDevice,
+  } = useHomeData();
+  const [selectedFilter, setSelectedFilter] = useState<string>("all");
+  const [livingAcSchedule, setLivingAcSchedule] = useState<AcSchedule | null>(
+    null,
   );
-  const livingRoomAcDevice = useMemo<HomeDevice>(() => {
-    const fallbackDevice = initialDevices.find(
-      (device) => device.id === "living-ac",
-    ) as HomeDevice;
 
+  useEffect(() => {
+    let isActive = true;
+
+    const loadLivingAcSchedule = () => {
+      if (pairedDevice === null) {
+        return;
+      }
+
+      getAcSchedule(pairedDevice)
+        .then((schedule) => {
+          if (isActive) {
+            setLivingAcSchedule(schedule);
+          }
+        })
+        .catch(() => {
+          // Keep the seeded schedule when storage is unavailable.
+        });
+    };
+
+    loadLivingAcSchedule();
+    const unsubscribe = navigation.addListener("focus", loadLivingAcSchedule);
+
+    return () => {
+      isActive = false;
+      unsubscribe();
+    };
+  }, [navigation, pairedDevice]);
+
+  const livingRoomAcDevice = useMemo<HomeDevice>(() => {
     if (deviceState === null) {
-      return fallbackDevice;
+      return livingRoomAcFallback;
     }
 
     return {
-      ...fallbackDevice,
+      ...livingRoomAcFallback,
       onDetail: `${deviceState.ac.temperature}°C · ${formatAcMode(
         deviceState.ac.mode,
       )}`,
       powered: deviceState.ac.power,
     };
   }, [deviceState]);
+
   const devices = useMemo(
-    () => [livingRoomAcDevice, ...localDevices],
-    [livingRoomAcDevice, localDevices],
+    () => [livingRoomAcDevice, ...sceneDevices],
+    [livingRoomAcDevice, sceneDevices],
+  );
+
+  const sceneNameById = useMemo(
+    () =>
+      scenes.reduce<Record<string, string>>(
+        (sceneMap, scene) => ({
+          ...sceneMap,
+          [scene.id]: scene.name,
+        }),
+        {},
+      ),
+    [scenes],
+  );
+
+  const sceneFilters = useMemo(
+    () => [
+      { id: "all", label: "All" },
+      ...scenes.map((scene) => ({ id: scene.id, label: scene.name })),
+    ],
+    [scenes],
   );
 
   const filteredDevices = useMemo(() => {
@@ -204,15 +195,168 @@ export function HomeScreen({ onOpenAirConditioner }: HomeScreenProps) {
       return devices;
     }
 
-    return devices.filter((device) => device.roomId === selectedFilter);
+    return devices.filter((device) => device.sceneId === selectedFilter);
   }, [devices, selectedFilter]);
+
+  const scheduleRows = useMemo(
+    () =>
+      schedules.map((schedule) => {
+        if (
+          schedule.id === LIVING_ROOM_AC_SCHEDULE_ID &&
+          livingAcSchedule !== null
+        ) {
+          return {
+            ...schedule,
+            endTime: livingAcSchedule.endTime,
+            startTime: livingAcSchedule.startTime,
+          };
+        }
+
+        return schedule;
+      }),
+    [livingAcSchedule, schedules],
+  );
+
+  const canControlDisplay =
+    isDeviceConnected && pairedDevice !== null && deviceState !== null;
+  const screenOn = deviceState?.display.screenOn ?? false;
 
   const triggerPressHaptic = useCallback(() => {
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
   }, []);
 
+  const updateDisplaySnapshot = useCallback(
+    (displayPatch: Partial<DeviceStateSnapshot["display"]>) => {
+      updateDeviceState((currentState) =>
+        currentState === null
+          ? currentState
+          : {
+              ...currentState,
+              display: {
+                ...currentState.display,
+                ...displayPatch,
+              },
+            },
+      );
+    },
+    [updateDeviceState],
+  );
+
+  const sendDisplayCommand = useCallback(
+    async (params: Record<string, string>) => {
+      const description = Object.entries(params)
+        .map(([key, value]) => `${key}=${value}`)
+        .join(",");
+
+      if (!canControlDisplay || pairedDevice === null) {
+        console.log(
+          `[Device] Dropped command because ESP32 is offline: ${description}`,
+        );
+        return false;
+      }
+
+      if (debugMode) {
+        console.log(`[Device] Debug display command accepted: ${description}`);
+        return true;
+      }
+
+      const host = pairedDevice.host.replace(/\/+$/, "");
+      const searchParams = new URLSearchParams(params);
+      const controller = new AbortController();
+      const timeout = setTimeout(
+        () => controller.abort(),
+        DISPLAY_COMMAND_TIMEOUT_MS,
+      );
+
+      try {
+        console.log(`[Device] Command sent immediately: ${description}`);
+        const response = await fetch(
+          `${host}/display?${searchParams.toString()}`,
+          {
+            headers: {
+              Authorization: `Bearer ${pairedDevice.token}`,
+            },
+            method: "GET",
+            signal: controller.signal,
+          },
+        );
+
+        if (!response.ok) {
+          console.warn("ESP32 display request failed", response.status);
+          return false;
+        }
+
+        return true;
+      } catch (error) {
+        console.warn("ESP32 display request failed without retry.", error);
+        reportDeviceUnreachable();
+        return false;
+      } finally {
+        clearTimeout(timeout);
+      }
+    },
+    [canControlDisplay, debugMode, pairedDevice, reportDeviceUnreachable],
+  );
+
+  const handleScreenPowerChange = useCallback(() => {
+    const nextScreenOn = !screenOn;
+
+    if (!canControlDisplay) {
+      console.log(
+        `[Device] Dropped command because ESP32 is offline: screen=${
+          nextScreenOn ? "on" : "off"
+        }`,
+      );
+      return;
+    }
+
+    triggerPressHaptic();
+    updateDisplaySnapshot({ screenOn: nextScreenOn });
+    void sendDisplayCommand({ screen: nextScreenOn ? "on" : "off" });
+  }, [
+    canControlDisplay,
+    screenOn,
+    sendDisplayCommand,
+    triggerPressHaptic,
+    updateDisplaySnapshot,
+  ]);
+
+  const openAddMenu = useCallback(() => {
+    triggerPressHaptic();
+
+    if (Platform.OS === "ios") {
+      ActionSheetIOS.showActionSheetWithOptions(
+        {
+          cancelButtonIndex: 0,
+          options: ["Cancel", "New Scene", "New Device"],
+          userInterfaceStyle: "dark",
+        },
+        (buttonIndex) => {
+          if (buttonIndex === 1) {
+            navigation.navigate("NewScene");
+          } else if (buttonIndex === 2) {
+            navigation.navigate("NewDevice");
+          }
+        },
+      );
+      return;
+    }
+
+    Alert.alert("Add", undefined, [
+      {
+        onPress: () => navigation.navigate("NewScene"),
+        text: "New Scene",
+      },
+      {
+        onPress: () => navigation.navigate("NewDevice"),
+        text: "New Device",
+      },
+      { style: "cancel", text: "Cancel" },
+    ]);
+  }, [navigation, triggerPressHaptic]);
+
   const handleSelectFilter = useCallback(
-    (filter: DeviceFilter) => {
+    (filter: string) => {
       triggerPressHaptic();
       setSelectedFilter(filter);
     },
@@ -223,7 +367,7 @@ export function HomeScreen({ onOpenAirConditioner }: HomeScreenProps) {
     (deviceId: string) => {
       triggerPressHaptic();
 
-      if (deviceId === "living-ac") {
+      if (deviceId === LIVING_ROOM_AC_DEVICE_ID) {
         updateDeviceState((currentState) =>
           currentState === null
             ? currentState
@@ -238,15 +382,9 @@ export function HomeScreen({ onOpenAirConditioner }: HomeScreenProps) {
         return;
       }
 
-      setLocalDevices((currentDevices) =>
-        currentDevices.map((device) =>
-          device.id === deviceId
-            ? { ...device, powered: !device.powered }
-            : device,
-        ),
-      );
+      toggleDevice(deviceId);
     },
-    [triggerPressHaptic, updateDeviceState],
+    [toggleDevice, triggerPressHaptic, updateDeviceState],
   );
 
   const handleOpenDevice = useCallback(
@@ -254,19 +392,13 @@ export function HomeScreen({ onOpenAirConditioner }: HomeScreenProps) {
       triggerPressHaptic();
 
       if (device.type === "ac") {
-        onOpenAirConditioner();
+        navigation.navigate("AirConditioner");
         return;
       }
 
-      setLocalDevices((currentDevices) =>
-        currentDevices.map((currentDevice) =>
-          currentDevice.id === device.id
-            ? { ...currentDevice, powered: !currentDevice.powered }
-            : currentDevice,
-        ),
-      );
+      toggleDevice(device.id);
     },
-    [onOpenAirConditioner, triggerPressHaptic],
+    [navigation, toggleDevice, triggerPressHaptic],
   );
 
   return (
@@ -282,18 +414,29 @@ export function HomeScreen({ onOpenAirConditioner }: HomeScreenProps) {
             <Text style={styles.greeting}>Good afternoon</Text>
             <Text style={styles.title}>SmartHome</Text>
           </View>
-          <TouchableOpacity
-            activeOpacity={0.76}
-            accessibilityLabel="Open settings"
-            accessibilityRole="button"
-            style={styles.headerIconButton}
-          >
-            <Settings color={theme.accent} size={22} strokeWidth={2.3} />
-          </TouchableOpacity>
+          <View style={styles.headerActions}>
+            <TouchableOpacity
+              activeOpacity={0.76}
+              accessibilityLabel="Open settings"
+              accessibilityRole="button"
+              style={styles.headerIconButton}
+            >
+              <Settings color={theme.accent} size={22} strokeWidth={2.3} />
+            </TouchableOpacity>
+            <TouchableOpacity
+              activeOpacity={0.76}
+              accessibilityLabel="Add scene or device"
+              accessibilityRole="button"
+              onPress={openAddMenu}
+              style={styles.headerIconButton}
+            >
+              <Plus color={theme.accent} size={24} strokeWidth={2.5} />
+            </TouchableOpacity>
+          </View>
         </View>
 
         <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>Rooms</Text>
+          <Text style={styles.sectionTitle}>Scenes</Text>
           <TouchableOpacity
             activeOpacity={0.76}
             accessibilityRole="button"
@@ -305,35 +448,43 @@ export function HomeScreen({ onOpenAirConditioner }: HomeScreenProps) {
 
         <ScrollView
           horizontal
-          contentContainerStyle={styles.roomList}
+          contentContainerStyle={styles.sceneList}
           showsHorizontalScrollIndicator={false}
         >
-          {rooms.map((room) => {
-            const selected = selectedFilter === room.id;
-            const chips = getRoomChips(devices, room.id);
+          {scenes.map((scene) => {
+            const selected = selectedFilter === scene.id;
+            const chips = getSceneChips(devices, scene.id);
+            const SceneIcon = sceneIconById[scene.icon];
 
             return (
               <TouchableOpacity
                 activeOpacity={0.78}
                 accessibilityRole="button"
                 accessibilityState={{ selected }}
-                key={room.id}
-                onPress={() => handleSelectFilter(room.id)}
-                style={[styles.roomCard, selected && styles.roomCardSelected]}
+                key={scene.id}
+                onPress={() => handleSelectFilter(scene.id)}
+                style={[styles.sceneCard, selected && styles.sceneCardSelected]}
               >
-                <View style={styles.roomCardHeader}>
-                  <Text style={styles.roomName}>{room.name}</Text>
-                  <Text style={styles.roomTemperature}>
-                    {room.temperature}°
+                <View style={styles.sceneCardHeader}>
+                  <View style={styles.sceneTitleGroup}>
+                    <SceneIcon
+                      color={selected ? theme.accent : theme.textSecondary}
+                      size={18}
+                      strokeWidth={2.3}
+                    />
+                    <Text style={styles.sceneName}>{scene.name}</Text>
+                  </View>
+                  <Text style={styles.sceneTemperature}>
+                    {scene.temperature}°
                   </Text>
                 </View>
-                <Text style={styles.roomDeviceCount}>
-                  {devices.filter((device) => device.roomId === room.id).length} devices
+                <Text style={styles.sceneDeviceCount}>
+                  {devices.filter((device) => device.sceneId === scene.id).length} devices
                 </Text>
                 <View style={styles.chipRow}>
                   {chips.map((chip) => (
                     <View
-                      key={`${room.id}-${chip.label}`}
+                      key={`${scene.id}-${chip.label}`}
                       style={[styles.chip, chip.active && styles.chipActive]}
                     >
                       <Text
@@ -354,14 +505,49 @@ export function HomeScreen({ onOpenAirConditioner }: HomeScreenProps) {
 
         <View style={styles.sectionHeader}>
           <Text style={styles.sectionTitle}>Devices</Text>
-          <TouchableOpacity
-            activeOpacity={0.76}
-            accessibilityRole="button"
-            style={styles.addButton}
-          >
-            <Plus color={theme.accent} size={15} strokeWidth={2.8} />
-            <Text style={styles.linkText}>Add</Text>
-          </TouchableOpacity>
+          <View style={styles.sectionActions}>
+            <TouchableOpacity
+              activeOpacity={0.76}
+              accessibilityLabel={
+                screenOn ? "Turn screen off" : "Turn screen on"
+              }
+              accessibilityRole="switch"
+              accessibilityState={{
+                checked: screenOn,
+                disabled: !canControlDisplay,
+              }}
+              disabled={!canControlDisplay}
+              onPress={handleScreenPowerChange}
+              style={[
+                styles.screenToggleButton,
+                screenOn && styles.screenToggleButtonActive,
+                !canControlDisplay && styles.screenToggleButtonDisabled,
+              ]}
+            >
+              {screenOn ? (
+                <Monitor
+                  color={theme.accentStrong}
+                  size={17}
+                  strokeWidth={2.4}
+                />
+              ) : (
+                <MonitorOff
+                  color={theme.textSecondary}
+                  size={17}
+                  strokeWidth={2.4}
+                />
+              )}
+            </TouchableOpacity>
+            <TouchableOpacity
+              activeOpacity={0.76}
+              accessibilityRole="button"
+              onPress={openAddMenu}
+              style={styles.addButton}
+            >
+              <Plus color={theme.accent} size={15} strokeWidth={2.8} />
+              <Text style={styles.linkText}>Add</Text>
+            </TouchableOpacity>
+          </View>
         </View>
 
         <ScrollView
@@ -369,7 +555,7 @@ export function HomeScreen({ onOpenAirConditioner }: HomeScreenProps) {
           contentContainerStyle={styles.filterList}
           showsHorizontalScrollIndicator={false}
         >
-          {roomFilters.map((filter) => {
+          {sceneFilters.map((filter) => {
             const selected = selectedFilter === filter.id;
 
             return (
@@ -445,8 +631,8 @@ export function HomeScreen({ onOpenAirConditioner }: HomeScreenProps) {
                   </TouchableOpacity>
                 </View>
                 <Text style={styles.deviceName}>{device.name}</Text>
-                <Text style={styles.deviceRoom}>
-                  {roomNameById[device.roomId]}
+                <Text style={styles.deviceScene}>
+                  {sceneNameById[device.sceneId] ?? "Unassigned"}
                 </Text>
                 <Text
                   style={[
@@ -459,6 +645,57 @@ export function HomeScreen({ onOpenAirConditioner }: HomeScreenProps) {
               </TouchableOpacity>
             );
           })}
+        </View>
+
+        <View style={[styles.sectionHeader, styles.schedulesSectionHeader]}>
+          <Text style={styles.sectionTitle}>Schedules</Text>
+        </View>
+
+        <View style={styles.scheduleCard}>
+          <View style={styles.scheduleHeaderRow}>
+            <Text style={[styles.scheduleHeaderText, styles.scheduleColScene]}>
+              Scene
+            </Text>
+            <Text style={[styles.scheduleHeaderText, styles.scheduleColDevice]}>
+              Device
+            </Text>
+            <Text style={[styles.scheduleHeaderText, styles.scheduleColPeriod]}>
+              Period
+            </Text>
+          </View>
+
+          {scheduleRows.map((schedule, index) => (
+            <View
+              key={schedule.id}
+              style={[
+                styles.scheduleRow,
+                index === scheduleRows.length - 1 && styles.scheduleRowLast,
+              ]}
+            >
+              <Text
+                numberOfLines={1}
+                style={[styles.scheduleSceneText, styles.scheduleColScene]}
+              >
+                {sceneNameById[schedule.sceneId] ?? "Unassigned"}
+              </Text>
+              <Text
+                numberOfLines={1}
+                style={[styles.scheduleDeviceText, styles.scheduleColDevice]}
+              >
+                {schedule.deviceName}
+              </Text>
+              <Text
+                numberOfLines={1}
+                style={[styles.schedulePeriodText, styles.scheduleColPeriod]}
+              >
+                {formatTime12h(schedule.startTime)} - {formatTime12h(schedule.endTime)}
+              </Text>
+            </View>
+          ))}
+
+          {scheduleRows.length === 0 ? (
+            <Text style={styles.scheduleEmptyText}>No schedules yet.</Text>
+          ) : null}
         </View>
       </ScrollView>
     </ScreenView>
@@ -495,6 +732,10 @@ const styles = StyleSheet.create({
     letterSpacing: 0,
     lineHeight: 42,
   },
+  headerActions: {
+    flexDirection: "row",
+    gap: theme.spacing.sm,
+  },
   headerIconButton: {
     alignItems: "center",
     backgroundColor: theme.surfaceLow,
@@ -512,11 +753,19 @@ const styles = StyleSheet.create({
     marginBottom: theme.spacing.md,
     marginTop: theme.spacing.sm,
   },
+  schedulesSectionHeader: {
+    marginTop: theme.spacing.xl,
+  },
   sectionTitle: {
     color: theme.text,
     fontSize: 21,
     fontWeight: "900",
     letterSpacing: 0,
+  },
+  sectionActions: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: theme.spacing.sm,
   },
   linkText: {
     color: theme.accent,
@@ -529,11 +778,28 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     gap: theme.spacing.xs,
   },
-  roomList: {
+  screenToggleButton: {
+    alignItems: "center",
+    backgroundColor: theme.surfaceLow,
+    borderColor: theme.border,
+    borderRadius: 13,
+    borderWidth: 1,
+    height: 34,
+    justifyContent: "center",
+    width: 34,
+  },
+  screenToggleButtonActive: {
+    backgroundColor: theme.accentMuted,
+    borderColor: theme.borderActive,
+  },
+  screenToggleButtonDisabled: {
+    opacity: 0.45,
+  },
+  sceneList: {
     gap: theme.spacing.md,
     paddingBottom: theme.spacing.lg,
   },
-  roomCard: {
+  sceneCard: {
     backgroundColor: theme.surfaceLow,
     borderColor: theme.border,
     borderRadius: 24,
@@ -542,7 +808,7 @@ const styles = StyleSheet.create({
     padding: theme.spacing.lg,
     width: 178,
   },
-  roomCardSelected: {
+  sceneCardSelected: {
     backgroundColor: theme.surfaceWarm,
     borderColor: theme.borderActive,
     shadowColor: theme.accent,
@@ -553,13 +819,18 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 18,
   },
-  roomCardHeader: {
+  sceneCardHeader: {
     alignItems: "flex-start",
     flexDirection: "row",
     gap: theme.spacing.sm,
     justifyContent: "space-between",
   },
-  roomName: {
+  sceneTitleGroup: {
+    flex: 1,
+    flexDirection: "row",
+    gap: theme.spacing.sm,
+  },
+  sceneName: {
     color: theme.text,
     flex: 1,
     fontSize: 16,
@@ -567,14 +838,14 @@ const styles = StyleSheet.create({
     letterSpacing: 0,
     lineHeight: 19,
   },
-  roomTemperature: {
+  sceneTemperature: {
     color: theme.accent,
     fontSize: 24,
     fontWeight: "900",
     letterSpacing: 0,
     lineHeight: 28,
   },
-  roomDeviceCount: {
+  sceneDeviceCount: {
     color: theme.textSecondary,
     fontSize: 13,
     fontWeight: "700",
@@ -704,7 +975,7 @@ const styles = StyleSheet.create({
     letterSpacing: 0,
     lineHeight: 19,
   },
-  deviceRoom: {
+  deviceScene: {
     color: theme.textMuted,
     fontSize: 12,
     fontWeight: "800",
@@ -720,5 +991,74 @@ const styles = StyleSheet.create({
   },
   deviceStatusOn: {
     color: theme.accent,
+  },
+  scheduleCard: {
+    backgroundColor: theme.surfaceLow,
+    borderColor: "rgba(255, 255, 255, 0.06)",
+    borderRadius: 24,
+    borderWidth: 1,
+    paddingHorizontal: theme.spacing.lg,
+    paddingVertical: theme.spacing.sm,
+  },
+  scheduleHeaderRow: {
+    borderBottomColor: "rgba(255, 255, 255, 0.06)",
+    borderBottomWidth: 1,
+    flexDirection: "row",
+    gap: theme.spacing.sm,
+    paddingVertical: theme.spacing.md,
+  },
+  scheduleHeaderText: {
+    color: theme.textMuted,
+    fontSize: 11,
+    fontWeight: "900",
+    letterSpacing: 0.6,
+    textTransform: "uppercase",
+  },
+  scheduleRow: {
+    alignItems: "center",
+    borderBottomColor: "rgba(255, 255, 255, 0.05)",
+    borderBottomWidth: 1,
+    flexDirection: "row",
+    gap: theme.spacing.sm,
+    paddingVertical: theme.spacing.md,
+  },
+  scheduleRowLast: {
+    borderBottomWidth: 0,
+  },
+  scheduleColScene: {
+    flex: 1,
+  },
+  scheduleColDevice: {
+    flex: 1,
+  },
+  scheduleColPeriod: {
+    flex: 1.35,
+    textAlign: "right",
+  },
+  scheduleSceneText: {
+    color: theme.text,
+    fontSize: 13,
+    fontWeight: "800",
+    letterSpacing: 0,
+  },
+  scheduleDeviceText: {
+    color: theme.textSecondary,
+    fontSize: 13,
+    fontWeight: "700",
+    letterSpacing: 0,
+  },
+  schedulePeriodText: {
+    color: theme.accent,
+    fontSize: 12,
+    fontWeight: "800",
+    letterSpacing: 0,
+  },
+  scheduleEmptyText: {
+    color: theme.textMuted,
+    fontSize: 13,
+    fontWeight: "700",
+    letterSpacing: 0,
+    paddingVertical: theme.spacing.md,
+    textAlign: "center",
   },
 });

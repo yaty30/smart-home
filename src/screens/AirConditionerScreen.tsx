@@ -183,7 +183,7 @@ export function AirConditionerScreen({
   const [fanSpeed, setFanSpeed] = useState<FanSpeed>(3);
   const [fanAuto, setFanAuto] = useState(true);
   const [power, setPower] = useState(true);
-  const [screenOn, setScreenOn] = useState(true);
+  const [quiet, setQuiet] = useState(false);
   const [qrVisible, setQrVisible] = useState(false);
   const [isAdjustingTemperature, setIsAdjustingTemperature] = useState(false);
   const [savedSchedule, setSavedSchedule] = useState<AcSchedule | null>(null);
@@ -317,7 +317,7 @@ export function AirConditionerScreen({
       setVerticalAirflowAuto(false);
     }
 
-    setScreenOn(deviceState.display.screenOn);
+    setQuiet(deviceState.ac.quiet);
     setQrVisible(deviceState.display.qrVisible);
   }, [deviceState]);
 
@@ -774,27 +774,6 @@ export function AirConditionerScreen({
     });
   }, [canControlDevice, logDroppedCommand, sendAcCommand]);
 
-  const handleScreenPowerChange = useCallback(
-    (nextScreenOn: boolean) => {
-      if (!canControlDevice) {
-        logDroppedCommand(`screen=${nextScreenOn ? "on" : "off"}`);
-        return;
-      }
-
-      triggerPressHaptic();
-      setScreenOn(nextScreenOn);
-      updateDisplaySnapshot({ screenOn: nextScreenOn });
-      void sendDisplayCommand({ screen: nextScreenOn ? "on" : "off" });
-    },
-    [
-      canControlDevice,
-      logDroppedCommand,
-      sendDisplayCommand,
-      triggerPressHaptic,
-      updateDisplaySnapshot,
-    ],
-  );
-
   const handleQrVisibilityChange = useCallback(
     (nextQrVisible: boolean) => {
       if (!canControlDevice) {
@@ -813,6 +792,27 @@ export function AirConditionerScreen({
       sendDisplayCommand,
       triggerPressHaptic,
       updateDisplaySnapshot,
+    ],
+  );
+
+  const handleQuietChange = useCallback(
+    (nextQuiet: boolean) => {
+      if (!canControlDevice) {
+        logDroppedCommand(`quiet=${nextQuiet ? "on" : "off"}`);
+        return;
+      }
+
+      triggerPressHaptic();
+      setQuiet(nextQuiet);
+      updateAcSnapshot({ quiet: nextQuiet });
+      void sendAcCommand({ quiet: nextQuiet ? "on" : "off" });
+    },
+    [
+      canControlDevice,
+      logDroppedCommand,
+      sendAcCommand,
+      triggerPressHaptic,
+      updateAcSnapshot,
     ],
   );
 
@@ -1116,10 +1116,10 @@ export function AirConditionerScreen({
                     deviceState?.display.pairingMode !== true
                   }
                   isDisabled={!canControlDevice}
+                  onChangeQuiet={handleQuietChange}
                   onChangeQrVisible={handleQrVisibilityChange}
-                  onChangeScreenOn={handleScreenPowerChange}
+                  quiet={quiet}
                   qrVisible={qrVisible}
-                  screenOn={screenOn}
                 />
               </Section>
             </>

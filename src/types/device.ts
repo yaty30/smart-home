@@ -13,6 +13,7 @@ export type DeviceStateSnapshot = {
     temperature: number;
     mode: EspAcMode;
     fan: EspFanSpeed;
+    quiet: boolean;
     swingVertical: EspAirflow;
     swingHorizontal: EspAirflow;
   };
