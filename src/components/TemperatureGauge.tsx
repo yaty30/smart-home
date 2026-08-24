@@ -1,24 +1,15 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import Slider from "@react-native-community/slider";
+import { Minus, Plus, Thermometer } from "lucide-react-native";
+import { useCallback, useEffect, useRef } from "react";
 import {
   Animated,
-  Easing,
-  PanResponder,
   StyleSheet,
   Text,
+  TouchableOpacity,
   View,
-} from 'react-native';
-import Svg, { Circle, Defs, LinearGradient, Path, Stop } from 'react-native-svg';
+} from "react-native";
 
-import { theme } from '../theme/theme';
-import {
-  GAUGE_START_ANGLE,
-  GAUGE_SWEEP_ANGLE,
-  angleToTemperature,
-  describeArc,
-  pointToGaugeAngle,
-  polarToCartesian,
-  temperatureToAngle,
-} from '../utils/temperatureGauge';
+import { theme } from "../theme/theme";
 
 type TemperatureGaugeProps = {
   size: number;
@@ -43,221 +34,249 @@ export function TemperatureGauge({
   onInteractionEnd,
   onInteractionStart,
 }: TemperatureGaugeProps) {
-  const animatedTemperature = useRef(new Animated.Value(temperature)).current;
-  const [displayedTemperature, setDisplayedTemperature] = useState(temperature);
-  const strokeWidth = Math.max(16, size * 0.06);
-  const center = size / 2;
   const controlsDisabled = !isPowered || isDisabled;
-  const radius = center - strokeWidth - 12;
-  const currentAngle = temperatureToAngle(
-    displayedTemperature,
-    minTemperature,
-    maxTemperature,
-  );
-  const thumb = polarToCartesian(center, center, radius, currentAngle);
-  const activeArc = describeArc(
-    center,
-    center,
-    radius,
-    GAUGE_START_ANGLE,
-    currentAngle,
-  );
-  const trackArc = describeArc(
-    center,
-    center,
-    radius,
-    GAUGE_START_ANGLE,
-    GAUGE_START_ANGLE + GAUGE_SWEEP_ANGLE,
-  );
+  const roundedTemperature = Math.round(temperature);
+  const canDecrease = !controlsDisabled && roundedTemperature > minTemperature;
+  const canIncrease = !controlsDisabled && roundedTemperature < maxTemperature;
+  const controlWidth = Math.min(size, 520);
+  const enabledProgress = useRef(new Animated.Value(controlsDisabled ? 0 : 1)).current;
 
   useEffect(() => {
-    const listenerId = animatedTemperature.addListener(({ value }) => {
-      setDisplayedTemperature(value);
-    });
-
-    return () => {
-      animatedTemperature.removeListener(listenerId);
-    };
-  }, [animatedTemperature]);
-
-  useEffect(() => {
-    Animated.timing(animatedTemperature, {
-      duration: 240,
-      easing: Easing.out(Easing.cubic),
-      toValue: temperature,
-      useNativeDriver: false,
+    Animated.timing(enabledProgress, {
+      duration: 220,
+      toValue: controlsDisabled ? 0 : 1,
+      useNativeDriver: true,
     }).start();
-  }, [animatedTemperature, temperature]);
+  }, [controlsDisabled, enabledProgress]);
 
-  const updateFromPoint = useCallback((locationX: number, locationY: number) => {
-    if (controlsDisabled) {
-      return;
-    }
-
-    const angle = pointToGaugeAngle(locationX, locationY, center);
-    onChangeTemperature(
-      angleToTemperature(angle, minTemperature, maxTemperature),
-    );
-  }, [
-    center,
-    controlsDisabled,
-    maxTemperature,
-    minTemperature,
-    onChangeTemperature,
-  ]);
-
-  const panResponder = useMemo(
-    () =>
-      PanResponder.create({
-      onMoveShouldSetPanResponder: () => !controlsDisabled,
-      onStartShouldSetPanResponder: () => !controlsDisabled,
-      onPanResponderGrant: (event) => {
-        onInteractionStart?.();
-        updateFromPoint(event.nativeEvent.locationX, event.nativeEvent.locationY);
-      },
-      onPanResponderMove: (event) => {
-        updateFromPoint(event.nativeEvent.locationX, event.nativeEvent.locationY);
-      },
-      onPanResponderRelease: () => {
-        onInteractionEnd?.();
-      },
-      onPanResponderTerminate: () => {
-        onInteractionEnd?.();
-      },
+  const animatedContainerStyle = {
+    opacity: enabledProgress.interpolate({
+      inputRange: [0, 1],
+      outputRange: [0.48, 1],
     }),
+  };
+
+  const updateTemperature = useCallback(
+    (nextTemperature: number) => {
+      onChangeTemperature(Math.round(nextTemperature));
+    },
+    [onChangeTemperature],
+  );
+
+  const nudgeTemperature = useCallback(
+    (direction: -1 | 1) => {
+      const nextTemperature = roundedTemperature + direction;
+
+      if (
+        controlsDisabled ||
+        nextTemperature < minTemperature ||
+        nextTemperature > maxTemperature
+      ) {
+        return;
+      }
+
+      onInteractionStart?.();
+      updateTemperature(nextTemperature);
+      onInteractionEnd?.();
+    },
     [
-      center,
       controlsDisabled,
       maxTemperature,
       minTemperature,
       onInteractionEnd,
       onInteractionStart,
-      onChangeTemperature,
-      updateFromPoint,
+      roundedTemperature,
+      updateTemperature,
     ],
   );
 
-  const inactiveStyle = useMemo(() => {
-    return controlsDisabled ? styles.contentInactive : undefined;
-  }, [controlsDisabled]);
-
   return (
-    <View
-      accessibilityRole="adjustable"
+    <Animated.View
       accessibilityLabel="Temperature"
+      accessibilityRole="adjustable"
+      accessibilityState={{ disabled: controlsDisabled }}
       accessibilityValue={{
         min: minTemperature,
         max: maxTemperature,
-        now: temperature,
-        text: `${temperature} degrees Celsius`,
+        now: roundedTemperature,
+        text: `${roundedTemperature} degrees Celsius`,
       }}
-      style={[styles.container, { height: size, width: size }, inactiveStyle]}
-      {...panResponder.panHandlers}
+      style={[
+        styles.container,
+        { maxWidth: controlWidth },
+        animatedContainerStyle,
+      ]}
     >
-      <Svg height={size} width={size} style={styles.svg}>
-        <Defs>
-          <LinearGradient id="temperatureGradient" x1="0" x2="1" y1="0" y2="0">
-            <Stop offset="0" stopColor={theme.accentBright} />
-            <Stop offset="1" stopColor={theme.accentDeep} />
-          </LinearGradient>
-        </Defs>
-        <Path
-          d={trackArc}
-          fill="none"
-          stroke={theme.gaugeTrack}
-          strokeLinecap="round"
-          strokeWidth={strokeWidth}
-        />
-        <Path
-          d={activeArc}
-          fill="none"
-          stroke="url(#temperatureGradient)"
-          strokeLinecap="round"
-          strokeWidth={strokeWidth}
-        />
-        <Circle
-          cx={thumb.x}
-          cy={thumb.y}
-          fill={theme.thumb}
-          r={strokeWidth * 0.42}
-          stroke={theme.accentGlow}
-          strokeWidth={strokeWidth * 0.38}
-        />
-      </Svg>
 
-      <View pointerEvents="none" style={styles.rangeLabels}>
-        <Text style={styles.rangeText}>{minTemperature}°</Text>
-        <Text style={styles.rangeText}>{maxTemperature}°</Text>
+      <View style={styles.title}>
+        <Thermometer color={theme.text} size={18} />
+        <Text style={styles.temperatureLabel}>Temperature</Text>
       </View>
-
-      <View pointerEvents="none" style={styles.centerContent}>
-        <View style={styles.temperatureRow}>
-          <Text style={styles.temperatureValue}>
-            {Math.round(displayedTemperature)}
-          </Text>
-          <Text style={styles.temperatureUnit}>°C</Text>
+      <View pointerEvents="none" style={styles.temperatureBlock}>
+        <View style={styles.temperatureValueBlock}>
+          <Text style={styles.temperatureValue}>{roundedTemperature}</Text>
+          <Text style={styles.temperatureValueUnit}>°C</Text>
         </View>
-        <Text style={styles.roomLabel}>Room</Text>
-        <Text style={styles.roomLabel}>Temperature</Text>
       </View>
-    </View>
+
+      <View style={styles.sliderRow}>
+        <TouchableOpacity
+          activeOpacity={0.74}
+          accessibilityLabel="Decrease target temperature"
+          accessibilityRole="button"
+          accessibilityState={{ disabled: !canDecrease }}
+          disabled={!canDecrease}
+          onPress={() => nudgeTemperature(-1)}
+          style={[styles.stepButton, !canDecrease && styles.stepButtonDisabled]}
+        >
+          <Minus
+            color={canDecrease ? theme.text : theme.textMuted}
+            size={20}
+            strokeWidth={2.5}
+          />
+        </TouchableOpacity>
+
+        <View style={styles.sliderWrap}>
+          <Slider
+            disabled={controlsDisabled}
+            maximumTrackTintColor={theme.gaugeTrack}
+            maximumValue={maxTemperature}
+            minimumTrackTintColor={theme.accent}
+            minimumValue={minTemperature}
+            onSlidingComplete={() => onInteractionEnd?.()}
+            onSlidingStart={() => onInteractionStart?.()}
+            onValueChange={updateTemperature}
+            step={1}
+            style={styles.slider}
+            tapToSeek
+            thumbTintColor={theme.accentDeep}
+            value={roundedTemperature}
+          />
+          <View pointerEvents="none" style={styles.rangeLabels}>
+            <View style={styles.rangeValueBlock}>
+              <Text style={styles.rangeText}>{minTemperature}</Text>
+              <Text style={styles.rangeTextUnit}>°C</Text>
+            </View>
+            <View style={styles.rangeValueBlock}>
+              <Text style={styles.rangeText}>{maxTemperature}</Text>
+              <Text style={styles.rangeTextUnit}>°C</Text>
+            </View>
+          </View>
+        </View>
+
+        <TouchableOpacity
+          activeOpacity={0.74}
+          accessibilityLabel="Increase target temperature"
+          accessibilityRole="button"
+          accessibilityState={{ disabled: !canIncrease }}
+          disabled={!canIncrease}
+          onPress={() => nudgeTemperature(1)}
+          style={[styles.stepButton, !canIncrease && styles.stepButtonDisabled]}
+        >
+          <Plus
+            color={canIncrease ? theme.text : theme.textMuted}
+            size={20}
+            strokeWidth={2.5}
+          />
+        </TouchableOpacity>
+      </View>
+    </Animated.View>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    gap: theme.spacing.xl,
+    width: "100%",
   },
-  contentInactive: {
-    opacity: 0.48,
-  },
-  svg: {
-    position: 'absolute',
-  },
-  rangeLabels: {
-    bottom: '20%',
+  title: {
+    width: "100%",
+    display: 'flex',
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    left: '8%',
-    position: 'absolute',
-    right: '8%',
-  },
-  rangeText: {
-    color: theme.textMuted,
-    fontSize: theme.typography.label,
-    fontWeight: '600',
-    letterSpacing: 0,
-  },
-  centerContent: {
     alignItems: 'center',
-    justifyContent: 'center',
-    paddingTop: theme.spacing.lg,
+    justifyContent: 'flex-start',
+    gap: 6
   },
-  temperatureRow: {
+  temperatureBlock: {
+    alignItems: "center",
+    gap: theme.spacing.xs,
+  },
+  temperatureValueBlock: {
+    display: 'flex',
+    flexDirection: 'row',
     alignItems: 'flex-start',
-    flexDirection: 'row',
+    gap: 2
   },
   temperatureValue: {
     color: theme.text,
-    fontSize: theme.typography.temperature,
-    fontWeight: '700',
+    fontSize: 50,
+    fontWeight: "600",
     letterSpacing: 0,
-    lineHeight: 68,
+    lineHeight: 66,
   },
-  temperatureUnit: {
+  temperatureValueUnit: {
     color: theme.text,
-    fontSize: 20,
-    fontWeight: '700',
-    letterSpacing: 0,
-    lineHeight: 38,
-    marginLeft: theme.spacing.xs,
+    marginTop: 10,
+    fontSize: 18,
+    fontWeight: "600",
   },
-  roomLabel: {
-    color: theme.textSecondary,
-    fontSize: theme.typography.label,
-    fontWeight: '500',
+  temperatureLabel: {
+    color: theme.text,
+    fontSize: 16,
+    fontWeight: "800",
     letterSpacing: 0,
-    lineHeight: 20,
+  },
+  sliderRow: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: theme.spacing.sm,
+    width: "100%",
+  },
+  sliderWrap: {
+    flex: 1,
+    gap: theme.spacing.xs,
+    minWidth: 0,
+  },
+  slider: {
+    height: 34,
+    width: "100%",
+  },
+  stepButton: {
+    alignItems: "center",
+    backgroundColor: theme.controlBackground,
+    borderColor: theme.borderStrong,
+    borderRadius: 16,
+    borderWidth: 1,
+    height: 44,
+    justifyContent: "center",
+    width: 44,
+    position: 'relative',
+    bottom: 8
+  },
+  stepButtonDisabled: {
+    opacity: 0.42,
+  },
+  rangeLabels: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    paddingHorizontal: theme.spacing.xs,
+  },
+  rangeValueBlock: {
+    alignItems: "flex-start",
+    flexDirection: "row",
+    gap: 1,
+  },
+  rangeText: {
+    color: theme.textSecondary,
+    fontSize: 13,
+    fontWeight: "600",
+    letterSpacing: 0,
+  },
+  rangeTextUnit: {
+    color: theme.textSecondary,
+    fontSize: 9,
+    fontWeight: "600",
+    marginTop: 1,
   },
 });

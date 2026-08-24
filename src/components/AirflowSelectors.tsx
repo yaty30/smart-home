@@ -1,7 +1,6 @@
-import { Smartphone, Wind } from "lucide-react-native";
-import { StyleSheet, Switch, Text, View } from "react-native";
+import { ArrowDown, ArrowRight, ArrowUp, MoveHorizontal, MoveVertical, Smartphone, Wind } from "lucide-react-native";
+import { View } from "react-native";
 
-import { theme } from "../theme/theme";
 import type {
   AirflowLevel,
   ControlIconProps,
@@ -9,8 +8,10 @@ import type {
   ControlOptionType,
 } from "../types/airConditioner";
 import { ControlButtonGroup } from "./ControlButtonGroup";
+import { theme } from "../theme/theme";
 
 const defaultAirConWindPosition = { top: 5, right: 2, size: 13, pl: 0 };
+type AirflowOption = "auto" | AirflowLevel;
 
 const RotatingWind = ({ iconRotation = 0, ...props }: ControlIconProps) => {
   return (
@@ -57,69 +58,99 @@ const AirCon = ({ color, iconRotation = 0, strokeWidth, type = 3 }: ControlIconP
   );
 };
 
-const verticalAirflowOptions: ControlOption<AirflowLevel>[] = [
+const verticalAirflowOptions: ControlOption<AirflowOption>[] = [
+  {
+    id: "auto",
+    label: "Auto",
+    accessibilityLabel: "Set vertical airflow to auto",
+    icon: null,
+    iconRotation: 0,
+    iconType: 3,
+  },
   {
     id: "one",
+    label: null,
     accessibilityLabel: "Vertical airflow level 1",
-    icon: AirCon,
+    icon: ArrowRight,
     iconRotation: 0,
+    iconType: 1,
   },
   {
     id: "two",
+    label: null,
     accessibilityLabel: "Vertical airflow level 2",
-    icon: AirCon,
-    iconRotation: 10,
+    icon: ArrowRight,
+    iconRotation: 20,
+    iconType: 2,
   },
   {
     id: "three",
+    label: null,
     accessibilityLabel: "Vertical airflow level 3",
-    icon: AirCon,
-    iconRotation: 25,
+    icon: ArrowRight,
+    iconRotation: 40,
+    iconType: 3,
   },
   {
     id: "four",
+    label: null,
     accessibilityLabel: "Vertical airflow level 4",
-    icon: AirCon,
-    iconRotation: 40,
+    icon: ArrowRight,
+    iconRotation: 55,
+    iconType: 4,
   },
   {
     id: "five",
+    label: null,
     accessibilityLabel: "Vertical airflow level 5",
-    icon: AirCon,
-    iconRotation: 60,
+    icon: ArrowRight,
+    iconRotation: 80,
+    iconType: 5,
   },
 ];
 
-const horizontalAirflowOptions: ControlOption<AirflowLevel>[] = [
+const horizontalAirflowOptions: ControlOption<AirflowOption>[] = [
   {
-    id: "one",
-    accessibilityLabel: "Horizontal airflow level 1",
-    icon: RotatingWind,
-    iconRotation: 150,
-  },
-  {
-    id: "two",
-    accessibilityLabel: "Horizontal airflow level 2",
-    icon: RotatingWind,
-    iconRotation: 120,
-  },
-  {
-    id: "three",
-    accessibilityLabel: "Horizontal airflow level 3",
-    icon: RotatingWind,
+    id: "auto",
+    label: "Auto",
+    accessibilityLabel: "Set horizontal airflow to auto",
+    icon: null,
     iconRotation: 90,
   },
   {
-    id: "four",
-    accessibilityLabel: "Horizontal airflow level 4",
-    icon: RotatingWind,
+    id: "one",
+    label: null,
+    accessibilityLabel: "Horizontal airflow level 1",
+    icon: ArrowDown,
     iconRotation: 50,
   },
   {
-    id: "five",
-    accessibilityLabel: "Horizontal airflow level 5",
-    icon: RotatingWind,
+    id: "two",
+    label: null,
+    accessibilityLabel: "Horizontal airflow level 2",
+    icon: ArrowDown,
     iconRotation: 30,
+  },
+  {
+    id: "three",
+    label: null,
+    accessibilityLabel: "Horizontal airflow level 3",
+    icon: ArrowDown,
+    iconRotation: 0,
+  },
+  {
+    id: "four",
+    label: null,
+    accessibilityLabel: "Horizontal airflow level 4",
+    icon: ArrowDown,
+    iconRotation: -30,
+  },
+  {
+    id: "five",
+    label: null,
+    accessibilityLabel: "Horizontal airflow level 5",
+    icon: ArrowDown,
+    iconRotation: -50,
   },
 ];
 
@@ -132,46 +163,6 @@ type AirflowSelectorProps = {
   onChangeAuto: (isAuto: boolean) => void;
 };
 
-function AirflowAutoSwitch({
-  isAuto,
-  isDisabled = false,
-  isPowered,
-  onChangeAuto,
-}: Pick<
-  AirflowSelectorProps,
-  "isAuto" | "isDisabled" | "isPowered" | "onChangeAuto"
->) {
-  const disabled = !isPowered || isDisabled;
-  const switchOn = isPowered && isAuto;
-
-  return (
-    <View style={styles.autoControl}>
-      <Text
-        style={[
-          styles.autoLabel,
-          switchOn && styles.autoLabelActive,
-        ]}
-      >
-        Auto
-      </Text>
-      <Switch
-        accessibilityLabel="Toggle automatic airflow"
-        disabled={disabled}
-        ios_backgroundColor={theme.controlBackground}
-        onValueChange={onChangeAuto}
-        thumbColor={
-          switchOn ? theme.accentBright : theme.textSecondary
-        }
-        trackColor={{
-          false: theme.controlBackgroundPressed,
-          true: theme.accentMuted,
-        }}
-        value={switchOn}
-      />
-    </View>
-  );
-}
-
 export function HorizontalAirflowSelector({
   selectedLevel,
   isAuto,
@@ -180,23 +171,24 @@ export function HorizontalAirflowSelector({
   onChangeLevel,
   onChangeAuto,
 }: AirflowSelectorProps) {
+  const handleChange = (nextValue: AirflowOption) => {
+    if (nextValue === "auto") {
+      onChangeAuto(true);
+      return;
+    }
+
+    onChangeLevel(nextValue);
+  };
+
   return (
     <ControlButtonGroup
       isDisabled={isDisabled}
       isPowered={isPowered}
-      labelAccessory={
-        <AirflowAutoSwitch
-          isAuto={isAuto}
-          isDisabled={isDisabled}
-          isPowered={isPowered}
-          onChangeAuto={onChangeAuto}
-        />
-      }
       label="Horizontal Airflow"
-      onChange={onChangeLevel}
+      labelAccessory={<MoveHorizontal color={theme.text} size={18} />}
+      onChange={handleChange}
       options={horizontalAirflowOptions}
-      selectedValue={selectedLevel}
-      suppressSelection={isAuto}
+      selectedValue={isAuto ? "auto" : selectedLevel}
     />
   );
 }
@@ -209,41 +201,24 @@ export function VerticalAirflowSelector({
   onChangeLevel,
   onChangeAuto,
 }: AirflowSelectorProps) {
+  const handleChange = (nextValue: AirflowOption) => {
+    if (nextValue === "auto") {
+      onChangeAuto(true);
+      return;
+    }
+
+    onChangeLevel(nextValue);
+  };
+
   return (
     <ControlButtonGroup
       isDisabled={isDisabled}
       isPowered={isPowered}
-      labelAccessory={
-        <AirflowAutoSwitch
-          isAuto={isAuto}
-          isDisabled={isDisabled}
-          isPowered={isPowered}
-          onChangeAuto={onChangeAuto}
-        />
-      }
       label="Vertical Airflow"
-      onChange={onChangeLevel}
+      labelAccessory={<MoveVertical color={theme.text} size={18} />}
+      onChange={handleChange}
       options={verticalAirflowOptions}
-      selectedValue={selectedLevel}
-      suppressSelection={isAuto}
+      selectedValue={isAuto ? "auto" : selectedLevel}
     />
   );
 }
-
-const styles = StyleSheet.create({
-  autoControl: {
-    alignItems: "center",
-    flexDirection: "row",
-    gap: theme.spacing.sm,
-    marginRight: theme.spacing.md,
-  },
-  autoLabel: {
-    color: theme.textSecondary,
-    fontSize: theme.typography.label,
-    fontWeight: "700",
-    letterSpacing: 0,
-  },
-  autoLabelActive: {
-    color: theme.accent,
-  },
-});

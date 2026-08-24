@@ -1,5 +1,6 @@
 import { BlurView } from "expo-blur";
-import { ArrowLeft, ChevronDown, Settings } from "lucide-react-native";
+import { ArrowLeft, ChevronLeft } from "lucide-react-native";
+import type { ReactNode } from "react";
 import { useEffect, useRef } from "react";
 import {
   Animated,
@@ -12,17 +13,25 @@ import {
 import { theme } from "../theme/theme";
 
 type ACHeaderProps = {
+  eyebrow?: string;
   isScrolled: boolean;
-  location: string;
   onBackPress?: () => void;
+  rightAccessory?: ReactNode;
+  title?: string;
 };
 
-export function ACHeader({ isScrolled, location, onBackPress }: ACHeaderProps) {
+export function ACHeader({
+  eyebrow,
+  isScrolled,
+  onBackPress,
+  rightAccessory,
+  title = "Air Conditioner",
+}: ACHeaderProps) {
   const glassOpacity = useRef(new Animated.Value(isScrolled ? 1 : 0)).current;
 
   useEffect(() => {
     Animated.timing(glassOpacity, {
-      duration: 180,
+      duration: 100,
       toValue: isScrolled ? 1 : 0,
       useNativeDriver: true,
     }).start();
@@ -37,7 +46,7 @@ export function ACHeader({ isScrolled, location, onBackPress }: ACHeaderProps) {
         >
           <BlurView
             experimentalBlurMethod="dimezisBlurView"
-            intensity={72}
+            intensity={28}
             style={StyleSheet.absoluteFill}
             tint="systemChromeMaterialDark"
           />
@@ -48,34 +57,20 @@ export function ACHeader({ isScrolled, location, onBackPress }: ACHeaderProps) {
         <TouchableOpacity
           activeOpacity={0.72}
           accessibilityRole="button"
-          accessibilityLabel="Disconnect device"
+          accessibilityLabel="Back"
           onPress={onBackPress}
-          style={styles.iconButton}
+          style={styles.backButton}
         >
-          <ArrowLeft color={theme.text} size={22} strokeWidth={2.35} />
+          <ChevronLeft color={theme.accent} size={26} strokeWidth={2.35} />
+          {/* <Text style={styles.backText}>Back</Text> */}
         </TouchableOpacity>
 
         <View style={styles.titleGroup}>
-          <Text style={styles.title}>Air Conditioner</Text>
-          <View style={styles.locationRow}>
-            <View style={styles.locationDot} />
-            <Text style={styles.location}>{location}</Text>
-            <ChevronDown
-              color={theme.textSecondary}
-              size={14}
-              strokeWidth={2.5}
-            />
-          </View>
+          {eyebrow ? <Text style={styles.eyebrow}>{eyebrow}</Text> : null}
+          <Text style={styles.title}>{title}</Text>
         </View>
 
-        <TouchableOpacity
-          activeOpacity={0.72}
-          accessibilityRole="button"
-          accessibilityLabel="Open settings"
-          style={styles.iconButton}
-        >
-          <Settings color={theme.text} size={21} strokeWidth={2.25} />
-        </TouchableOpacity>
+        <View style={styles.rightSlot}>{rightAccessory}</View>
       </View>
     </View>
   );
@@ -84,8 +79,8 @@ export function ACHeader({ isScrolled, location, onBackPress }: ACHeaderProps) {
 const styles = StyleSheet.create({
   headerWrap: {
     backgroundColor: "transparent",
-    paddingHorizontal: theme.spacing.lg,
-    paddingTop: 0,
+    paddingHorizontal: theme.spacing.xl,
+    paddingTop: 2,
     zIndex: 10,
   },
   headerWrapScrolled: {
@@ -104,51 +99,62 @@ const styles = StyleSheet.create({
     borderRadius: theme.radiusLarge,
     flexDirection: "row",
     justifyContent: "space-between",
-    minHeight: 62,
+    minHeight: 60,
     overflow: "hidden",
     paddingHorizontal: theme.spacing.sm,
   },
   glassLayer: {
     ...StyleSheet.absoluteFillObject,
-    borderColor: "rgba(255, 255, 255, 0.14)",
+    borderColor: theme.border,
     borderRadius: theme.radiusLarge,
     borderWidth: 1,
     overflow: "hidden",
   },
   glassTint: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: "rgba(11, 11, 13, 0.18)",
+    backgroundColor: "rgba(33, 22, 15, 0.12)",
   },
   topSeal: {
-    backgroundColor: "rgba(11, 11, 13, 0.34)",
+    backgroundColor: theme.accentSubtle,
     height: 2,
     left: 1,
     position: "absolute",
     right: 1,
     top: 0,
   },
-  iconButton: {
+  backButton: {
     alignItems: "center",
-    backgroundColor: "rgba(255, 255, 255, 0.06)",
-    borderColor: "rgba(255, 255, 255, 0.12)",
-    borderRadius: theme.radiusRound,
-    borderWidth: 1,
-    height: 46,
+    backgroundColor: "transparent",
+    flexDirection: "row",
+    gap: theme.spacing.xs,
+    height: 40,
+    justifyContent: "flex-start",
+    minWidth: 62,
+    paddingHorizontal: 0,
+    zIndex: 1,
+  },
+  backText: {
+    color: theme.accent,
+    fontSize: 15,
+    fontWeight: "700",
+    letterSpacing: 0,
+  },
+  rightSlot: {
+    alignItems: "center",
     justifyContent: "center",
-    shadowColor: "#000000",
-    shadowOffset: {
-      height: 6,
-      width: 0,
-    },
-    shadowOpacity: 0.18,
-    shadowRadius: 10,
-    width: 46,
+    minWidth: 62,
+    zIndex: 1,
   },
   titleGroup: {
     alignItems: "center",
-    flex: 1,
-    gap: 2,
-    paddingHorizontal: theme.spacing.lg,
+    bottom: 0,
+    gap: 1,
+    justifyContent: "center",
+    left: 0,
+    pointerEvents: "none",
+    position: "absolute",
+    right: 0,
+    top: 0,
   },
   title: {
     color: theme.text,
@@ -162,29 +168,11 @@ const styles = StyleSheet.create({
     },
     textShadowRadius: 6,
   },
-  locationRow: {
-    alignItems: "center",
-    flexDirection: "row",
-    gap: theme.spacing.xs,
-    minHeight: 18,
-  },
-  locationDot: {
-    backgroundColor: theme.accent,
-    borderRadius: theme.radiusRound,
-    height: 5,
-    shadowColor: theme.accent,
-    shadowOffset: {
-      height: 0,
-      width: 0,
-    },
-    shadowOpacity: 0.65,
-    shadowRadius: 8,
-    width: 5,
-  },
-  location: {
-    color: theme.textSecondary,
-    fontSize: 13,
-    fontWeight: "600",
-    letterSpacing: 0,
+  eyebrow: {
+    color: theme.accent,
+    fontSize: 12,
+    fontWeight: "800",
+    letterSpacing: 2,
+    textTransform: "uppercase",
   },
 });

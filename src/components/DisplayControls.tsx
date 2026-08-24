@@ -1,4 +1,4 @@
-import { Monitor, QrCode } from "lucide-react-native";
+import { Cast, Monitor, QrCode } from "lucide-react-native";
 import { StyleSheet, Switch, Text, View } from "react-native";
 
 import { theme } from "../theme/theme";
@@ -46,7 +46,7 @@ function DisplayToggle({
         disabled={disabled}
         ios_backgroundColor={theme.controlBackground}
         onValueChange={onChange}
-        thumbColor={enabled ? theme.accentBright : theme.textSecondary}
+        thumbColor={enabled ? theme.accent : theme.textSecondary}
         trackColor={{
           false: theme.controlBackgroundPressed,
           true: theme.accentMuted,
@@ -67,7 +67,10 @@ export function DisplayControls({
 }: DisplayControlsProps) {
   return (
     <View style={styles.container}>
-      <Text style={styles.label}>Display</Text>
+      <View style={styles.title}>
+        <Cast color={theme.text} size={18} />
+        <Text style={styles.label}>Display</Text>
+      </View>
       <DisplayToggle
         accessibilityLabel="Toggle ESP32 screen power"
         disabled={isDisabled}
@@ -116,12 +119,17 @@ const styles = StyleSheet.create({
     backgroundColor: theme.accentSubtle,
     borderColor: theme.borderActive,
   },
+  title: {
+    display: 'flex',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6
+  },
   label: {
-    color: theme.textMuted,
-    fontSize: theme.typography.label,
-    fontWeight: "600",
+    color: theme.text,
+    fontSize: 16,
+    fontWeight: "800",
     letterSpacing: 0,
-    textTransform: "uppercase",
   },
   row: {
     alignItems: "center",

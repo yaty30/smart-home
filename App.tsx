@@ -15,6 +15,8 @@ import { ConnectDeviceScreen } from "./src/screens/ConnectDeviceScreen";
 import { AirConditionerScreen } from './src/screens/AirConditionerScreen';
 import { theme } from './src/theme/theme';
 
+const DEBUG_MODE = true;
+
 function StartupGate() {
   const { isLoading, isPaired } = useDeviceConnection();
 
@@ -40,7 +42,7 @@ export default function App() {
         barStyle="light-content"
         translucent={false}
       />
-      <DeviceConnectionProvider>
+      <DeviceConnectionProvider debugMode={DEBUG_MODE}>
         <StartupGate />
       </DeviceConnectionProvider>
     </>

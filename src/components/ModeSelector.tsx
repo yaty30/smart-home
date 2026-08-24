@@ -1,7 +1,9 @@
-import { DropletOff, Fan, Flame, Snowflake, Sparkles } from 'lucide-react-native';
+import { DropletOff, Flame, Snowflake, Sparkles, SunSnow } from 'lucide-react-native';
 
 import type { AirConditionerMode, ControlOption } from '../types/airConditioner';
 import { ControlButtonGroup } from './ControlButtonGroup';
+import { Text } from 'react-native';
+import { theme } from '../theme/theme';
 
 const modes: ControlOption<AirConditionerMode>[] = [
   {
@@ -24,11 +26,6 @@ const modes: ControlOption<AirConditionerMode>[] = [
     label: 'Heat',
     icon: Flame,
   },
-  {
-    id: 'fan',
-    label: 'Fan',
-    icon: Fan,
-  },
 ];
 
 type ModeSelectorProps = {
@@ -49,6 +46,7 @@ export function ModeSelector({
       isDisabled={isDisabled}
       isPowered={isPowered}
       label="Mode"
+      labelAccessory={<SunSnow color={theme.text} size={18} />}
       onChange={onChangeMode}
       options={modes}
       selectedValue={selectedMode}

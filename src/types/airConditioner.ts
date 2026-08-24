@@ -16,10 +16,11 @@ export type ControlIconProps = {
 
 export type ControlOption<T extends string> = {
   id: T;
-  label?: string;
+  label?: string | null;
   accessibilityLabel?: string;
-  icon?: ComponentType<ControlIconProps>;
+  icon?: ComponentType<ControlIconProps> | null;
   iconRotation?: number;
+  iconType?: number;
 };
 
 export type ControlOptionType = {
