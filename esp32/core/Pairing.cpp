@@ -23,8 +23,17 @@ bool isAuthorizedBearer(const String& authorizationHeader) {
   return authorizationHeader == expected;
 }
 
+String controllerIdFromIP(const String& ip) {
+  String controllerId = "ctrl-";
+  controllerId += ip;
+  controllerId.replace(".", "-");
+  return controllerId;
+}
+
 void initPairing() {
   pinMode(BOOT_BUTTON_PIN, INPUT_PULLUP);
+  Serial.printf("Hold BOOT for %lu ms while running to reset pairing\n",
+                PAIRING_BUTTON_HOLD_MS);
 }
 
 void enterPairingMode() {
@@ -55,7 +64,8 @@ void handlePairingButton() {
 
   if (!bootButtonHoldHandled && isPaired && millis() - bootButtonPressedAt >= PAIRING_BUTTON_HOLD_MS) {
     bootButtonHoldHandled = true;
-    enterPairingMode();
+    Serial.println("BOOT long-hold detected; resetting pairing");
+    resetPairing();
   }
 }
 
@@ -71,6 +81,9 @@ void completePairing() {
 void resetPairing() {
   applyPairingState(false);
   pairingMode = true;
-  renderDisplayState();
-  broadcastState();
+  DisplayState nextDisplayState = displayState;
+  nextDisplayState.screenOn = true;
+  nextDisplayState.qrVisible = true;
+  applyDisplayState(nextDisplayState);
+  Serial.println("Pairing reset");
 }

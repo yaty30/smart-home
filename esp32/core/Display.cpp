@@ -12,6 +12,7 @@
 #include <qrcode.h>
 
 #include "Config.h"
+#include "Pairing.h"
 #include "State.h"
 #include "WiFiManager.h"
 
@@ -539,9 +540,10 @@ void displayQRCodeForIP() {
     return;
   }
 
-  String host = "http://" + currentIPString();
+  String ip = currentIPString();
   String payload = "{";
-  payload += "\"host\":\"" + jsonEscape(host) + "\",";
+  payload += "\"controllerId\":\"" + jsonEscape(controllerIdFromIP(ip)) + "\",";
+  payload += "\"ip\":\"" + jsonEscape(ip) + "\",";
   payload += "\"token\":\"" + jsonEscape(PAIRING_TOKEN) + "\"";
   payload += "}";
 
