@@ -6,34 +6,28 @@ import {
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  ActivityIndicator,
   Animated,
   type LayoutChangeEvent,
-  SafeAreaView,
   StatusBar,
   StyleSheet,
-  Text,
   View,
 } from "react-native";
 
 import { BottomNav, type BottomNavTab } from "./src/components/BottomNav";
-import {
-  DeviceConnectionProvider,
-  useDeviceConnection,
-} from "./src/context/DeviceConnectionContext";
-import { HomeDataProvider } from "./src/context/HomeDataContext";
 import type {
   RootStackParamList,
   RootStackScreenProps,
 } from "./src/navigation/types";
-import { AirConditionerScreen } from "./src/screens/AirConditionerScreen";
-import { ConnectDeviceScreen } from "./src/screens/ConnectDeviceScreen";
-import { HomeScreen } from "./src/screens/HomeScreen";
-import { NewDeviceSheet } from "./src/screens/NewDeviceSheet";
-import { NewSceneSheet } from "./src/screens/NewSceneSheet";
-import { SceneDetailScreen } from "./src/screens/SceneDetailScreen";
-import { ScenesScreen } from "./src/screens/ScenesScreen";
+import { RoomsScreen } from "./src/screens/RoomsScreen";
+import { RoomDetailScreen } from "./src/screens/RoomDetailScreen";
+import { DeviceControlScreen } from "./src/screens/DeviceControlScreen";
+import { SettingsScreen } from "./src/screens/SettingsScreen";
+import { ControllersScreen } from "./src/screens/ControllersScreen";
+import { PairControllerScreen } from "./src/screens/PairControllerScreen";
 import { theme } from "./src/theme/theme";
+import { RoomsProvider } from "./src/store/rooms";
+import { DevicesProvider } from "./src/store/devices";
+import { ControllersProvider } from "./src/store/controllers";
 
 const DEBUG_MODE = true;
 const NAV_HIDE_ANIMATION_MS = 220;
@@ -41,11 +35,11 @@ const SCREEN_SLIDE_ANIMATION_MS = 260;
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
-type MainTabKey = Extract<BottomNavTab, "home" | "scenes">;
+type MainTabKey = Extract<BottomNavTab, "home" | "settings">;
 
 const tabIndexByKey: Record<MainTabKey, number> = {
   home: 0,
-  scenes: 1,
+  settings: 1,
 };
 
 const navigationTheme = {
@@ -129,11 +123,6 @@ function MainNavigator({ navigation }: RootStackScreenProps<"Main">) {
           return;
         }
 
-        if (routeName === "Scenes") {
-          switchTab("scenes");
-          return;
-        }
-
         navigateAway(...args);
       },
     }),
@@ -154,20 +143,10 @@ function MainNavigator({ navigation }: RootStackScreenProps<"Main">) {
         ]}
       >
         <View style={[styles.tabPage, { width: screenWidth }]}>
-          <HomeScreen
-            navigation={mainNavigation}
-            onScrollDirectionChange={(direction) =>
-              setNavCompact(direction === "down")
-            }
-          />
+          <RoomsScreen navigation={mainNavigation} />
         </View>
         <View style={[styles.tabPage, { width: screenWidth }]}>
-          <ScenesScreen
-            navigation={mainNavigation}
-            onScrollDirectionChange={(direction) =>
-              setNavCompact(direction === "down")
-            }
-          />
+          <SettingsScreen navigation={mainNavigation} />
         </View>
       </Animated.View>
 
@@ -175,14 +154,14 @@ function MainNavigator({ navigation }: RootStackScreenProps<"Main">) {
         active={activeTab}
         compact={navCompact}
         onHomePress={() => switchTab("home")}
-        onScenesPress={() => switchTab("scenes")}
+        onSettingsPress={() => switchTab("settings")}
         visible={navVisible}
       />
     </View>
   );
 }
 
-function PairedStack() {
+function AppStack() {
   return (
     <Stack.Navigator
       screenOptions={{
@@ -191,49 +170,18 @@ function PairedStack() {
       }}
     >
       <Stack.Screen component={MainNavigator} name="Main" />
-      <Stack.Screen component={SceneDetailScreen} name="SceneDetail" />
-      <Stack.Screen name="AirConditioner">
-        {({ navigation }) => (
-          <AirConditionerScreen onBackPress={() => navigation.goBack()} />
-        )}
-      </Stack.Screen>
-      <Stack.Group
-        screenOptions={{
-          contentStyle: { backgroundColor: theme.paperBackground },
-          presentation: "formSheet",
-          sheetAllowedDetents: "fitToContents",
-          sheetCornerRadius: 28,
-          sheetGrabberVisible: true,
-        }}
-      >
-        <Stack.Screen component={NewSceneSheet} name="NewScene" />
-        <Stack.Screen component={NewDeviceSheet} name="NewDevice" />
-      </Stack.Group>
+      <Stack.Screen component={RoomDetailScreen} name="RoomDetail" />
+      <Stack.Screen component={DeviceControlScreen} name="DeviceControl" />
+      <Stack.Screen component={ControllersScreen} name="Controllers" />
+      <Stack.Screen component={PairControllerScreen} name="PairController" />
     </Stack.Navigator>
   );
 }
 
-function StartupGate() {
-  const { isLoading, isPaired } = useDeviceConnection();
-
-  if (isLoading) {
-    return (
-      <SafeAreaView style={styles.safeArea}>
-        <View style={styles.loadingScreen}>
-          <ActivityIndicator color={theme.accentBright} size="large" />
-          <Text style={styles.loadingText}>Checking device connection...</Text>
-        </View>
-      </SafeAreaView>
-    );
-  }
-
-  if (!isPaired) {
-    return <ConnectDeviceScreen />;
-  }
-
+function AppContent() {
   return (
     <NavigationContainer theme={navigationTheme}>
-      <PairedStack />
+      <AppStack />
     </NavigationContainer>
   );
 }
@@ -246,11 +194,13 @@ export default function App() {
         barStyle="light-content"
         translucent={false}
       />
-      <DeviceConnectionProvider debugMode={DEBUG_MODE}>
-        <HomeDataProvider>
-          <StartupGate />
-        </HomeDataProvider>
-      </DeviceConnectionProvider>
+      <RoomsProvider>
+        <ControllersProvider>
+          <DevicesProvider>
+            <AppContent />
+          </DevicesProvider>
+        </ControllersProvider>
+      </RoomsProvider>
     </View>
   );
 }
@@ -271,24 +221,5 @@ const styles = StyleSheet.create({
   },
   tabPage: {
     flex: 1,
-  },
-  safeArea: {
-    backgroundColor: theme.root,
-    flex: 1,
-  },
-  loadingScreen: {
-    alignItems: "center",
-    backgroundColor: theme.root,
-    flex: 1,
-    gap: theme.spacing.lg,
-    justifyContent: "center",
-    paddingHorizontal: theme.spacing.xl,
-  },
-  loadingText: {
-    color: theme.textSecondary,
-    fontSize: theme.typography.body,
-    fontWeight: "700",
-    letterSpacing: 0,
-    textAlign: "center",
   },
 });

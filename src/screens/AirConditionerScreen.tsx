@@ -10,6 +10,7 @@ import {
   Moon,
   Power,
   PowerOff,
+  Zap,
 } from "lucide-react-native";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -39,7 +40,10 @@ import { CollapsibleView } from "../components/CollapsibleView";
 import { FanSpeedControl } from "../components/FanSpeedControl";
 import { DisplayControls } from "../components/DisplayControls";
 import { ModeSelector } from "../components/ModeSelector";
-import { SCREEN_BOTTOM_SAFE_PADDING, ScreenView } from "../components/ScreenView";
+import {
+  SCREEN_BOTTOM_SAFE_PADDING,
+  ScreenView,
+} from "../components/ScreenView";
 import { Section } from "../components/Section";
 import { useDeviceConnection } from "../context/DeviceConnectionContext";
 import {
@@ -54,7 +58,11 @@ import type {
   AirflowLevel,
   FanSpeed,
 } from "../types/airConditioner";
-import type { DeviceStateSnapshot, EspAirflow, EspFanSpeed } from "../types/device";
+import type {
+  DeviceStateSnapshot,
+  EspAirflow,
+  EspFanSpeed,
+} from "../types/device";
 import { normalizeTemperature } from "../utils/temperatureGauge";
 
 const temperatureRanges: Record<
@@ -92,7 +100,10 @@ const modeToEspMode = (mode: AirConditionerMode) => {
   }
 };
 
-const airflowLevelToEspPosition: Record<AirflowLevel, Exclude<EspAirflow, "auto">> = {
+const airflowLevelToEspPosition: Record<
+  AirflowLevel,
+  Exclude<EspAirflow, "auto">
+> = {
   one: "1",
   two: "2",
   three: "3",
@@ -100,7 +111,10 @@ const airflowLevelToEspPosition: Record<AirflowLevel, Exclude<EspAirflow, "auto"
   five: "5",
 };
 
-const espPositionToAirflowLevel: Record<"1" | "2" | "3" | "4" | "5", AirflowLevel> = {
+const espPositionToAirflowLevel: Record<
+  "1" | "2" | "3" | "4" | "5",
+  AirflowLevel
+> = {
   "1": "one",
   "2": "two",
   "3": "three",
@@ -109,6 +123,7 @@ const espPositionToAirflowLevel: Record<"1" | "2" | "3" | "4" | "5", AirflowLeve
 };
 
 const DEVICE_COMMAND_TIMEOUT_MS = 1500;
+const TEMPERATURE_COMMAND_DEBOUNCE_MS = 400;
 type TimeField = "start" | "end";
 type SchedulerViewState = "empty" | "summary" | "editor" | "confirmDelete";
 
@@ -178,10 +193,14 @@ const displayAirflow = (airflow: ScheduleAirflow) => {
 };
 
 type AirConditionerScreenProps = {
+  deviceId: string;
   onBackPress: () => void;
 };
 
-export function AirConditionerScreen({ onBackPress }: AirConditionerScreenProps) {
+export function AirConditionerScreen({
+  deviceId,
+  onBackPress,
+}: AirConditionerScreenProps) {
   const {
     deviceConnectionStatus,
     debugMode,
@@ -203,6 +222,7 @@ export function AirConditionerScreen({ onBackPress }: AirConditionerScreenProps)
   const [fanAuto, setFanAuto] = useState(true);
   const [power, setPower] = useState(true);
   const [quiet, setQuiet] = useState(false);
+  const [powerful, setPowerful] = useState(false);
   const [qrVisible, setQrVisible] = useState(false);
   const [isAdjustingTemperature, setIsAdjustingTemperature] = useState(false);
   const [savedSchedule, setSavedSchedule] = useState<AcSchedule | null>(null);
@@ -219,6 +239,9 @@ export function AirConditionerScreen({ onBackPress }: AirConditionerScreenProps)
   const latestTemperature = useRef(temperature);
   const latestFanSpeed = useRef<FanSpeed>(fanSpeed);
   const latestHeaderScrolled = useRef(false);
+  const temperatureCommandTimer = useRef<ReturnType<typeof setTimeout> | null>(
+    null,
+  );
   const controlEnabledProgress = useRef(new Animated.Value(1)).current;
   const modeTemperatures = useRef<Partial<Record<AirConditionerMode, number>>>({
     auto: 24,
@@ -238,6 +261,7 @@ export function AirConditionerScreen({ onBackPress }: AirConditionerScreenProps)
     isDeviceConnected && pairedDevice !== null && deviceState !== null;
   const liveControlsEnabled = canControlDevice && power;
   const quietControlEnabled = canControlDevice && power;
+  const powerfulControlEnabled = canControlDevice && power;
   const unavailableStatusText = useMemo(() => {
     if (deviceConnectionStatus === "connecting") {
       return "Reconnecting to ESP32";
@@ -338,6 +362,7 @@ export function AirConditionerScreen({ onBackPress }: AirConditionerScreenProps)
     }
 
     setQuiet(deviceState.ac.power ? deviceState.ac.quiet : false);
+    setPowerful(deviceState.ac.power ? deviceState.ac.powerful : false);
     setQrVisible(deviceState.display.qrVisible);
   }, [deviceState]);
 
@@ -361,12 +386,12 @@ export function AirConditionerScreen({ onBackPress }: AirConditionerScreenProps)
         currentState === null
           ? currentState
           : {
-            ...currentState,
-            ac: {
-              ...currentState.ac,
-              ...acPatch,
+              ...currentState,
+              ac: {
+                ...currentState.ac,
+                ...acPatch,
+              },
             },
-          },
       );
     },
     [updateDeviceState],
@@ -378,12 +403,12 @@ export function AirConditionerScreen({ onBackPress }: AirConditionerScreenProps)
         currentState === null
           ? currentState
           : {
-            ...currentState,
-            display: {
-              ...currentState.display,
-              ...displayPatch,
+              ...currentState,
+              display: {
+                ...currentState.display,
+                ...displayPatch,
+              },
             },
-          },
       );
     },
     [updateDeviceState],
@@ -448,6 +473,41 @@ export function AirConditionerScreen({ onBackPress }: AirConditionerScreenProps)
       reportDeviceUnreachable,
     ],
   );
+
+  const clearTemperatureCommandTimer = useCallback(() => {
+    if (temperatureCommandTimer.current !== null) {
+      clearTimeout(temperatureCommandTimer.current);
+      temperatureCommandTimer.current = null;
+    }
+  }, []);
+
+  const sendTemperatureCommandDebounced = useCallback(
+    (nextTemperature: number) => {
+      clearTemperatureCommandTimer();
+      temperatureCommandTimer.current = setTimeout(() => {
+        temperatureCommandTimer.current = null;
+
+        if (!canControlDevice) {
+          logDroppedCommand(`temp=${nextTemperature}`);
+          return;
+        }
+
+        void sendAcCommand({
+          temp: nextTemperature,
+        });
+      }, TEMPERATURE_COMMAND_DEBOUNCE_MS);
+    },
+    [
+      canControlDevice,
+      clearTemperatureCommandTimer,
+      logDroppedCommand,
+      sendAcCommand,
+    ],
+  );
+
+  useEffect(() => {
+    return clearTemperatureCommandTimer;
+  }, [clearTemperatureCommandTimer]);
 
   const sendDisplayCommand = useCallback(
     async (params: Record<string, string>) => {
@@ -529,10 +589,12 @@ export function AirConditionerScreen({ onBackPress }: AirConditionerScreenProps)
       triggerSelectionHaptic();
       setTemperature(normalizedTemperature);
       updateAcSnapshot({ temperature: normalizedTemperature });
+      sendTemperatureCommandDebounced(normalizedTemperature);
     },
     [
       canControlDevice,
       mode,
+      sendTemperatureCommandDebounced,
       temperatureRange.max,
       temperatureRange.min,
       triggerSelectionHaptic,
@@ -548,6 +610,7 @@ export function AirConditionerScreen({ onBackPress }: AirConditionerScreenProps)
       }
 
       triggerPressHaptic();
+      clearTemperatureCommandTimer();
       const nextRange = temperatureRangeForMode(nextMode);
       modeTemperatures.current[mode] = temperature;
 
@@ -574,6 +637,7 @@ export function AirConditionerScreen({ onBackPress }: AirConditionerScreenProps)
     },
     [
       canControlDevice,
+      clearTemperatureCommandTimer,
       logDroppedCommand,
       mode,
       sendAcCommand,
@@ -614,7 +678,9 @@ export function AirConditionerScreen({ onBackPress }: AirConditionerScreenProps)
   const handleVerticalAirflowChange = useCallback(
     (nextLevel: AirflowLevel) => {
       if (!canControlDevice) {
-        logDroppedCommand(`swingVertical=${airflowLevelToEspPosition[nextLevel]}`);
+        logDroppedCommand(
+          `swingVertical=${airflowLevelToEspPosition[nextLevel]}`,
+        );
         return;
       }
 
@@ -669,7 +735,9 @@ export function AirConditionerScreen({ onBackPress }: AirConditionerScreenProps)
 
   const handleVerticalAirflowAutoChange = useCallback(
     (nextAuto: boolean) => {
-      const nextSwing = nextAuto ? "auto" : airflowLevelToEspPosition[verticalAirflow];
+      const nextSwing = nextAuto
+        ? "auto"
+        : airflowLevelToEspPosition[verticalAirflow];
 
       if (!canControlDevice) {
         logDroppedCommand(`swingVertical=${nextSwing}`);
@@ -729,14 +797,18 @@ export function AirConditionerScreen({ onBackPress }: AirConditionerScreenProps)
   const handleFanAutoChange = useCallback(
     (nextFanAuto: boolean) => {
       if (!canControlDevice) {
-        logDroppedCommand(`fan=${nextFanAuto ? "auto" : latestFanSpeed.current}`);
+        logDroppedCommand(
+          `fan=${nextFanAuto ? "auto" : latestFanSpeed.current}`,
+        );
         return;
       }
 
       triggerPressHaptic();
       setFanAuto(nextFanAuto);
       updateAcSnapshot({
-        fan: nextFanAuto ? "auto" : (String(latestFanSpeed.current) as EspFanSpeed),
+        fan: nextFanAuto
+          ? "auto"
+          : (String(latestFanSpeed.current) as EspFanSpeed),
       });
       void sendAcCommand({
         fan: nextFanAuto ? "auto" : latestFanSpeed.current,
@@ -758,26 +830,29 @@ export function AirConditionerScreen({ onBackPress }: AirConditionerScreenProps)
     }
 
     triggerPressHaptic();
+    clearTemperatureCommandTimer();
     setPower((currentPower) => {
       const nextPower = !currentPower;
       const nextSnapshot = nextPower
         ? { power: nextPower }
-        : { power: nextPower, quiet: false };
+        : { power: nextPower, quiet: false, powerful: false };
 
       if (!nextPower) {
         setQuiet(false);
+        setPowerful(false);
       }
 
       updateAcSnapshot(nextSnapshot);
       void sendAcCommand({
         power: nextPower ? "on" : "off",
-        ...(nextPower ? {} : { quiet: "off" }),
+        ...(nextPower ? {} : { quiet: "off", powerful: "off" }),
       });
 
       return nextPower;
     });
   }, [
     canControlDevice,
+    clearTemperatureCommandTimer,
     logDroppedCommand,
     power,
     sendAcCommand,
@@ -795,13 +870,8 @@ export function AirConditionerScreen({ onBackPress }: AirConditionerScreenProps)
 
     if (!canControlDevice) {
       logDroppedCommand(`temp=${latestTemperature.current}`);
-      return;
     }
-
-    void sendAcCommand({
-      temp: latestTemperature.current,
-    });
-  }, [canControlDevice, logDroppedCommand, sendAcCommand]);
+  }, [canControlDevice, logDroppedCommand]);
 
   const handleQrVisibilityChange = useCallback(
     (nextQrVisible: boolean) => {
@@ -833,12 +903,38 @@ export function AirConditionerScreen({ onBackPress }: AirConditionerScreenProps)
 
       triggerPressHaptic();
       setQuiet(nextQuiet);
-      updateAcSnapshot({ quiet: nextQuiet });
-      void sendAcCommand({ quiet: nextQuiet ? "on" : "off" });
+      setPowerful(false);
+      updateAcSnapshot({ quiet: nextQuiet, powerful: false });
+      void sendAcCommand({ quiet: nextQuiet ? "on" : "off", powerful: "off" });
     },
     [
       logDroppedCommand,
       quietControlEnabled,
+      sendAcCommand,
+      triggerPressHaptic,
+      updateAcSnapshot,
+    ],
+  );
+
+  const handlePowerfulChange = useCallback(
+    (nextPowerful: boolean) => {
+      if (!powerfulControlEnabled) {
+        logDroppedCommand(`powerful=${nextPowerful ? "on" : "off"}`);
+        return;
+      }
+
+      triggerPressHaptic();
+      setPowerful(nextPowerful);
+      setQuiet(false);
+      updateAcSnapshot({ powerful: nextPowerful, quiet: false });
+      void sendAcCommand({
+        powerful: nextPowerful ? "on" : "off",
+        quiet: "off",
+      });
+    },
+    [
+      logDroppedCommand,
+      powerfulControlEnabled,
       sendAcCommand,
       triggerPressHaptic,
       updateAcSnapshot,
@@ -1115,6 +1211,29 @@ export function AirConditionerScreen({ onBackPress }: AirConditionerScreenProps)
                     strokeWidth={2.4}
                   />
                 </TouchableOpacity>
+
+                <TouchableOpacity
+                  activeOpacity={0.75}
+                  accessibilityLabel="Toggle powerful mode"
+                  accessibilityRole="switch"
+                  accessibilityState={{
+                    checked: powerful,
+                    disabled: !powerfulControlEnabled,
+                  }}
+                  disabled={!powerfulControlEnabled}
+                  onPress={() => handlePowerfulChange(!powerful)}
+                  style={[
+                    styles.quietButton,
+                    powerful ? styles.powerfulButtonOn : styles.quietButtonOff,
+                    !powerfulControlEnabled && styles.powerCornerButtonDisabled,
+                  ]}
+                >
+                  <Zap
+                    color={powerful ? theme.powerfulAccent : theme.text}
+                    size={20}
+                    strokeWidth={2.4}
+                  />
+                </TouchableOpacity>
                 <TouchableOpacity
                   activeOpacity={0.75}
                   accessibilityLabel="Toggle air conditioner power"
@@ -1313,8 +1432,8 @@ export function AirConditionerScreen({ onBackPress }: AirConditionerScreenProps)
             <Section>
               <Text style={styles.cardTitle}>Delete schedule?</Text>
               <Text style={styles.cardSubtitle}>
-                This will remove the AC schedule. The current AC state
-                will not be changed.
+                This will remove the AC schedule. The current AC state will not
+                be changed.
               </Text>
               <View style={styles.scheduleActionRow}>
                 <AppButton
@@ -1337,9 +1456,7 @@ export function AirConditionerScreen({ onBackPress }: AirConditionerScreenProps)
             <>
               <Section>
                 <Text style={styles.cardTitle}>
-                  {savedSchedule === null
-                    ? "Create schedule"
-                    : "Edit schedule"}
+                  {savedSchedule === null ? "Create schedule" : "Edit schedule"}
                 </Text>
                 <Text style={styles.cardSubtitle}>
                   Save changes to make this automatic schedule active.
@@ -1365,11 +1482,7 @@ export function AirConditionerScreen({ onBackPress }: AirConditionerScreenProps)
                             ? draftSchedule.startTime
                             : draftSchedule.endTime}
                         </Text>
-                        <Clock
-                          color={theme.text}
-                          size={20}
-                          strokeWidth={2.3}
-                        />
+                        <Clock color={theme.text} size={20} strokeWidth={2.3} />
                       </TouchableOpacity>
                     </View>
                   ))}
@@ -1438,9 +1551,9 @@ export function AirConditionerScreen({ onBackPress }: AirConditionerScreenProps)
                       currentDraft === null
                         ? currentDraft
                         : {
-                          ...currentDraft,
-                          horizontalAirflow: nextLevel,
-                        },
+                            ...currentDraft,
+                            horizontalAirflow: nextLevel,
+                          },
                     );
                   }}
                   selectedLevel={
@@ -1468,9 +1581,9 @@ export function AirConditionerScreen({ onBackPress }: AirConditionerScreenProps)
                       currentDraft === null
                         ? currentDraft
                         : {
-                          ...currentDraft,
-                          verticalAirflow: nextLevel,
-                        },
+                            ...currentDraft,
+                            verticalAirflow: nextLevel,
+                          },
                     );
                   }}
                   selectedLevel={
@@ -1498,7 +1611,7 @@ export function AirConditionerScreen({ onBackPress }: AirConditionerScreenProps)
             </>
           ) : null}
 
-          {isDeviceConnected && deviceState?.display.pairingMode !== true ? (
+          {/* {isDeviceConnected && deviceState?.display.pairingMode !== true ? (
             <Section>
               <DisplayControls
                 canControlQr
@@ -1507,7 +1620,7 @@ export function AirConditionerScreen({ onBackPress }: AirConditionerScreenProps)
                 qrVisible={qrVisible}
               />
             </Section>
-          ) : null}
+          ) : null} */}
         </View>
       </ScrollView>
 
@@ -1538,13 +1651,11 @@ export function AirConditionerScreen({ onBackPress }: AirConditionerScreenProps)
                     selectedDate,
                   )
                 }
-                value={
-                  dateFromTimeString(
-                    activeTimePicker === "start"
-                      ? draftSchedule.startTime
-                      : draftSchedule.endTime,
-                  )
-                }
+                value={dateFromTimeString(
+                  activeTimePicker === "start"
+                    ? draftSchedule.startTime
+                    : draftSchedule.endTime,
+                )}
                 textColor={theme.text}
                 themeVariant="dark"
                 style={styles.timePicker}
@@ -1602,7 +1713,7 @@ const styles = StyleSheet.create({
     letterSpacing: 0,
   },
   modePillTextSelected: {
-    color: theme.accentStrong
+    color: theme.accentStrong,
   },
   temperatureHeader: {
     alignItems: "flex-start",
@@ -1616,9 +1727,9 @@ const styles = StyleSheet.create({
     minWidth: 0,
   },
   temperatureTitleContainer: {
-    display: 'flex',
-    flexDirection: 'row',
-    gap: 6
+    display: "flex",
+    flexDirection: "row",
+    gap: 6,
   },
   temperatureActions: {
     alignItems: "center",
@@ -1640,6 +1751,10 @@ const styles = StyleSheet.create({
   quietButtonOff: {
     backgroundColor: theme.controlBackground,
     borderColor: theme.border,
+  },
+  powerfulButtonOn: {
+    backgroundColor: theme.powerfulAccentMuted,
+    borderColor: theme.powerfulAccent,
   },
   powerCornerButton: {
     alignItems: "center",

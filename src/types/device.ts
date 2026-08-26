@@ -14,6 +14,7 @@ export type DeviceStateSnapshot = {
     mode: EspAcMode;
     fan: EspFanSpeed;
     quiet: boolean;
+    powerful: boolean;
     swingVertical: EspAirflow;
     swingHorizontal: EspAirflow;
   };

@@ -20,6 +20,8 @@ export const theme = {
   powerAccentGlow: 'rgba(255, 106, 88, 0.3)',
   quietAccent: '#8B7CFF',
   quietAccentMuted: 'rgba(139, 124, 255, 0.2)',
+  powerfulAccent: '#FFA500',
+  powerfulAccentMuted: 'rgba(255, 165, 0, 0.2)',
 
   text: '#F7F7F8',
   textSecondary: '#B4AEA8',

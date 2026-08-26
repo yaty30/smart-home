@@ -1,5 +1,5 @@
 import * as Haptics from "expo-haptics";
-import { CalendarDays, House, LayoutGrid, User } from "lucide-react-native";
+import { House, Settings as SettingsIcon } from "lucide-react-native";
 import { useEffect, useRef } from "react";
 import {
   Animated,
@@ -15,20 +15,18 @@ export const BOTTOM_NAV_CLEARANCE = 60;
 const NAV_ITEM_SIZE = 52;
 const NAV_ITEM_GAP = theme.spacing.sm;
 
-export type BottomNavTab = "home" | "schedule" | "scenes" | "profile";
+export type BottomNavTab = "home" | "settings";
 
 const activeIndexByTab: Record<BottomNavTab, number> = {
   home: 0,
-  schedule: 1,
-  scenes: 2,
-  profile: 3,
+  settings: 1,
 };
 
 type BottomNavProps = {
   active?: BottomNavTab;
   compact?: boolean;
   onHomePress?: () => void;
-  onScenesPress?: () => void;
+  onSettingsPress?: () => void;
   visible?: boolean;
 };
 
@@ -36,7 +34,7 @@ export function BottomNav({
   active = "home",
   compact = false,
   onHomePress,
-  onScenesPress,
+  onSettingsPress,
   visible = true,
 }: BottomNavProps) {
   const visibleProgress = useRef(new Animated.Value(visible ? 1 : 0)).current;
@@ -123,39 +121,23 @@ export function BottomNav({
           />
         </TouchableOpacity>
 
-        <View
-          accessibilityLabel="Schedule"
-          accessibilityRole="button"
-          style={styles.item}
-        >
-          <CalendarDays color={theme.textMuted} size={22} strokeWidth={2.1} />
-        </View>
-
         <TouchableOpacity
           activeOpacity={0.8}
-          accessibilityLabel="Scenes"
+          accessibilityLabel="Settings"
           accessibilityRole="button"
-          accessibilityState={{ selected: active === "scenes" }}
+          accessibilityState={{ selected: active === "settings" }}
           onPress={() => {
             triggerPress();
-            onScenesPress?.();
+            onSettingsPress?.();
           }}
           style={styles.item}
         >
-          <LayoutGrid
-            color={active === "scenes" ? theme.textOnAccent : theme.textMuted}
+          <SettingsIcon
+            color={active === "settings" ? theme.textOnAccent : theme.textMuted}
             size={22}
             strokeWidth={2.1}
           />
         </TouchableOpacity>
-
-        <View
-          accessibilityLabel="Profile"
-          accessibilityRole="button"
-          style={styles.item}
-        >
-          <User color={theme.textMuted} size={22} strokeWidth={2.1} />
-        </View>
       </View>
     </Animated.View>
   );

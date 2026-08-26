@@ -3,10 +3,10 @@ import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 
 export type RootStackParamList = {
   Main: undefined;
-  SceneDetail: { sceneId: string };
-  AirConditioner: undefined;
-  NewScene: undefined;
-  NewDevice: undefined;
+  RoomDetail: { roomId: string };
+  DeviceControl: { deviceId: string };
+  Controllers: undefined;
+  PairController: undefined;
 };
 
 export type RootStackScreenProps<T extends keyof RootStackParamList> =
