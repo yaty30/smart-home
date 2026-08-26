@@ -1,5 +1,5 @@
 import { BlurView } from "expo-blur";
-import { ArrowLeft, ChevronLeft } from "lucide-react-native";
+import { ChevronLeft } from "lucide-react-native";
 import type { ReactNode } from "react";
 import { useEffect, useRef } from "react";
 import {
@@ -79,8 +79,8 @@ export function ACHeader({
 const styles = StyleSheet.create({
   headerWrap: {
     backgroundColor: "transparent",
-    paddingHorizontal: theme.spacing.xl,
     paddingTop: 2,
+    width: "100%",
     zIndex: 10,
   },
   headerWrapScrolled: {
@@ -96,18 +96,17 @@ const styles = StyleSheet.create({
   container: {
     alignItems: "center",
     backgroundColor: "transparent",
-    borderRadius: theme.radiusLarge,
     flexDirection: "row",
     justifyContent: "space-between",
     minHeight: 60,
     overflow: "hidden",
-    paddingHorizontal: theme.spacing.sm,
+    paddingHorizontal: theme.spacing.lg,
+    width: "100%",
   },
   glassLayer: {
     ...StyleSheet.absoluteFillObject,
-    borderColor: theme.border,
-    borderRadius: theme.radiusLarge,
-    borderWidth: 1,
+    borderBottomColor: theme.border,
+    borderBottomWidth: 1,
     overflow: "hidden",
   },
   glassTint: {

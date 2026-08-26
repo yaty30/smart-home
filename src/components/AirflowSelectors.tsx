@@ -1,4 +1,12 @@
-import { ArrowDown, ArrowRight, ArrowUp, MoveHorizontal, MoveVertical, Smartphone, Wind } from "lucide-react-native";
+import {
+  ArrowDown,
+  ArrowRight,
+  DraftingCompass,
+  MoveHorizontal,
+  MoveVertical,
+  Smartphone,
+  Wind,
+} from "lucide-react-native";
 import { View } from "react-native";
 
 import type {
@@ -11,20 +19,14 @@ import { ControlButtonGroup } from "./ControlButtonGroup";
 import { theme } from "../theme/theme";
 
 const defaultAirConWindPosition = { top: 5, right: 2, size: 13, pl: 0 };
-type AirflowOption = "auto" | AirflowLevel;
+export type AirflowOption = "auto" | AirflowLevel;
 
-const RotatingWind = ({ iconRotation = 0, ...props }: ControlIconProps) => {
-  return (
-    <Wind
-      {...props}
-      style={{
-        transform: [{ rotate: `${iconRotation}deg` }],
-      }}
-    />
-  );
-};
-
-const AirCon = ({ color, iconRotation = 0, strokeWidth, type = 3 }: ControlIconProps) => {
+export const AirflowIcon = ({
+  color,
+  iconRotation = 0,
+  strokeWidth,
+  type = 3,
+}: ControlIconProps) => {
   const types: ControlOptionType[] = [
     defaultAirConWindPosition,
     { top: 7, right: 3, size: 13, pl: 4 },
@@ -58,7 +60,7 @@ const AirCon = ({ color, iconRotation = 0, strokeWidth, type = 3 }: ControlIconP
   );
 };
 
-const verticalAirflowOptions: ControlOption<AirflowOption>[] = [
+export const verticalAirflowOptions: ControlOption<AirflowOption>[] = [
   {
     id: "auto",
     label: "Auto",
@@ -109,7 +111,7 @@ const verticalAirflowOptions: ControlOption<AirflowOption>[] = [
   },
 ];
 
-const horizontalAirflowOptions: ControlOption<AirflowOption>[] = [
+export const horizontalAirflowOptions: ControlOption<AirflowOption>[] = [
   {
     id: "auto",
     label: "Auto",
@@ -185,7 +187,7 @@ export function HorizontalAirflowSelector({
       isDisabled={isDisabled}
       isPowered={isPowered}
       label="Horizontal Airflow"
-      labelAccessory={<MoveHorizontal color={theme.text} size={18} />}
+      labelAccessory={<DraftingCompass color={theme.text} size={18} />}
       onChange={handleChange}
       options={horizontalAirflowOptions}
       selectedValue={isAuto ? "auto" : selectedLevel}
@@ -215,7 +217,7 @@ export function VerticalAirflowSelector({
       isDisabled={isDisabled}
       isPowered={isPowered}
       label="Vertical Airflow"
-      labelAccessory={<MoveVertical color={theme.text} size={18} />}
+      labelAccessory={<View style={{transform: 'rotate(-90deg)'}}><DraftingCompass color={theme.text} size={18} /></View>}
       onChange={handleChange}
       options={verticalAirflowOptions}
       selectedValue={isAuto ? "auto" : selectedLevel}

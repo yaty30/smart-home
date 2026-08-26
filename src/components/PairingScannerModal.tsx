@@ -194,6 +194,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     flexDirection: "row",
     justifyContent: "space-between",
+    marginHorizontal: theme.spacing.lg
   },
   scannerTitle: {
     color: theme.text,

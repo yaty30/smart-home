@@ -1,19 +1,35 @@
 import * as Haptics from "expo-haptics";
 import {
   AirVent,
+  ArrowDown,
+  ArrowRight,
+  Bell,
+  ChevronRight,
+  DropletOff,
+  Fan,
+  Flame,
+  House,
   Lightbulb,
   Monitor,
   MonitorOff,
+  Moon,
   Plus,
-  Power,
-  PowerOff,
-  Settings,
+  Snowflake,
+  Sparkles,
+  Tally1,
+  Tally2,
+  Tally3,
+  Tally4,
+  Tally5,
   Tv,
 } from "lucide-react-native";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import type { ComponentType } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActionSheetIOS,
   Alert,
+  type NativeScrollEvent,
+  type NativeSyntheticEvent,
   Platform,
   ScrollView,
   StyleSheet,
@@ -23,27 +39,83 @@ import {
 } from "react-native";
 
 import {
-  SCREEN_BOTTOM_SAFE_PADDING,
-  ScreenView,
-} from "../components/ScreenView";
-import { sceneIconById } from "../components/sceneIcons";
+  AirflowIcon,
+  horizontalAirflowOptions,
+  type AirflowOption,
+  verticalAirflowOptions,
+} from "../components/AirflowSelectors";
+import { BOTTOM_NAV_CLEARANCE } from "../components/BottomNav";
+import { CardPowerButton, DeviceGridCard } from "../components/DeviceGridCard";
+import { ScreenView } from "../components/ScreenView";
 import { useDeviceConnection } from "../context/DeviceConnectionContext";
 import {
   LIVING_ROOM_AC_DEVICE_ID,
   LIVING_ROOM_AC_SCHEDULE_ID,
   useHomeData,
 } from "../context/HomeDataContext";
-import type { RootStackScreenProps } from "../navigation/types";
+import type {
+  MainScrollDirection,
+  MainTabScreenProps,
+} from "../navigation/types";
 import { getAcSchedule } from "../storage/acScheduleStorage";
 import { theme } from "../theme/theme";
 import type { AcSchedule } from "../types/acSchedule";
-import type { DeviceStateSnapshot } from "../types/device";
+import type { DeviceStateSnapshot, EspAirflow } from "../types/device";
 import type { HomeDevice } from "../types/home";
 
 const iconByDeviceType = {
   ac: AirVent,
   light: Lightbulb,
   tv: Tv,
+};
+
+type HeroStatusIcon = ComponentType<{
+  color?: string;
+  size?: number;
+  strokeWidth?: number;
+}>;
+
+const modeHeroStatusByMode: Record<
+  DeviceStateSnapshot["ac"]["mode"],
+  { icon: HeroStatusIcon; label: string }
+> = {
+  auto: { icon: Sparkles, label: "Auto" },
+  cool: { icon: Snowflake, label: "Cold" },
+  dry: { icon: DropletOff, label: "Dry" },
+  fan: { icon: Fan, label: "Fan" },
+  heat: { icon: Flame, label: "Heat" },
+};
+
+const fanHeroStatusBySpeed: Record<
+  DeviceStateSnapshot["ac"]["fan"],
+  { icon: HeroStatusIcon; label: string }
+> = {
+  "1": { icon: Tally1, label: "Fan 1" },
+  "2": { icon: Tally2, label: "Fan 2" },
+  "3": { icon: Tally3, label: "Fan 3" },
+  "4": { icon: Tally4, label: "Fan 4" },
+  "5": { icon: Tally5, label: "Fan 5" },
+  auto: { icon: Fan, label: "Auto" },
+};
+
+const airflowOptionIdByEspAirflow: Record<EspAirflow, AirflowOption> = {
+  "1": "one",
+  "2": "two",
+  "3": "three",
+  "4": "four",
+  "5": "five",
+  auto: "auto",
+};
+
+const optionForEspAirflow = (
+  options: typeof verticalAirflowOptions,
+  airflow: EspAirflow,
+) => {
+  const optionId = airflowOptionIdByEspAirflow[airflow];
+
+  return (
+    options.find((option) => option.id === optionId) ?? options[0]!
+  );
 };
 
 const formatAcMode = (mode: string) => {
@@ -66,6 +138,20 @@ const formatTime12h = (time: string) => {
   )} ${suffix}`;
 };
 
+const getGreeting = () => {
+  const hours = new Date().getHours();
+
+  if (hours < 12) {
+    return "Good morning";
+  }
+
+  if (hours < 18) {
+    return "Good afternoon";
+  }
+
+  return "Good evening";
+};
+
 const livingRoomAcFallback: HomeDevice = {
   id: LIVING_ROOM_AC_DEVICE_ID,
   name: "Air Conditioner",
@@ -81,29 +167,10 @@ const getDeviceStatus = (device: HomeDevice) => {
   return device.powered ? device.onDetail : "Off";
 };
 
-const getSceneChips = (devices: HomeDevice[], sceneId: string) => {
-  const activeDevices = devices.filter(
-    (device) => device.sceneId === sceneId && device.powered,
-  );
-
-  if (activeDevices.length === 0) {
-    return [{ active: false, label: "All Off" }];
-  }
-
-  return activeDevices.map((device) => {
-    if (device.type === "ac") {
-      return { active: true, label: "AC On" };
-    }
-
-    if (device.type === "light") {
-      return { active: true, label: "Light On" };
-    }
-
-    return { active: true, label: "TV On" };
-  });
-};
-
-export function HomeScreen({ navigation }: RootStackScreenProps<"Home">) {
+export function HomeScreen({
+  navigation,
+  onScrollDirectionChange,
+}: MainTabScreenProps) {
   const {
     debugMode,
     deviceState,
@@ -122,6 +189,7 @@ export function HomeScreen({ navigation }: RootStackScreenProps<"Home">) {
   const [livingAcSchedule, setLivingAcSchedule] = useState<AcSchedule | null>(
     null,
   );
+  const latestScrollY = useRef(0);
 
   useEffect(() => {
     let isActive = true;
@@ -191,11 +259,15 @@ export function HomeScreen({ navigation }: RootStackScreenProps<"Home">) {
   );
 
   const filteredDevices = useMemo(() => {
+    const gridDevices = devices.filter(
+      (device) => device.id !== LIVING_ROOM_AC_DEVICE_ID,
+    );
+
     if (selectedFilter === "all") {
-      return devices;
+      return gridDevices;
     }
 
-    return devices.filter((device) => device.sceneId === selectedFilter);
+    return gridDevices.filter((device) => device.sceneId === selectedFilter);
   }, [devices, selectedFilter]);
 
   const scheduleRows = useMemo(
@@ -220,6 +292,53 @@ export function HomeScreen({ navigation }: RootStackScreenProps<"Home">) {
   const canControlDisplay =
     isDeviceConnected && pairedDevice !== null && deviceState !== null;
   const screenOn = deviceState?.display.screenOn ?? false;
+  const acMode = deviceState?.ac.mode ?? "cool";
+  const fanSpeed = deviceState?.ac.fan ?? "auto";
+  const quietOn = livingRoomAcDevice.powered && deviceState?.ac.quiet === true;
+  const verticalAirflow = deviceState?.ac.swingVertical ?? "auto";
+  const horizontalAirflow = deviceState?.ac.swingHorizontal ?? "auto";
+  const heroStatusItems = useMemo(
+    () => {
+      const verticalOption = optionForEspAirflow(
+        verticalAirflowOptions,
+        verticalAirflow,
+      );
+      const horizontalOption = optionForEspAirflow(
+        horizontalAirflowOptions,
+        horizontalAirflow,
+      );
+
+      return [
+        {
+          ...modeHeroStatusByMode[acMode],
+          id: "mode",
+          type: "icon" as const,
+        },
+        {
+          ...fanHeroStatusBySpeed[fanSpeed],
+          id: "fan",
+          type: "icon" as const,
+        },
+        {
+          iconRotation: horizontalOption.iconRotation ?? 0,
+          iconType: horizontalOption.iconType ?? 3,
+          id: "horizontal-airflow",
+          isAuto: horizontalAirflow === "auto",
+          label: "Horizontal",
+          type: "airflow" as const,
+        },
+        {
+          iconRotation: verticalOption.iconRotation ?? 0,
+          iconType: verticalOption.iconType ?? 3,
+          id: "vertical-airflow",
+          isAuto: verticalAirflow === "auto",
+          label: "Vertical",
+          type: "airflow" as const,
+        },
+      ];
+    },
+    [acMode, fanSpeed, horizontalAirflow, verticalAirflow],
+  );
 
   const triggerPressHaptic = useCallback(() => {
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -231,12 +350,12 @@ export function HomeScreen({ navigation }: RootStackScreenProps<"Home">) {
         currentState === null
           ? currentState
           : {
-              ...currentState,
-              display: {
-                ...currentState.display,
-                ...displayPatch,
-              },
+            ...currentState,
+            display: {
+              ...currentState.display,
+              ...displayPatch,
             },
+          },
       );
     },
     [updateDeviceState],
@@ -303,8 +422,7 @@ export function HomeScreen({ navigation }: RootStackScreenProps<"Home">) {
 
     if (!canControlDisplay) {
       console.log(
-        `[Device] Dropped command because ESP32 is offline: screen=${
-          nextScreenOn ? "on" : "off"
+        `[Device] Dropped command because ESP32 is offline: screen=${nextScreenOn ? "on" : "off"
         }`,
       );
       return;
@@ -363,6 +481,15 @@ export function HomeScreen({ navigation }: RootStackScreenProps<"Home">) {
     [triggerPressHaptic],
   );
 
+  const handleOpenScene = useCallback(() => {
+    if (selectedFilter === "all") {
+      return;
+    }
+
+    triggerPressHaptic();
+    navigation.navigate("SceneDetail", { sceneId: selectedFilter });
+  }, [navigation, selectedFilter, triggerPressHaptic]);
+
   const handleToggleDevice = useCallback(
     (deviceId: string) => {
       triggerPressHaptic();
@@ -372,12 +499,12 @@ export function HomeScreen({ navigation }: RootStackScreenProps<"Home">) {
           currentState === null
             ? currentState
             : {
-                ...currentState,
-                ac: {
-                  ...currentState.ac,
-                  power: !currentState.ac.power,
-                },
+              ...currentState,
+              ac: {
+                ...currentState.ac,
+                power: !currentState.ac.power,
               },
+            },
         );
         return;
       }
@@ -401,153 +528,56 @@ export function HomeScreen({ navigation }: RootStackScreenProps<"Home">) {
     [navigation, toggleDevice, triggerPressHaptic],
   );
 
+  const handleMainScroll = useCallback(
+    (event: NativeSyntheticEvent<NativeScrollEvent>) => {
+      const nextScrollY = Math.max(event.nativeEvent.contentOffset.y, 0);
+      const scrollDelta = nextScrollY - latestScrollY.current;
+
+      if (nextScrollY <= 0) {
+        latestScrollY.current = nextScrollY;
+        onScrollDirectionChange?.("up");
+        return;
+      }
+
+      if (Math.abs(scrollDelta) < 6) {
+        return;
+      }
+
+      const direction: MainScrollDirection = scrollDelta > 0 ? "down" : "up";
+      latestScrollY.current = nextScrollY;
+      onScrollDirectionChange?.(direction);
+    },
+    [onScrollDirectionChange],
+  );
+
   return (
     <ScreenView>
       <ScrollView
-        bounces={false}
+        alwaysBounceVertical
         contentContainerStyle={styles.content}
+        onScroll={handleMainScroll}
+        scrollEventThrottle={16}
         showsVerticalScrollIndicator={false}
         style={styles.scrollView}
       >
         <View style={styles.header}>
-          <View style={styles.titleGroup}>
-            <Text style={styles.greeting}>Good afternoon</Text>
-            <Text style={styles.title}>SmartHome</Text>
+          <View style={styles.identityGroup}>
+            <View style={styles.avatar}>
+              <House color={theme.accent} size={22} strokeWidth={2.3} />
+            </View>
+            <View style={styles.greetingGroup}>
+              <Text style={styles.greetingName}>Hi there</Text>
+              <Text style={styles.greeting}>{getGreeting()}</Text>
+            </View>
           </View>
-          <View style={styles.headerActions}>
-            <TouchableOpacity
-              activeOpacity={0.76}
-              accessibilityLabel="Open settings"
-              accessibilityRole="button"
-              style={styles.headerIconButton}
-            >
-              <Settings color={theme.accent} size={22} strokeWidth={2.3} />
-            </TouchableOpacity>
-            <TouchableOpacity
-              activeOpacity={0.76}
-              accessibilityLabel="Add scene or device"
-              accessibilityRole="button"
-              onPress={openAddMenu}
-              style={styles.headerIconButton}
-            >
-              <Plus color={theme.accent} size={24} strokeWidth={2.5} />
-            </TouchableOpacity>
-          </View>
-        </View>
-
-        <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>Scenes</Text>
           <TouchableOpacity
             activeOpacity={0.76}
+            accessibilityLabel="Notifications"
             accessibilityRole="button"
-            onPress={() => handleSelectFilter("all")}
+            style={styles.headerIconButton}
           >
-            <Text style={styles.linkText}>View all</Text>
+            <Bell color={theme.text} size={20} strokeWidth={2.2} />
           </TouchableOpacity>
-        </View>
-
-        <ScrollView
-          horizontal
-          contentContainerStyle={styles.sceneList}
-          showsHorizontalScrollIndicator={false}
-        >
-          {scenes.map((scene) => {
-            const selected = selectedFilter === scene.id;
-            const chips = getSceneChips(devices, scene.id);
-            const SceneIcon = sceneIconById[scene.icon];
-
-            return (
-              <TouchableOpacity
-                activeOpacity={0.78}
-                accessibilityRole="button"
-                accessibilityState={{ selected }}
-                key={scene.id}
-                onPress={() => handleSelectFilter(scene.id)}
-                style={[styles.sceneCard, selected && styles.sceneCardSelected]}
-              >
-                <View style={styles.sceneCardHeader}>
-                  <View style={styles.sceneTitleGroup}>
-                    <SceneIcon
-                      color={selected ? theme.accent : theme.textSecondary}
-                      size={18}
-                      strokeWidth={2.3}
-                    />
-                    <Text style={styles.sceneName}>{scene.name}</Text>
-                  </View>
-                  <Text style={styles.sceneTemperature}>
-                    {scene.temperature}°
-                  </Text>
-                </View>
-                <Text style={styles.sceneDeviceCount}>
-                  {devices.filter((device) => device.sceneId === scene.id).length} devices
-                </Text>
-                <View style={styles.chipRow}>
-                  {chips.map((chip) => (
-                    <View
-                      key={`${scene.id}-${chip.label}`}
-                      style={[styles.chip, chip.active && styles.chipActive]}
-                    >
-                      <Text
-                        style={[
-                          styles.chipText,
-                          chip.active && styles.chipTextActive,
-                        ]}
-                      >
-                        {chip.label}
-                      </Text>
-                    </View>
-                  ))}
-                </View>
-              </TouchableOpacity>
-            );
-          })}
-        </ScrollView>
-
-        <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>Devices</Text>
-          <View style={styles.sectionActions}>
-            <TouchableOpacity
-              activeOpacity={0.76}
-              accessibilityLabel={
-                screenOn ? "Turn screen off" : "Turn screen on"
-              }
-              accessibilityRole="switch"
-              accessibilityState={{
-                checked: screenOn,
-                disabled: !canControlDisplay,
-              }}
-              disabled={!canControlDisplay}
-              onPress={handleScreenPowerChange}
-              style={[
-                styles.screenToggleButton,
-                screenOn && styles.screenToggleButtonActive,
-                !canControlDisplay && styles.screenToggleButtonDisabled,
-              ]}
-            >
-              {screenOn ? (
-                <Monitor
-                  color={theme.accentStrong}
-                  size={17}
-                  strokeWidth={2.4}
-                />
-              ) : (
-                <MonitorOff
-                  color={theme.textSecondary}
-                  size={17}
-                  strokeWidth={2.4}
-                />
-              )}
-            </TouchableOpacity>
-            <TouchableOpacity
-              activeOpacity={0.76}
-              accessibilityRole="button"
-              onPress={openAddMenu}
-              style={styles.addButton}
-            >
-              <Plus color={theme.accent} size={15} strokeWidth={2.8} />
-              <Text style={styles.linkText}>Add</Text>
-            </TouchableOpacity>
-          </View>
         </View>
 
         <ScrollView
@@ -560,7 +590,7 @@ export function HomeScreen({ navigation }: RootStackScreenProps<"Home">) {
 
             return (
               <TouchableOpacity
-                activeOpacity={0.78}
+                activeOpacity={0.8}
                 accessibilityRole="button"
                 accessibilityState={{ selected }}
                 key={filter.id}
@@ -580,71 +610,161 @@ export function HomeScreen({ navigation }: RootStackScreenProps<"Home">) {
           })}
         </ScrollView>
 
-        <View style={styles.deviceGrid}>
-          {filteredDevices.map((device) => {
-            const Icon = iconByDeviceType[device.type];
-            const powered = device.powered;
-            const PowerIcon = powered ? PowerOff : Power;
+        {selectedFilter !== "all" ? (
+          <TouchableOpacity
+            activeOpacity={0.76}
+            accessibilityRole="button"
+            onPress={handleOpenScene}
+            style={styles.sceneLinkRow}
+          >
+            <Text style={styles.sceneLinkTitle}>
+              {sceneNameById[selectedFilter] ?? "Scene"}
+            </Text>
+            <View style={styles.sceneLinkAction}>
+              <Text style={styles.linkText}>Open scene</Text>
+              <ChevronRight color={theme.accent} size={16} strokeWidth={2.6} />
+            </View>
+          </TouchableOpacity>
+        ) : null}
 
-            return (
-              <TouchableOpacity
-                activeOpacity={0.82}
-                accessibilityRole="button"
-                key={device.id}
-                onPress={() => handleOpenDevice(device)}
-                style={[styles.deviceCard, powered && styles.deviceCardOn]}
-              >
-                <View style={styles.deviceCardTop}>
+        <TouchableOpacity
+          activeOpacity={0.88}
+          accessibilityRole="button"
+          accessibilityLabel="Open air conditioner controls"
+          onPress={() => handleOpenDevice(livingRoomAcDevice)}
+          style={[styles.heroCard, livingRoomAcDevice.powered ? styles.heroCardOn : {}]}
+        >
+          <View style={styles.heroTopRow}>
+            <View style={styles.heroTitleGroup}>
+              <Text style={styles.heroTitle}>{livingRoomAcDevice.name}</Text>
+              <Text style={styles.heroSubtitle}>
+                Connected to {sceneNameById[livingRoomAcDevice.sceneId]}
+              </Text>
+            </View>
+            <View style={styles.heroActions}>
+              {quietOn ? (
+                <View
+                  accessibilityLabel="Quiet mode is on"
+                  style={styles.heroQuietIndicator}
+                >
+                  <Moon
+                    color={theme.quietAccent}
+                    size={18}
+                    strokeWidth={2.4}
+                  />
+                </View>
+              ) : null}
+              <CardPowerButton
+                accessibilityLabel="Toggle air conditioner"
+                isOn={livingRoomAcDevice.powered}
+                onToggle={(event) => {
+                  event.stopPropagation();
+                  handleToggleDevice(livingRoomAcDevice.id);
+                }}
+              />
+            </View>
+          </View>
+
+          <View style={styles.heroIllustration}>
+            <View
+              style={[
+                styles.heroIconHalo,
+                livingRoomAcDevice.powered && styles.heroIconHaloOn,
+              ]}
+            >
+              <AirVent
+                color={
+                  livingRoomAcDevice.powered ? theme.accent : theme.textMuted
+                }
+                size={62}
+                strokeWidth={1.6}
+              />
+            </View>
+            <Text
+              style={[
+                styles.heroStatus,
+                livingRoomAcDevice.powered && styles.heroStatusOn,
+              ]}
+            >
+              {getDeviceStatus(livingRoomAcDevice)}
+            </Text>
+          </View>
+
+          <View style={styles.heroModeRow}>
+            {heroStatusItems.map((statusItem) => {
+              return (
+                <View key={statusItem.id} style={styles.heroModeItem}>
                   <View
                     style={[
-                      styles.deviceIconFrame,
-                      powered && styles.deviceIconFrameOn,
+                      styles.heroModeCircle,
+                      livingRoomAcDevice.powered && styles.heroModeCircleActive,
                     ]}
                   >
-                    <Icon
-                      color={powered ? theme.accent : theme.textSecondary}
-                      size={23}
-                      strokeWidth={2.2}
-                    />
+                    {statusItem.type === "airflow" ? (
+                      <View style={styles.heroAirflowIcon}>
+                        <View style={{ transform: `rotate(${statusItem.isAuto ? 0 : statusItem.iconRotation}deg)` }}>
+                          {statusItem.isAuto ? <Text style={{fontSize: 20, fontWeight: '700', color: theme.accentBright}}>A</Text> :
+                            statusItem.id === "vertical-airflow" ?
+                              <ArrowRight color={theme.accentBright} />
+                              :
+                              <ArrowDown color={theme.accentBright}/>
+                          }
+                        </View>
+                      </View>
+                    ) : (
+                      (() => {
+                        const StatusIcon = statusItem.icon;
+
+                        return (
+                          <StatusIcon
+                            color={theme.accentBright}
+                            size={19}
+                            strokeWidth={2.2}
+                          />
+                        );
+                      })()
+                    )}
                   </View>
-                  <TouchableOpacity
-                    activeOpacity={0.74}
-                    accessibilityLabel={`Toggle ${device.name}`}
-                    accessibilityRole="switch"
-                    accessibilityState={{ checked: powered }}
-                    onPress={(event) => {
-                      event.stopPropagation();
-                      handleToggleDevice(device.id);
-                    }}
+                  <Text
                     style={[
-                      styles.devicePowerButton,
-                      powered
-                        ? styles.devicePowerButtonShutdown
-                        : styles.devicePowerButtonOn,
+                      styles.heroModeLabel,
+                      livingRoomAcDevice.powered && styles.heroModeLabelActive,
                     ]}
                   >
-                    <PowerIcon
-                      color={powered ? theme.powerAccent : theme.accent}
-                      size={18}
-                      strokeWidth={2.5}
-                    />
-                  </TouchableOpacity>
+                    {statusItem.label}
+                  </Text>
                 </View>
-                <Text style={styles.deviceName}>{device.name}</Text>
-                <Text style={styles.deviceScene}>
-                  {sceneNameById[device.sceneId] ?? "Unassigned"}
-                </Text>
-                <Text
-                  style={[
-                    styles.deviceStatus,
-                    powered && styles.deviceStatusOn,
-                  ]}
-                >
-                  {getDeviceStatus(device)}
-                </Text>
-              </TouchableOpacity>
-            );
-          })}
+              );
+            })}
+          </View>
+        </TouchableOpacity>
+
+        <View style={styles.sectionHeader}>
+          <Text style={styles.sectionTitle}>Manage your device</Text>
+          <TouchableOpacity
+            activeOpacity={0.8}
+            accessibilityLabel="Add scene or device"
+            accessibilityRole="button"
+            onPress={openAddMenu}
+            style={styles.addButton}
+          >
+            <Plus color={theme.textOnAccent} size={20} strokeWidth={2.6} />
+          </TouchableOpacity>
+        </View>
+
+        <View style={styles.deviceGrid}>
+          {filteredDevices.map((device) => (
+            <DeviceGridCard
+              icon={iconByDeviceType[device.type]}
+              key={device.id}
+              name={device.name}
+              onPress={() => handleOpenDevice(device)}
+              onTogglePower={() => handleToggleDevice(device.id)}
+              powered={device.powered}
+              statusLabel={getDeviceStatus(device)}
+              subtitle={sceneNameById[device.sceneId] ?? "Unassigned"}
+            />
+          ))}
         </View>
 
         <View style={[styles.sectionHeader, styles.schedulesSectionHeader]}>
@@ -698,6 +818,7 @@ export function HomeScreen({ navigation }: RootStackScreenProps<"Home">) {
           ) : null}
         </View>
       </ScrollView>
+
     </ScreenView>
   );
 }
@@ -707,7 +828,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   content: {
-    paddingBottom: SCREEN_BOTTOM_SAFE_PADDING + theme.spacing.xxl,
+    paddingBottom: BOTTOM_NAV_CLEARANCE + theme.spacing.xl,
     paddingHorizontal: theme.spacing.lg,
   },
   header: {
@@ -716,56 +837,87 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     marginBottom: theme.spacing.xl,
   },
-  titleGroup: {
-    gap: theme.spacing.xs,
+  identityGroup: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: theme.spacing.md,
+  },
+  avatar: {
+    alignItems: "center",
+    backgroundColor: theme.surfaceWarm,
+    borderColor: theme.borderStrong,
+    borderRadius: theme.radiusRound,
+    borderWidth: 1,
+    height: 48,
+    justifyContent: "center",
+    width: 48,
+  },
+  greetingGroup: {
+    gap: 2,
+  },
+  greetingName: {
+    color: theme.text,
+    fontSize: 17,
+    fontWeight: "800",
+    letterSpacing: 0,
   },
   greeting: {
     color: theme.textSecondary,
     fontSize: 13,
-    fontWeight: "700",
+    fontWeight: "600",
     letterSpacing: 0,
-  },
-  title: {
-    color: theme.text,
-    fontSize: 38,
-    fontWeight: "900",
-    letterSpacing: 0,
-    lineHeight: 42,
-  },
-  headerActions: {
-    flexDirection: "row",
-    gap: theme.spacing.sm,
   },
   headerIconButton: {
     alignItems: "center",
     backgroundColor: theme.surfaceLow,
-    borderColor: theme.borderStrong,
-    borderRadius: 18,
+    borderColor: "rgba(255, 255, 255, 0.08)",
+    borderRadius: theme.radiusRound,
     borderWidth: 1,
-    height: 50,
+    height: 48,
     justifyContent: "center",
-    width: 50,
+    width: 48,
   },
-  sectionHeader: {
+  filterList: {
+    gap: theme.spacing.sm,
+    paddingBottom: theme.spacing.lg,
+  },
+  filterPill: {
+    backgroundColor: "rgba(255, 255, 255, 0.04)",
+    borderColor: "rgba(255, 255, 255, 0.06)",
+    borderRadius: theme.radiusRound,
+    borderWidth: 1,
+    paddingHorizontal: theme.spacing.lg,
+    paddingVertical: 11,
+  },
+  filterPillSelected: {
+    backgroundColor: theme.accentSolid,
+    borderColor: theme.accentSolid,
+  },
+  filterPillText: {
+    color: theme.textSecondary,
+    fontSize: 13,
+    fontWeight: "800",
+    letterSpacing: 0,
+  },
+  filterPillTextSelected: {
+    color: theme.textOnAccent,
+  },
+  sceneLinkRow: {
     alignItems: "center",
     flexDirection: "row",
     justifyContent: "space-between",
     marginBottom: theme.spacing.md,
-    marginTop: theme.spacing.sm,
   },
-  schedulesSectionHeader: {
-    marginTop: theme.spacing.xl,
-  },
-  sectionTitle: {
+  sceneLinkTitle: {
     color: theme.text,
-    fontSize: 21,
+    fontSize: 17,
     fontWeight: "900",
     letterSpacing: 0,
   },
-  sectionActions: {
+  sceneLinkAction: {
     alignItems: "center",
     flexDirection: "row",
-    gap: theme.spacing.sm,
+    gap: 2,
   },
   linkText: {
     color: theme.accent,
@@ -773,10 +925,102 @@ const styles = StyleSheet.create({
     fontWeight: "900",
     letterSpacing: 0,
   },
-  addButton: {
+  heroCardOn: {
+    backgroundColor: theme.surfaceWarm,
+    borderColor: theme.borderStrong,
+    shadowColor: theme.accent,
+    shadowOffset: {
+      height: 8,
+      width: 0,
+    },
+    shadowOpacity: 0.08,
+    shadowRadius: 16,
+  },
+  heroCard: {
+    backgroundColor: theme.surfaceLow,
+    borderColor: "rgba(255, 255, 255, 0.06)",
+    borderRadius: theme.radiusMedium,
+    borderWidth: 1,
+    marginBottom: theme.spacing.lg,
+    padding: theme.spacing.lg,
+  },
+  heroTopRow: {
+    alignItems: "flex-start",
+    flexDirection: "row",
+    gap: theme.spacing.md,
+    justifyContent: "space-between",
+  },
+  heroTitleGroup: {
+    flex: 1,
+    gap: theme.spacing.xs,
+  },
+  heroActions: {
     alignItems: "center",
     flexDirection: "row",
-    gap: theme.spacing.xs,
+    gap: theme.spacing.sm,
+  },
+  heroQuietIndicator: {
+    alignItems: "center",
+    backgroundColor: theme.quietAccentMuted,
+    borderColor: theme.quietAccent,
+    borderRadius: 16,
+    borderWidth: 1,
+    height: 40,
+    justifyContent: "center",
+    width: 40,
+  },
+  heroTitle: {
+    color: theme.text,
+    fontSize: 18,
+    fontWeight: "900",
+    letterSpacing: 0,
+  },
+  heroSubtitle: {
+    color: theme.textSecondary,
+    fontSize: 13,
+    fontWeight: "600",
+    letterSpacing: 0,
+  },
+  heroIllustration: {
+    alignItems: "center",
+    gap: theme.spacing.md,
+    paddingVertical: theme.spacing.xl,
+  },
+  heroIconHalo: {
+    alignItems: "center",
+    backgroundColor: "rgba(255, 255, 255, 0.03)",
+    borderColor: "rgba(255, 255, 255, 0.06)",
+    borderRadius: theme.radiusRound,
+    borderWidth: 1,
+    height: 118,
+    justifyContent: "center",
+    width: 118,
+  },
+  heroIconHaloOn: {
+    backgroundColor: theme.accentSubtle,
+    borderColor: theme.borderStrong,
+  },
+  heroStatus: {
+    color: theme.textMuted,
+    fontSize: 14,
+    fontWeight: "800",
+    letterSpacing: 0,
+  },
+  heroStatusOn: {
+    color: theme.accent,
+  },
+  heroFooterHeader: {
+    alignItems: "center",
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginBottom: theme.spacing.md,
+  },
+  heroFooterLabel: {
+    color: theme.textSecondary,
+    fontSize: 13,
+    fontWeight: "800",
+    letterSpacing: 0.4,
+    textTransform: "uppercase",
   },
   screenToggleButton: {
     alignItems: "center",
@@ -795,207 +1039,107 @@ const styles = StyleSheet.create({
   screenToggleButtonDisabled: {
     opacity: 0.45,
   },
-  sceneList: {
-    gap: theme.spacing.md,
-    paddingBottom: theme.spacing.lg,
-  },
-  sceneCard: {
-    backgroundColor: theme.surfaceLow,
-    borderColor: theme.border,
-    borderRadius: 24,
-    borderWidth: 1,
-    minHeight: 140,
-    padding: theme.spacing.lg,
-    width: 178,
-  },
-  sceneCardSelected: {
-    backgroundColor: theme.surfaceWarm,
-    borderColor: theme.borderActive,
-    shadowColor: theme.accent,
-    shadowOffset: {
-      height: 8,
-      width: 0,
-    },
-    shadowOpacity: 0.1,
-    shadowRadius: 18,
-  },
-  sceneCardHeader: {
-    alignItems: "flex-start",
+  heroModeRow: {
     flexDirection: "row",
-    gap: theme.spacing.sm,
     justifyContent: "space-between",
   },
-  sceneTitleGroup: {
-    flex: 1,
-    flexDirection: "row",
+  heroModeItem: {
+    alignItems: "center",
     gap: theme.spacing.sm,
+    width: 64,
   },
-  sceneName: {
-    color: theme.text,
-    flex: 1,
-    fontSize: 16,
-    fontWeight: "900",
-    letterSpacing: 0,
-    lineHeight: 19,
+  heroModeCircle: {
+    alignItems: "center",
+    backgroundColor: "rgba(255, 255, 255, 0.04)",
+    borderColor: "rgba(255, 255, 255, 0.07)",
+    borderRadius: theme.radiusRound,
+    borderWidth: 1,
+    height: 52,
+    justifyContent: "center",
+    width: 52,
   },
-  sceneTemperature: {
-    color: theme.accent,
-    fontSize: 24,
-    fontWeight: "900",
-    letterSpacing: 0,
-    lineHeight: 28,
+  heroModeCircleActive: {
+    backgroundColor: theme.powerAccentMuted,
+    borderColor: theme.accentSolid,
   },
-  sceneDeviceCount: {
+  heroAirflowIcon: {
+    alignItems: "center",
+    flexDirection: "row",
+    justifyContent: "center",
+    position: "relative",
+  },
+  heroAirflowAuto: {
+    backgroundColor: theme.controlBackground,
+    borderColor: "rgba(255, 255, 255, 0.16)",
+    borderRadius: 7,
+    borderWidth: 1,
     color: theme.textSecondary,
-    fontSize: 13,
+    fontSize: 9,
+    fontWeight: "900",
+    height: 14,
+    letterSpacing: 0,
+    lineHeight: 12,
+    minWidth: 14,
+    overflow: "hidden",
+    position: "absolute",
+    right: -9,
+    textAlign: "center",
+    top: -10,
+  },
+  heroAirflowAutoActive: {
+    backgroundColor: theme.textOnAccent,
+    borderColor: theme.textOnAccent,
+    color: theme.accentSolid,
+  },
+  heroModeLabel: {
+    color: theme.textMuted,
+    fontSize: 11,
     fontWeight: "700",
     letterSpacing: 0,
+  },
+  heroModeLabelActive: {
+    color: theme.accent,
+  },
+  sectionHeader: {
+    alignItems: "center",
+    flexDirection: "row",
+    justifyContent: "space-between",
     marginBottom: theme.spacing.md,
     marginTop: theme.spacing.sm,
   },
-  chipRow: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: theme.spacing.xs,
+  schedulesSectionHeader: {
+    marginTop: theme.spacing.xl,
   },
-  chip: {
-    backgroundColor: "rgba(255, 255, 255, 0.04)",
-    borderColor: "rgba(255, 255, 255, 0.06)",
-    borderRadius: theme.radiusRound,
-    borderWidth: 1,
-    paddingHorizontal: 9,
-    paddingVertical: 7,
-  },
-  chipActive: {
-    backgroundColor: theme.accentMuted,
-    borderColor: theme.borderActive,
-  },
-  chipText: {
-    color: theme.textSecondary,
-    fontSize: 11,
-    fontWeight: "900",
-    letterSpacing: 0,
-    lineHeight: 12,
-  },
-  chipTextActive: {
-    color: theme.accent,
-  },
-  filterList: {
-    gap: theme.spacing.sm,
-    paddingBottom: theme.spacing.md,
-  },
-  filterPill: {
-    backgroundColor: "rgba(255, 255, 255, 0.04)",
-    borderColor: "rgba(255, 255, 255, 0.06)",
-    borderRadius: theme.radiusRound,
-    borderWidth: 1,
-    paddingHorizontal: theme.spacing.md,
-    paddingVertical: 10,
-  },
-  filterPillSelected: {
-    backgroundColor: theme.accentMuted,
-    borderColor: theme.borderActive,
-  },
-  filterPillText: {
-    color: theme.textSecondary,
-    fontSize: 13,
+  sectionTitle: {
+    color: theme.text,
+    fontSize: 20,
     fontWeight: "900",
     letterSpacing: 0,
   },
-  filterPillTextSelected: {
-    color: theme.accent,
+  addButton: {
+    alignItems: "center",
+    backgroundColor: theme.accentSolid,
+    borderRadius: theme.radiusRound,
+    height: 40,
+    justifyContent: "center",
+    shadowColor: theme.accentSolid,
+    shadowOffset: {
+      height: 4,
+      width: 0,
+    },
+    shadowOpacity: 0.4,
+    shadowRadius: 10,
+    width: 40,
   },
   deviceGrid: {
     flexDirection: "row",
     flexWrap: "wrap",
     gap: theme.spacing.md,
   },
-  deviceCard: {
-    backgroundColor: theme.surfaceLow,
-    borderColor: "rgba(255, 255, 255, 0.06)",
-    borderRadius: 24,
-    borderWidth: 1,
-    minHeight: 174,
-    padding: theme.spacing.md,
-    width: "48.2%",
-  },
-  deviceCardOn: {
-    backgroundColor: theme.surfaceWarm,
-    borderColor: theme.borderStrong,
-    shadowColor: theme.accent,
-    shadowOffset: {
-      height: 8,
-      width: 0,
-    },
-    shadowOpacity: 0.08,
-    shadowRadius: 16,
-  },
-  deviceCardTop: {
-    alignItems: "center",
-    flexDirection: "row",
-    justifyContent: "space-between",
-    marginBottom: theme.spacing.md,
-  },
-  deviceIconFrame: {
-    alignItems: "center",
-    backgroundColor: "rgba(255, 255, 255, 0.04)",
-    borderColor: "rgba(255, 255, 255, 0.06)",
-    borderRadius: 17,
-    borderWidth: 1,
-    height: 45,
-    justifyContent: "center",
-    width: 45,
-  },
-  deviceIconFrameOn: {
-    backgroundColor: theme.accentMuted,
-    borderColor: theme.borderActive,
-  },
-  devicePowerButton: {
-    alignItems: "center",
-    backgroundColor: theme.surfaceLow,
-    borderColor: theme.border,
-    borderRadius: 15,
-    borderWidth: 1,
-    height: 40,
-    justifyContent: "center",
-    width: 40,
-  },
-  devicePowerButtonOn: {
-    backgroundColor: theme.accentMuted,
-    borderColor: theme.borderActive,
-  },
-  devicePowerButtonShutdown: {
-    backgroundColor: theme.powerAccentMuted,
-    borderColor: theme.powerAccent,
-  },
-  deviceName: {
-    color: theme.text,
-    fontSize: 16,
-    fontWeight: "900",
-    letterSpacing: 0,
-    lineHeight: 19,
-  },
-  deviceScene: {
-    color: theme.textMuted,
-    fontSize: 12,
-    fontWeight: "800",
-    letterSpacing: 0,
-    marginTop: theme.spacing.xs,
-  },
-  deviceStatus: {
-    color: theme.textMuted,
-    fontSize: 13,
-    fontWeight: "900",
-    letterSpacing: 0,
-    marginTop: theme.spacing.md,
-  },
-  deviceStatusOn: {
-    color: theme.accent,
-  },
   scheduleCard: {
     backgroundColor: theme.surfaceLow,
     borderColor: "rgba(255, 255, 255, 0.06)",
-    borderRadius: 24,
+    borderRadius: theme.radiusMedium,
     borderWidth: 1,
     paddingHorizontal: theme.spacing.lg,
     paddingVertical: theme.spacing.sm,

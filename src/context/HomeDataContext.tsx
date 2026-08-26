@@ -119,6 +119,7 @@ type HomeDataContextValue = {
   schedules: HomeSchedule[];
   addScene: (name: string, icon: SceneIconId) => Scene;
   addDevice: (input: AddDeviceInput) => HomeDevice;
+  removeDevice: (deviceId: string) => void;
   toggleDevice: (deviceId: string) => void;
 };
 
@@ -165,16 +166,23 @@ export function HomeDataProvider({ children }: PropsWithChildren) {
     );
   }, []);
 
+  const removeDevice = useCallback((deviceId: string) => {
+    setDevices((currentDevices) =>
+      currentDevices.filter((device) => device.id !== deviceId),
+    );
+  }, []);
+
   const value = useMemo(
     () => ({
       addDevice,
       addScene,
       devices,
+      removeDevice,
       scenes,
       schedules,
       toggleDevice,
     }),
-    [addDevice, addScene, devices, scenes, schedules, toggleDevice],
+    [addDevice, addScene, devices, removeDevice, scenes, schedules, toggleDevice],
   );
 
   return (

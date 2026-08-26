@@ -155,14 +155,21 @@ export function DeviceConnectionProvider({
   const [deviceConnectionStatus, setDeviceConnectionStatus] =
     useState<DeviceConnectionStatus>("disconnected");
   const [deviceState, setDeviceState] = useState<DeviceStateSnapshot | null>(null);
+  const [debugDisconnected, setDebugDisconnected] = useState(false);
   const reconnectAttempt = useRef(0);
   const activeSocket = useRef<WebSocket | null>(null);
 
   useEffect(() => {
     if (debugMode) {
-      setPairedDevice(debugPairedDevice);
-      setDeviceState(debugDeviceState);
-      setDeviceConnectionStatus("connected");
+      if (debugDisconnected) {
+        setPairedDevice(null);
+        setDeviceState(null);
+        setDeviceConnectionStatus("disconnected");
+      } else {
+        setPairedDevice(debugPairedDevice);
+        setDeviceState(debugDeviceState);
+        setDeviceConnectionStatus("connected");
+      }
       setIsLoading(false);
       return;
     }
@@ -188,13 +195,19 @@ export function DeviceConnectionProvider({
     return () => {
       isMounted = false;
     };
-  }, [debugMode]);
+  }, [debugDisconnected, debugMode]);
 
   useEffect(() => {
     if (debugMode) {
-      setPairedDevice(debugPairedDevice);
-      setDeviceState(debugDeviceState);
-      setDeviceConnectionStatus("connected");
+      if (debugDisconnected) {
+        setPairedDevice(null);
+        setDeviceState(null);
+        setDeviceConnectionStatus("disconnected");
+      } else {
+        setPairedDevice(debugPairedDevice);
+        setDeviceState(debugDeviceState);
+        setDeviceConnectionStatus("connected");
+      }
       return;
     }
 
@@ -315,11 +328,12 @@ export function DeviceConnectionProvider({
         activeSocket.current = null;
       }
     };
-  }, [debugMode, pairedDevice]);
+  }, [debugDisconnected, debugMode, pairedDevice]);
 
   const pairDevice = useCallback(
     async (device: PairedDevice) => {
       if (debugMode) {
+        setDebugDisconnected(false);
         setPairedDevice(debugPairedDevice);
         return;
       }
@@ -332,9 +346,10 @@ export function DeviceConnectionProvider({
 
   const disconnectDevice = useCallback(async () => {
     if (debugMode) {
-      setPairedDevice(debugPairedDevice);
-      setDeviceState(debugDeviceState);
-      setDeviceConnectionStatus("connected");
+      setDebugDisconnected(true);
+      setPairedDevice(null);
+      setDeviceState(null);
+      setDeviceConnectionStatus("disconnected");
       return;
     }
 

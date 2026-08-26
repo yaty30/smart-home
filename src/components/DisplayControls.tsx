@@ -1,5 +1,5 @@
 import type { ComponentType } from "react";
-import { Hexagon, Moon, QrCode } from "lucide-react-native";
+import { Hexagon, QrCode } from "lucide-react-native";
 import { StyleSheet, Switch, Text, View } from "react-native";
 
 import { theme } from "../theme/theme";
@@ -7,9 +7,7 @@ import { theme } from "../theme/theme";
 type DisplayControlsProps = {
   canControlQr: boolean;
   isDisabled?: boolean;
-  quiet: boolean;
   qrVisible: boolean;
-  onChangeQuiet: (quiet: boolean) => void;
   onChangeQrVisible: (visible: boolean) => void;
 };
 
@@ -67,37 +65,26 @@ function DisplayToggle({
 export function DisplayControls({
   canControlQr,
   isDisabled = false,
-  onChangeQuiet,
   onChangeQrVisible,
-  quiet,
   qrVisible,
 }: DisplayControlsProps) {
+  if (!canControlQr) {
+    return null;
+  }
+
   return (
     <View style={styles.container}>
       <View style={styles.title}>
         <Hexagon color={theme.text} size={18} />
         <Text style={styles.label}>Others</Text>
       </View>
-      {canControlQr ? (
-        <>
-          <DisplayToggle
-            accessibilityLabel="Toggle pairing QR code visibility"
-            disabled={isDisabled}
-            enabled={qrVisible}
-            icon={QrCode}
-            label="Pairing QR"
-            onChange={onChangeQrVisible}
-          />
-          <View style={styles.divider} />
-        </>
-      ) : null}
       <DisplayToggle
-        accessibilityLabel="Toggle quiet mode"
+        accessibilityLabel="Toggle pairing QR code visibility"
         disabled={isDisabled}
-        enabled={quiet}
-        icon={Moon}
-        label="Quiet"
-        onChange={onChangeQuiet}
+        enabled={qrVisible}
+        icon={QrCode}
+        label="Pairing QR"
+        onChange={onChangeQrVisible}
       />
     </View>
   );
@@ -106,11 +93,6 @@ export function DisplayControls({
 const styles = StyleSheet.create({
   container: {
     gap: theme.spacing.md,
-  },
-  divider: {
-    backgroundColor: theme.border,
-    height: 1,
-    marginLeft: 52,
   },
   iconFrame: {
     alignItems: "center",
@@ -127,10 +109,10 @@ const styles = StyleSheet.create({
     borderColor: theme.borderActive,
   },
   title: {
-    display: 'flex',
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6
+    alignItems: "center",
+    display: "flex",
+    flexDirection: "row",
+    gap: 6,
   },
   label: {
     color: theme.text,
