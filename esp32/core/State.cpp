@@ -6,7 +6,9 @@ AcState acState = {
   kPanasonicAcCool,
   kPanasonicAcFanAuto,
   kPanasonicAcSwingVAuto,
-  kPanasonicAcSwingHAuto
+  kPanasonicAcSwingHAuto,
+  false,
+  false
 };
 
 DisplayState displayState = {
@@ -170,7 +172,9 @@ String acStateJson() {
   body += "\"fan\":\"" + fanString(acState.fan) + "\",";
   body += "\"swing\":\"" + swingVerticalString(acState.swingVertical) + "\",";
   body += "\"swingVertical\":\"" + swingVerticalString(acState.swingVertical) + "\",";
-  body += "\"swingHorizontal\":\"" + swingHorizontalString(acState.swingHorizontal) + "\"";
+  body += "\"swingHorizontal\":\"" + swingHorizontalString(acState.swingHorizontal) + "\",";
+  body += "\"quiet\":" + boolString(acState.quiet) + ",";
+  body += "\"powerful\":" + boolString(acState.powerful);
   body += "}";
   return body;
 }
@@ -192,6 +196,20 @@ bool parsePower(const String& value, bool& power) {
 
   if (value == "off") {
     power = false;
+    return true;
+  }
+
+  return false;
+}
+
+bool parseToggle(const String& value, bool& enabled) {
+  if (value == "on" || value == "true" || value == "1") {
+    enabled = true;
+    return true;
+  }
+
+  if (value == "off" || value == "false" || value == "0") {
+    enabled = false;
     return true;
   }
 

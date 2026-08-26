@@ -15,7 +15,8 @@ bool isValidACState(const AcState& state) {
          modeString(state.mode) != "unknown" &&
          fanString(state.fan) != "unknown" &&
          swingVerticalString(state.swingVertical) != "unknown" &&
-         swingHorizontalString(state.swingHorizontal) != "unknown";
+         swingHorizontalString(state.swingHorizontal) != "unknown" &&
+         !(state.quiet && state.powerful);
 }
 }
 
@@ -37,7 +38,9 @@ bool loadStoredState(AcState& storedAcState, DisplayState& storedDisplayState, b
     preferences.getUChar("ac_mode", storedAcState.mode),
     preferences.getUChar("ac_fan", storedAcState.fan),
     preferences.getUChar("ac_swing_v", storedAcState.swingVertical),
-    preferences.getUChar("ac_swing_h", storedAcState.swingHorizontal)
+    preferences.getUChar("ac_swing_h", storedAcState.swingHorizontal),
+    preferences.getBool("ac_quiet", storedAcState.quiet),
+    preferences.getBool("ac_powerful", storedAcState.powerful)
   };
 
   if (!isValidACState(candidate)) {
@@ -64,6 +67,8 @@ void saveACState(const AcState& state) {
   preferences.putUChar("ac_fan", state.fan);
   preferences.putUChar("ac_swing_v", state.swingVertical);
   preferences.putUChar("ac_swing_h", state.swingHorizontal);
+  preferences.putBool("ac_quiet", state.quiet);
+  preferences.putBool("ac_powerful", state.powerful);
 }
 
 void saveDisplayState(const DisplayState& state) {

@@ -19,6 +19,9 @@ void applyACState(const AcState& state) {
   ac.setFan(state.fan);
   ac.setSwingVertical(state.swingVertical);
   ac.setSwingHorizontal(state.swingHorizontal);
+  // This Panasonic profile's Quiet/Powerful bits are reversed for the target AC.
+  ac.setQuiet(state.powerful);
+  ac.setPowerful(state.quiet);
 }
 
 void logHorizontalEncodingCheck() {
@@ -86,7 +89,11 @@ void sendAC(const AcState& state) {
   Serial.print(", swingVertical=");
   Serial.print(swingVerticalString(state.swingVertical));
   Serial.print(", swingHorizontal=");
-  Serial.println(swingHorizontalString(state.swingHorizontal));
+  Serial.print(swingHorizontalString(state.swingHorizontal));
+  Serial.print(", quiet=");
+  Serial.print(state.quiet ? "on" : "off");
+  Serial.print(", powerful=");
+  Serial.println(state.powerful ? "on" : "off");
 }
 
 void queueACCommand(const AcState& state) {

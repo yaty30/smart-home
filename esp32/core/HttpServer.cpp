@@ -84,6 +84,8 @@ void applyACStateAndRespond(const AcState& nextState) {
   body += "\"fan\":\"" + fanString(acState.fan) + "\",";
   body += "\"swingVertical\":\"" + swingVerticalString(acState.swingVertical) + "\",";
   body += "\"swingHorizontal\":\"" + swingHorizontalString(acState.swingHorizontal) + "\",";
+  body += "\"quiet\":" + boolString(acState.quiet) + ",";
+  body += "\"powerful\":" + boolString(acState.powerful) + ",";
   body += "\"message\":\"IR command queued\"";
   body += "}";
 
@@ -115,6 +117,8 @@ String statusJson() {
   body += "\"fan\":\"" + fanString(acState.fan) + "\",";
   body += "\"swingVertical\":\"" + swingVerticalString(acState.swingVertical) + "\",";
   body += "\"swingHorizontal\":\"" + swingHorizontalString(acState.swingHorizontal) + "\",";
+  body += "\"quiet\":" + boolString(acState.quiet) + ",";
+  body += "\"powerful\":" + boolString(acState.powerful) + ",";
   body += "\"paired\":" + boolString(isPaired) + ",";
   body += "\"pendingIR\":" + boolString(pendingIR) + ",";
   body += "\"wifiConnected\":" + boolString(isWiFiConnected()) + ",";
@@ -128,14 +132,17 @@ String statusJson() {
 void handleRoot() {
   logRequestContent("handleRoot");
 
+  String ip = currentIPString();
   String body = "{";
   body += "\"name\":\"ESP32-C3 Panasonic AC Controller\",";
-  body += "\"ip\":\"" + currentIPString() + "\",";
+  body += "\"controllerId\":\"" + jsonEscape(controllerIdFromIP(ip)) + "\",";
+  body += "\"ip\":\"" + ip + "\",";
+  body += "\"token\":\"" + jsonEscape(PAIRING_TOKEN) + "\",";
   body += "\"websocket\":\"" + jsonEscape(webSocketUrl()) + "\",";
   body += "\"endpoints\":[";
   body += "\"GET /\",";
   body += "\"GET /status\",";
-  body += "\"GET /ac?power=on|off&temp=16-30&mode=auto|cool|dry|fan|heat&fan=auto|1..5&swingVertical=auto|1..5&swingHorizontal=auto|1..5\",";
+  body += "\"GET /ac?power=on|off&temp=16-30&mode=auto|cool|dry|fan|heat&fan=auto|1..5&swingVertical=auto|1..5&swingHorizontal=auto|1..5&quiet=on|off&powerful=on|off\",";
   body += "\"GET /power/on\",";
   body += "\"GET /power/off\",";
   body += "\"GET /temp/16..30\",";
@@ -157,8 +164,8 @@ void handleAC() {
 
   AcState nextState = acState;
 
-  if (!server.hasArg("power") && !server.hasArg("temp") && !server.hasArg("mode") && !server.hasArg("fan") && !server.hasArg("swing") && !server.hasArg("swingVertical") && !server.hasArg("swingHorizontal") && !server.hasArg("verticalAirflow") && !server.hasArg("horizontalAirflow")) {
-    sendJson(400, "{\"success\":false,\"error\":\"Provide power=on|off, temp=16-30, mode=auto|cool|dry|fan|heat, fan=auto|1..5, swingVertical=auto|1..5, and/or swingHorizontal=auto|1..5\"}");
+  if (!server.hasArg("power") && !server.hasArg("temp") && !server.hasArg("mode") && !server.hasArg("fan") && !server.hasArg("swing") && !server.hasArg("swingVertical") && !server.hasArg("swingHorizontal") && !server.hasArg("verticalAirflow") && !server.hasArg("horizontalAirflow") && !server.hasArg("quiet") && !server.hasArg("powerful")) {
+    sendJson(400, "{\"success\":false,\"error\":\"Provide power=on|off, temp=16-30, mode=auto|cool|dry|fan|heat, fan=auto|1..5, swingVertical=auto|1..5, swingHorizontal=auto|1..5, quiet=on|off, and/or powerful=on|off\"}");
     return;
   }
 
@@ -205,6 +212,32 @@ void handleAC() {
   if (server.hasArg("horizontalAirflow") && !parseSwingHorizontal(server.arg("horizontalAirflow"), nextState.swingHorizontal)) {
     sendJson(400, "{\"success\":false,\"error\":\"Invalid horizontalAirflow. Use auto or 1-5\"}");
     return;
+  }
+
+  if (server.hasArg("quiet")) {
+    bool nextQuiet;
+    if (!parseToggle(server.arg("quiet"), nextQuiet)) {
+      sendJson(400, "{\"success\":false,\"error\":\"Invalid quiet. Use on or off\"}");
+      return;
+    }
+
+    nextState.quiet = nextQuiet;
+    if (nextQuiet) {
+      nextState.powerful = false;
+    }
+  }
+
+  if (server.hasArg("powerful")) {
+    bool nextPowerful;
+    if (!parseToggle(server.arg("powerful"), nextPowerful)) {
+      sendJson(400, "{\"success\":false,\"error\":\"Invalid powerful. Use on or off\"}");
+      return;
+    }
+
+    nextState.powerful = nextPowerful;
+    if (nextPowerful) {
+      nextState.quiet = false;
+    }
   }
 
   applyACStateAndRespond(nextState);

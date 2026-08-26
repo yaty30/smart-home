@@ -260,6 +260,26 @@ void handleCommandMessage(uint8_t clientId, const String& message) {
       return;
     }
     nextState.power = power;
+  } else if (command == "ac.quiet" || command == "ac.setQuiet") {
+    bool quiet;
+    if (!getJsonBool(message, "value", quiet)) {
+      sendText(clientId, commandAckJson(requestId, false, "invalid_quiet"));
+      return;
+    }
+    nextState.quiet = quiet;
+    if (quiet) {
+      nextState.powerful = false;
+    }
+  } else if (command == "ac.powerful" || command == "ac.setPowerful") {
+    bool powerful;
+    if (!getJsonBool(message, "value", powerful)) {
+      sendText(clientId, commandAckJson(requestId, false, "invalid_powerful"));
+      return;
+    }
+    nextState.powerful = powerful;
+    if (powerful) {
+      nextState.quiet = false;
+    }
   } else if (command == "ac.setTemperature") {
     int temp;
     if (!getJsonInt(message, "value", temp) || !parseTemperatureValue(temp, nextState.temperature)) {
