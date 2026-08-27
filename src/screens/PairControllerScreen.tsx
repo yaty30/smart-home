@@ -1,6 +1,6 @@
-import { AlertCircle, QrCode, Wifi } from 'lucide-react-native';
-import { useState, useCallback } from 'react';
-import { SafeAreaView, StyleSheet, Text, View, TextInput, Modal, Pressable, ActivityIndicator } from 'react-native';
+import { AlertCircle, X } from 'lucide-react-native';
+import { useState, useCallback, useEffect, useRef } from 'react';
+import { Alert, SafeAreaView, StyleSheet, Text, View, TextInput, Modal, Pressable, ActivityIndicator } from 'react-native';
 import { AppButton } from '../components/AppButton';
 import { theme } from '../theme/theme';
 import type { RootStackScreenProps } from '../navigation/types';
@@ -9,31 +9,36 @@ import {
   useCameraPermissions,
   type BarcodeScanningResult,
 } from 'expo-camera';
-import { X } from 'lucide-react-native';
 import { useControllers } from '../store/controllers';
 import { useRooms } from '../store/rooms';
 import {
   parsePairingQRCode,
   notifyPairingComplete,
   createControllerFromQRCode,
+  type PairingQRCodePayload,
 } from '../services/pairingService';
 
 type PairControllerScreenProps = RootStackScreenProps<'PairController'>;
 
-export function PairControllerScreen({ navigation }: PairControllerScreenProps) {
+export function PairControllerScreen({ navigation, route }: PairControllerScreenProps) {
   const [permission, requestPermission] = useCameraPermissions();
-  const [isScannerOpen, setIsScannerOpen] = useState(false);
   const [permissionError, setPermissionError] = useState<string | null>(null);
   const [isPairing, setIsPairing] = useState(false);
   const [canScan, setCanScan] = useState(true);
   const [scannerError, setScannerError] = useState<string | null>(null);
   const [showLocationInput, setShowLocationInput] = useState(false);
   const [locationName, setLocationName] = useState('');
-  const [scannedPayload, setScannedPayload] = useState<any>(null);
+  const [scannedPayload, setScannedPayload] = useState<PairingQRCodePayload | null>(null);
   const { addController, getControllerByControllerId, updateControllerOnlineStatus } = useControllers();
   const { addRoom, getRoomById } = useRooms();
+  const requestedCameraPermission = useRef(false);
+  const targetRoomId = route.params?.roomId;
+  const targetRoom = targetRoomId ? getRoomById(targetRoomId) : undefined;
+  const targetRoomName = targetRoom?.name ?? route.params?.roomName;
+  const pendingRoomName = targetRoomId ? undefined : route.params?.roomName;
+  const pendingRoomIcon = route.params?.roomIcon;
 
-  const openScanner = useCallback(async () => {
+  const ensureCameraPermission = useCallback(async () => {
     setPermissionError(null);
 
     if (!permission?.granted) {
@@ -45,17 +50,48 @@ export function PairControllerScreen({ navigation }: PairControllerScreenProps) 
       }
     }
 
-    setIsScannerOpen(true);
     setCanScan(true);
     setScannerError(null);
     return true;
   }, [permission?.granted, requestPermission]);
 
   const closeScanner = useCallback(() => {
-    setIsScannerOpen(false);
     setCanScan(true);
     setScannerError(null);
   }, []);
+
+  const handleCloseScanner = useCallback(() => {
+    closeScanner();
+    if (navigation.canGoBack()) {
+      navigation.goBack();
+    } else {
+      navigation.navigate('Main');
+    }
+  }, [closeScanner, navigation]);
+
+  const completePairing = useCallback(
+    async (payload: PairingQRCodePayload, roomName: string, roomId: string) => {
+      const controller = createControllerFromQRCode(payload, roomName, roomId);
+      await addController(controller);
+
+      void notifyPairingComplete(controller);
+
+      const { controllerHealthService } = await import('../services/controllerHealthService');
+      await controllerHealthService.checkController(controller, updateControllerOnlineStatus);
+
+      return controller;
+    },
+    [addController, updateControllerOnlineStatus]
+  );
+
+  useEffect(() => {
+    if (requestedCameraPermission.current) {
+      return;
+    }
+
+    requestedCameraPermission.current = true;
+    void ensureCameraPermission();
+  }, [ensureCameraPermission]);
 
   const handleBarcodeScanned = useCallback(
     async (result: BarcodeScanningResult) => {
@@ -89,11 +125,58 @@ export function PairControllerScreen({ navigation }: PairControllerScreenProps) 
         return;
       }
 
+      setScannerError(null);
+
+      if (targetRoomId && targetRoomName) {
+        setIsPairing(true);
+
+        try {
+          await completePairing(payload, targetRoomName, targetRoomId);
+          navigation.replace('RoomDetail', { roomId: targetRoomId });
+        } catch (error) {
+          console.error('Pairing failed:', error);
+          setCanScan(true);
+          Alert.alert('Pairing Failed', 'Pairing could not be saved. Try scanning again.');
+        } finally {
+          setIsPairing(false);
+        }
+        return;
+      }
+
+      if (pendingRoomName) {
+        setIsPairing(true);
+
+        try {
+          const room = addRoom(pendingRoomName, pendingRoomIcon);
+          await completePairing(payload, pendingRoomName, room.id);
+          navigation.replace('RoomDetail', { roomId: room.id });
+        } catch (error) {
+          console.error('Pairing failed:', error);
+          setCanScan(true);
+          Alert.alert('Pairing Failed', 'Pairing could not be saved. Try scanning again.');
+        } finally {
+          setIsPairing(false);
+        }
+        return;
+      }
+
       setScannedPayload(payload);
-      closeScanner();
+      setLocationName('');
       setShowLocationInput(true);
     },
-    [canScan, isPairing, getControllerByControllerId, getRoomById, closeScanner]
+    [
+      canScan,
+      closeScanner,
+      completePairing,
+      getControllerByControllerId,
+      getRoomById,
+      isPairing,
+      navigation,
+      pendingRoomIcon,
+      pendingRoomName,
+      targetRoomId,
+      targetRoomName,
+    ]
   );
 
   const handleLocationSubmit = useCallback(async () => {
@@ -105,14 +188,7 @@ export function PairControllerScreen({ navigation }: PairControllerScreenProps) 
 
     try {
       const room = addRoom(locationName.trim());
-      const controller = createControllerFromQRCode(scannedPayload, locationName.trim(), room.id);
-      await addController(controller);
-
-      void notifyPairingComplete(controller);
-
-      // Check controller health immediately after adding
-      const { controllerHealthService } = await import('../services/controllerHealthService');
-      await controllerHealthService.checkController(controller, updateControllerOnlineStatus);
+      await completePairing(scannedPayload, locationName.trim(), room.id);
 
       setShowLocationInput(false);
       setLocationName('');
@@ -132,46 +208,18 @@ export function PairControllerScreen({ navigation }: PairControllerScreenProps) 
     } finally {
       setIsPairing(false);
     }
-  }, [locationName, scannedPayload, addRoom, addController, navigation]);
+  }, [locationName, scannedPayload, addRoom, completePairing, navigation]);
 
-  const permissionMessage = permissionError ||
-    (permission === null || permission.granted ? null : 'Camera access is required to scan the ESP32 pairing QR code.');
+  const permissionMessage =
+    permissionError ||
+    (permission === null || permission.granted
+      ? null
+      : 'Camera access is required to scan the ESP32 pairing QR code.');
+  const canUseCamera = permission?.granted === true;
 
   return (
     <SafeAreaView style={styles.safeArea}>
-      <View style={styles.screen}>
-        <View style={styles.content}>
-          <View style={styles.deviceMark}>
-            <Wifi color={theme.accentBright} size={34} strokeWidth={2.25} />
-          </View>
-
-          <View style={styles.copy}>
-            <Text style={styles.eyebrow}>Controller pairing</Text>
-            <Text style={styles.title}>Connect your ESP32</Text>
-            <Text style={styles.body}>
-              Scan the QR code shown by your ESP32 controller to pair it with the app.
-            </Text>
-          </View>
-
-          {permissionMessage !== null ? (
-            <View style={styles.inlineNotice}>
-              <AlertCircle color={theme.accentBright} size={18} strokeWidth={2.4} />
-              <Text style={styles.inlineNoticeText}>{permissionMessage}</Text>
-            </View>
-          ) : null}
-
-          <AppButton
-            label="Scan QR Code"
-            leftIcon={<QrCode size={22} strokeWidth={2.6} color={theme.accentStrong} />}
-            onPress={() => {
-              void openScanner();
-            }}
-            vibe="strong"
-          />
-        </View>
-      </View>
-
-      <Modal animationType="slide" onRequestClose={closeScanner} visible={isScannerOpen}>
+      {canUseCamera ? (
         <View style={styles.scannerScreen}>
           <CameraView
             barcodeScannerSettings={{ barcodeTypes: ['qr'] }}
@@ -185,7 +233,7 @@ export function PairControllerScreen({ navigation }: PairControllerScreenProps) 
               <Pressable
                 accessibilityRole="button"
                 accessibilityLabel="Close scanner"
-                onPress={closeScanner}
+                onPress={handleCloseScanner}
                 style={styles.closeButton}
               >
                 <X color={theme.text} size={22} strokeWidth={2.5} />
@@ -219,11 +267,41 @@ export function PairControllerScreen({ navigation }: PairControllerScreenProps) 
             </View>
           </SafeAreaView>
         </View>
-      </Modal>
+      ) : (
+        <View style={styles.permissionScreen}>
+          {permissionMessage === null ? (
+            <ActivityIndicator color={theme.accentBright} />
+          ) : (
+            <>
+              <View style={styles.inlineNotice}>
+                <AlertCircle color={theme.accentBright} size={18} strokeWidth={2.4} />
+                <Text style={styles.inlineNoticeText}>{permissionMessage}</Text>
+              </View>
+              <View style={styles.permissionActions}>
+                <AppButton
+                  label="Back"
+                  onPress={handleCloseScanner}
+                  style={styles.permissionButton}
+                  variant="secondary"
+                />
+                <AppButton
+                  label="Try Again"
+                  onPress={() => {
+                    void ensureCameraPermission();
+                  }}
+                  style={styles.permissionButton}
+                  vibe="strong"
+                />
+              </View>
+            </>
+          )}
+        </View>
+      )}
 
       <Modal
         animationType="slide"
         onRequestClose={() => {
+          setCanScan(true);
           setShowLocationInput(false);
           setLocationName('');
           setScannedPayload(null);
@@ -259,6 +337,7 @@ export function PairControllerScreen({ navigation }: PairControllerScreenProps) 
                   label="Cancel"
                   variant="secondary"
                   onPress={() => {
+                    setCanScan(true);
                     setShowLocationInput(false);
                     setLocationName('');
                     setScannedPayload(null);
@@ -286,61 +365,21 @@ const styles = StyleSheet.create({
     backgroundColor: theme.root,
     flex: 1,
   },
-  screen: {
+  permissionScreen: {
     alignItems: 'center',
     backgroundColor: theme.root,
     flex: 1,
     justifyContent: 'center',
     paddingHorizontal: theme.spacing.xl,
   },
-  content: {
-    alignItems: 'center',
-    gap: theme.spacing.xl,
-    maxWidth: 420,
+  permissionActions: {
+    flexDirection: 'row',
+    gap: theme.spacing.md,
+    marginTop: theme.spacing.lg,
     width: '100%',
   },
-  deviceMark: {
-    alignItems: 'center',
-    backgroundColor: theme.accentMuted,
-    borderColor: theme.borderActive,
-    borderRadius: theme.radiusRound,
-    borderWidth: 1,
-    height: 82,
-    justifyContent: 'center',
-    shadowColor: theme.accent,
-    shadowOffset: {
-      height: 12,
-      width: 0,
-    },
-    shadowOpacity: 0.24,
-    shadowRadius: 24,
-    width: 82,
-  },
-  copy: {
-    alignItems: 'center',
-    gap: theme.spacing.sm,
-  },
-  eyebrow: {
-    color: theme.accentBright,
-    fontSize: theme.typography.label,
-    fontWeight: '700',
-    letterSpacing: 0,
-    textTransform: 'uppercase',
-  },
-  title: {
-    color: theme.text,
-    fontSize: 30,
-    fontWeight: '800',
-    letterSpacing: 0,
-    textAlign: 'center',
-  },
-  body: {
-    color: theme.textSecondary,
-    fontSize: theme.typography.body,
-    fontWeight: '500',
-    letterSpacing: 0,
-    lineHeight: 24,
-    textAlign: 'center',
+  permissionButton: {
+    flex: 1,
   },
   inlineNotice: {
     alignItems: 'center',

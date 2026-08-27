@@ -89,7 +89,7 @@ const styles = StyleSheet.create({
   },
   iconButton: {
     alignItems: "center",
-    borderRadius: 18,
+    borderRadius: 50,
     height: 44,
     justifyContent: "center",
     width: 44,
@@ -98,12 +98,13 @@ const styles = StyleSheet.create({
     backgroundColor: theme.accentSubtle,
   },
   iconButtonFramed: {
-    backgroundColor: theme.surfaceWarm,
-    borderColor: theme.border,
-    borderWidth: 1,
+    // backgroundColor: theme.surfaceWarm,
+    // borderColor: theme.border,
+    // borderWidth: 1,
   },
   iconButtonFramedPressed: {
-    backgroundColor: theme.accentMuted,
-    borderColor: theme.borderActive,
+    // backgroundColor: theme.accentMuted,
+    // borderColor: theme.borderActive,
+    opacity: 0.4
   },
 });

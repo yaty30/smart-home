@@ -1,11 +1,12 @@
-import { useMemo, useRef, useState } from 'react';
+import { QrCode } from 'lucide-react-native';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
+  Animated,
   Keyboard,
   KeyboardAvoidingView,
   Modal,
   PanResponder,
   Platform,
-  Pressable,
   SafeAreaView,
   ScrollView,
   StyleSheet,
@@ -21,163 +22,216 @@ import { AppButton } from './AppButton';
 type AddRoomSheetProps = {
   visible: boolean;
   onClose: () => void;
-  onAddRoom: (name: string, icon: RoomIcon) => void;
+  onScanController: (name: string, icon: RoomIcon) => void;
 };
 
-export function AddRoomSheet({ visible, onClose, onAddRoom }: AddRoomSheetProps) {
+export function AddRoomSheet({ visible, onClose, onScanController }: AddRoomSheetProps) {
   const [roomName, setRoomName] = useState('');
   const [selectedIcon, setSelectedIcon] = useState<RoomIcon>(DEFAULT_ROOM_ICON);
+  // Always starts at 0 — entrance is handled by Modal's animationType="slide".
+  // useNativeDriver: false throughout so JS-side hit testing stays accurate.
+  const translateY = useRef(new Animated.Value(800)).current;
+  const scrollAtTop = useRef(true);
+  const isDismissing = useRef(false);
 
   const canAddRoom = roomName.trim().length > 0;
 
-  const handleClose = () => {
+  useEffect(() => {
+    if (visible) {
+      isDismissing.current = false;
+      translateY.setValue(800);
+      Animated.spring(translateY, {
+        toValue: 0,
+        useNativeDriver: false,
+        bounciness: 4,
+        speed: 14,
+      }).start();
+    }
+  }, [visible, translateY]);
+
+  const handleClose = useCallback(() => {
     Keyboard.dismiss();
     setRoomName('');
     setSelectedIcon(DEFAULT_ROOM_ICON);
     onClose();
-  };
+  }, [onClose]);
 
   const handleSubmit = () => {
     const trimmedName = roomName.trim();
-    if (!trimmedName) {
-      return;
-    }
-
+    if (!trimmedName) return;
     Keyboard.dismiss();
-    onAddRoom(trimmedName, selectedIcon);
+    onScanController(trimmedName, selectedIcon);
     setRoomName('');
     setSelectedIcon(DEFAULT_ROOM_ICON);
   };
 
-  const panResponder = useRef(
+  // Stable ref so PanResponder (created once) always calls the latest handleClose.
+  const handleCloseRef = useRef(handleClose);
+  useEffect(() => { handleCloseRef.current = handleClose; }, [handleClose]);
+
+  const snapBack = useCallback(() => {
+    if (isDismissing.current) return;
+    Animated.spring(translateY, {
+      toValue: 0,
+      useNativeDriver: false,
+      bounciness: 4,
+    }).start();
+  }, [translateY]);
+
+  const dismiss = useCallback(() => {
+    if (isDismissing.current) return;
+    isDismissing.current = true;
+    Animated.timing(translateY, {
+      toValue: 900,
+      duration: 220,
+      useNativeDriver: false,
+    }).start(() => {
+      handleCloseRef.current();
+    });
+  }, [translateY]);
+
+  // Handle-area PanResponder — claims every touch unconditionally.
+  const handlePan = useRef(
     PanResponder.create({
-      onMoveShouldSetPanResponder: (_, gestureState) => {
-        return gestureState.dy > 8 && Math.abs(gestureState.dy) > Math.abs(gestureState.dx);
+      onStartShouldSetPanResponder: () => true,
+      onPanResponderMove: (_, { dy }) => {
+        translateY.setValue(Math.max(0, dy));
       },
-      onPanResponderRelease: (_, gestureState) => {
-        if (gestureState.dy > 70 || gestureState.vy > 0.8) {
-          handleClose();
-        }
+      onPanResponderRelease: (_, { dy, vy }) => {
+        if (dy > 120 || vy > 0.8) { dismiss(); } else { snapBack(); }
       },
+      onPanResponderTerminate: () => { snapBack(); },
+    }),
+  ).current;
+
+  // Content-area PanResponder — only activates on a downward drag when at scroll top.
+  const contentPan = useRef(
+    PanResponder.create({
+      onMoveShouldSetPanResponder: (_, { dy, dx }) =>
+        scrollAtTop.current && dy > 10 && dy > Math.abs(dx),
+      onPanResponderMove: (_, { dy }) => {
+        translateY.setValue(Math.max(0, dy));
+      },
+      onPanResponderRelease: (_, { dy, vy }) => {
+        if (dy > 120 || vy > 0.8) { dismiss(); } else { snapBack(); }
+      },
+      onPanResponderTerminate: () => { snapBack(); },
     }),
   ).current;
 
   const iconOptions = useMemo(() => ROOM_ICONS, []);
 
   return (
-    <Modal
-      animationType="slide"
-      onRequestClose={handleClose}
-      transparent
-      visible={visible}
-    >
-      <Pressable style={styles.overlay} onPress={handleClose}>
+    // animationType="slide" lets iOS handle the entrance natively.
+    // The sheet starts at translateY=0, so hit testing is immediately correct.
+    <Modal animationType="none" onRequestClose={dismiss} transparent visible={visible}>
+      <View style={styles.root}>
+        {/* Backdrop — tap to close */}
+        <TouchableOpacity
+          style={StyleSheet.absoluteFill}
+          onPress={dismiss}
+          activeOpacity={1}
+        />
+
+        {/* box-none: container doesn't absorb touches, only its children do */}
         <KeyboardAvoidingView
           behavior={Platform.OS === 'ios' ? 'padding' : undefined}
           pointerEvents="box-none"
           style={styles.keyboardAvoiding}
         >
-          <Pressable style={styles.sheet} onPress={(event) => event.stopPropagation()}>
-            <SafeAreaView style={styles.sheetSafeArea}>
-              <View
-                accessibilityRole="button"
-                accessibilityLabel="Dismiss add room sheet"
-                style={styles.handleArea}
-                {...panResponder.panHandlers}
-              >
+          <Animated.View style={[styles.sheet, { transform: [{ translateY }] }]}>
+            <SafeAreaView style={styles.safeArea}>
+              {/* Handle area — sole owner of handlePan; no Pressable in this subtree */}
+              <View style={styles.handleArea} {...handlePan.panHandlers}>
                 <View style={styles.handle} />
               </View>
 
-              <ScrollView
-                contentContainerStyle={styles.content}
-                keyboardShouldPersistTaps="handled"
-                showsVerticalScrollIndicator={false}
-                style={styles.formScroll}
-              >
-                <Text style={styles.title}>Add Room</Text>
+              {/* Content area — contentPan only activates on downward swipe at scroll top */}
+              <View style={styles.scrollContainer} {...contentPan.panHandlers}>
+                <ScrollView
+                  contentContainerStyle={styles.content}
+                  keyboardShouldPersistTaps="handled"
+                  onScroll={(e) => {
+                    scrollAtTop.current = e.nativeEvent.contentOffset.y <= 0;
+                  }}
+                  scrollEventThrottle={16}
+                  showsVerticalScrollIndicator={false}
+                  style={styles.formScroll}
+                >
+                  <Text style={styles.title}>Add Room</Text>
 
-                <Text style={styles.sectionLabel}>Room Name</Text>
-                <TextInput
-                  autoCapitalize="words"
-                  autoCorrect={false}
-                  onChangeText={setRoomName}
-                  onSubmitEditing={handleSubmit}
-                  placeholder="Living Room"
-                  placeholderTextColor={theme.textMuted}
-                  returnKeyType="done"
-                  style={styles.input}
-                  value={roomName}
-                />
+                  <Text style={styles.sectionLabel}>Room Name</Text>
+                  <TextInput
+                    autoCapitalize="words"
+                    autoCorrect={false}
+                    onChangeText={setRoomName}
+                    onSubmitEditing={handleSubmit}
+                    placeholder="Living Room"
+                    placeholderTextColor={theme.textMuted}
+                    returnKeyType="done"
+                    style={styles.input}
+                    value={roomName}
+                  />
 
-                <Text style={[styles.sectionLabel, styles.iconSectionLabel]}>
-                  Choose Icon
-                </Text>
-                <View style={styles.iconGrid}>
-                  {iconOptions.map(({ id, label, icon: Icon }) => {
-                    const isSelected = selectedIcon === id;
-
-                    return (
-                      <TouchableOpacity
-                        key={id}
-                        activeOpacity={0.74}
-                        accessibilityLabel={`Select ${label} icon`}
-                        accessibilityRole="button"
-                        accessibilityState={{ selected: isSelected }}
-                        onPress={() => {
-                          Keyboard.dismiss();
-                          setSelectedIcon(id);
-                        }}
-                        style={[
-                          styles.iconOption,
-                          isSelected && styles.iconOptionSelected,
-                        ]}
-                      >
-                        <Icon
-                          color={isSelected ? theme.accent : theme.textSecondary}
-                          size={26}
-                          strokeWidth={2.25}
-                        />
-                        <Text
-                          numberOfLines={1}
-                          style={[
-                            styles.iconLabel,
-                            isSelected && styles.iconLabelSelected,
-                          ]}
+                  <Text style={[styles.sectionLabel, styles.iconSectionLabel]}>Choose Icon</Text>
+                  <View style={styles.iconGrid}>
+                    {iconOptions.map(({ id, label, icon: Icon }) => {
+                      const isSelected = selectedIcon === id;
+                      return (
+                        <TouchableOpacity
+                          key={id}
+                          activeOpacity={0.74}
+                          accessibilityLabel={`Select ${label} icon`}
+                          accessibilityRole="button"
+                          accessibilityState={{ selected: isSelected }}
+                          onPress={() => {
+                            Keyboard.dismiss();
+                            setSelectedIcon(id);
+                          }}
+                          style={[styles.iconOption, isSelected && styles.iconOptionSelected]}
                         >
-                          {label}
-                        </Text>
-                      </TouchableOpacity>
-                    );
-                  })}
-                </View>
-              </ScrollView>
+                          <Icon
+                            color={isSelected ? theme.accent : theme.textSecondary}
+                            size={26}
+                            strokeWidth={2.25}
+                          />
+                          <Text
+                            numberOfLines={1}
+                            style={[styles.iconLabel, isSelected && styles.iconLabelSelected]}
+                          >
+                            {label}
+                          </Text>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </View>
+                </ScrollView>
+              </View>
 
               <View style={styles.footer}>
                 <AppButton
                   disabled={!canAddRoom}
-                  label="Add Room"
+                  label="Scan Controller"
+                  leftIcon={<QrCode color={theme.accentStrong} size={22} strokeWidth={2.6} />}
                   onPress={handleSubmit}
                   vibe="strong"
                 />
               </View>
             </SafeAreaView>
-          </Pressable>
+          </Animated.View>
         </KeyboardAvoidingView>
-      </Pressable>
+      </View>
     </Modal>
   );
 }
 
 const styles = StyleSheet.create({
-  overlay: {
-    backgroundColor: theme.scrim,
+  root: {
     flex: 1,
-    justifyContent: 'flex-end',
   },
   keyboardAvoiding: {
-    flex: 1,
+    ...StyleSheet.absoluteFillObject,
     justifyContent: 'flex-end',
-    width: '100%',
   },
   sheet: {
     backgroundColor: theme.paperBackground,
@@ -186,13 +240,9 @@ const styles = StyleSheet.create({
     borderTopRightRadius: 24,
     borderTopWidth: 1,
     maxHeight: '86%',
-    overflow: 'hidden',
   },
-  sheetSafeArea: {
+  safeArea: {
     maxHeight: '100%',
-  },
-  formScroll: {
-    flexShrink: 1,
   },
   handleArea: {
     alignItems: 'center',
@@ -204,6 +254,12 @@ const styles = StyleSheet.create({
     borderRadius: 2,
     height: 4,
     width: 42,
+  },
+  scrollContainer: {
+    flexShrink: 1,
+  },
+  formScroll: {
+    flexShrink: 1,
   },
   content: {
     paddingHorizontal: theme.spacing.xl,

@@ -1,5 +1,5 @@
 import * as Haptics from "expo-haptics";
-import { House, Settings as SettingsIcon } from "lucide-react-native";
+import { House, Settings as SettingsIcon, ShelvingUnit } from "lucide-react-native";
 import { useEffect, useRef } from "react";
 import {
   Animated,
@@ -15,17 +15,19 @@ export const BOTTOM_NAV_CLEARANCE = 60;
 const NAV_ITEM_SIZE = 52;
 const NAV_ITEM_GAP = theme.spacing.sm;
 
-export type BottomNavTab = "home" | "settings";
+export type BottomNavTab = "home" | "rooms" | "settings";
 
 const activeIndexByTab: Record<BottomNavTab, number> = {
   home: 0,
-  settings: 1,
+  rooms: 1,
+  settings: 2,
 };
 
 type BottomNavProps = {
   active?: BottomNavTab;
   compact?: boolean;
   onHomePress?: () => void;
+  onRoomsPress?: () => void;
   onSettingsPress?: () => void;
   visible?: boolean;
 };
@@ -34,6 +36,7 @@ export function BottomNav({
   active = "home",
   compact = false,
   onHomePress,
+  onRoomsPress,
   onSettingsPress,
   visible = true,
 }: BottomNavProps) {
@@ -116,6 +119,24 @@ export function BottomNav({
         >
           <House
             color={active === "home" ? theme.textOnAccent : theme.textMuted}
+            size={22}
+            strokeWidth={2.4}
+          />
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          activeOpacity={0.8}
+          accessibilityLabel="Rooms"
+          accessibilityRole="button"
+          accessibilityState={{ selected: active === "rooms" }}
+          onPress={() => {
+            triggerPress();
+            onRoomsPress?.();
+          }}
+          style={styles.item}
+        >
+          <ShelvingUnit
+            color={active === "rooms" ? theme.textOnAccent : theme.textMuted}
             size={22}
             strokeWidth={2.4}
           />

@@ -1,19 +1,23 @@
-import { AirVent, Lightbulb, Tv, ChevronDown } from 'lucide-react-native';
-import { useState } from 'react';
+import { Picker } from '@react-native-picker/picker';
+import { AirVent, Lightbulb, Tv } from 'lucide-react-native';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
+  Animated,
   Modal,
-  View,
-  Text,
-  StyleSheet,
-  TouchableOpacity,
-  Pressable,
+  PanResponder,
   ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from 'react-native';
 import { theme } from '../theme/theme';
 import { AppButton } from './AppButton';
 
 type DeviceType = 'ac' | 'tv' | 'light';
-type DeviceBrand = 'panasonic' | 'lg';
+type DeviceBrand =
+  | 'panasonic' | 'lg' | 'mitsubishi' | 'hitachi'
+  | 'toshiba' | 'sharp' | 'fujitsu' | 'samsung' | 'midea';
 
 type AddDeviceSheetProps = {
   visible: boolean;
@@ -21,45 +25,103 @@ type AddDeviceSheetProps = {
   onContinue: (deviceType: DeviceType, brand: DeviceBrand) => void;
 };
 
+// Large enough to clear any device screen during enter/exit animations.
+const OFFSCREEN = 800;
+
 export function AddDeviceSheet({ visible, onClose, onContinue }: AddDeviceSheetProps) {
   const [selectedType, setSelectedType] = useState<DeviceType | null>(null);
   const [selectedBrand, setSelectedBrand] = useState<DeviceBrand | null>(null);
-  const [showBrandDropdown, setShowBrandDropdown] = useState(false);
+  // Start off-screen; we animate in ourselves so animationType="none" on the Modal.
+  // useNativeDriver: false keeps JS-side hit testing in sync with the visual position.
+  const translateY = useRef(new Animated.Value(OFFSCREEN)).current;
+  const isDismissing = useRef(false);
 
-  const deviceTypes: Array<{
-    type: DeviceType;
-    label: string;
-    icon: typeof AirVent;
-    enabled: boolean;
-  }> = [
-    { type: 'ac', label: 'Air Conditioner', icon: AirVent, enabled: true },
-    { type: 'tv', label: 'TV', icon: Tv, enabled: false },
-    { type: 'light', label: 'Lamp', icon: Lightbulb, enabled: false },
+  const deviceTypes = [
+    { type: 'ac' as DeviceType, label: 'Air Conditioner', icon: AirVent, enabled: true },
+    { type: 'tv' as DeviceType, label: 'TV', icon: Tv, enabled: false },
+    { type: 'light' as DeviceType, label: 'Lamp', icon: Lightbulb, enabled: false },
   ];
 
-  const brands: Array<{
-    brand: DeviceBrand;
-    label: string;
-    enabled: boolean;
-  }> = [
-    { brand: 'panasonic', label: 'Panasonic', enabled: true },
-    { brand: 'lg', label: 'LG', enabled: false },
+  const brands = [
+    { brand: 'panasonic' as DeviceBrand, label: 'Panasonic' },
+    { brand: 'lg' as DeviceBrand, label: 'LG' },
+    { brand: 'mitsubishi' as DeviceBrand, label: 'Mitsubishi Electric' },
+    { brand: 'hitachi' as DeviceBrand, label: 'Hitachi' },
+    { brand: 'toshiba' as DeviceBrand, label: 'Toshiba' },
+    { brand: 'sharp' as DeviceBrand, label: 'Sharp' },
+    { brand: 'fujitsu' as DeviceBrand, label: 'Fujitsu' },
+    { brand: 'samsung' as DeviceBrand, label: 'Samsung' },
+    { brand: 'midea' as DeviceBrand, label: 'Midea' },
   ];
+
+  // Reset position each time the sheet opens so a partial drag from a previous
+  // session doesn't leave the view in a wrong position.
+  useEffect(() => {
+    if (visible) {
+      isDismissing.current = false;
+      translateY.setValue(OFFSCREEN);
+      Animated.spring(translateY, {
+        toValue: 0,
+        useNativeDriver: false,
+        bounciness: 4,
+        speed: 14,
+      }).start();
+    }
+  }, [visible, translateY]);
+
+  const handleClose = useCallback(() => {
+    setSelectedType(null);
+    setSelectedBrand(null);
+    onClose();
+  }, [onClose]);
+
+  // Stable ref so the PanResponder (created once) always calls the latest handleClose.
+  const handleCloseRef = useRef(handleClose);
+  useEffect(() => { handleCloseRef.current = handleClose; }, [handleClose]);
+
+  const snapBack = useCallback(() => {
+    if (isDismissing.current) return;
+    Animated.spring(translateY, {
+      toValue: 0,
+      useNativeDriver: false,
+      bounciness: 4,
+    }).start();
+  }, [translateY]);
+
+  const dismiss = useCallback(() => {
+    if (isDismissing.current) return;
+    isDismissing.current = true;
+    Animated.timing(translateY, {
+      toValue: OFFSCREEN,
+      duration: 220,
+      useNativeDriver: false,
+    }).start(() => {
+      handleCloseRef.current();
+    });
+  }, [translateY]);
+
+  const panResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onPanResponderMove: (_, { dy }) => {
+        // setValue is always synchronous JS — no native driver concern here.
+        translateY.setValue(Math.max(0, dy));
+      },
+      onPanResponderRelease: (_, { dy, vy }) => {
+        if (dy > 120 || vy > 0.8) {
+          dismiss();
+        } else {
+          snapBack();
+        }
+      },
+      onPanResponderTerminate: () => { snapBack(); },
+    }),
+  ).current;
 
   const handleTypeSelect = (type: DeviceType, enabled: boolean) => {
     if (!enabled) return;
     setSelectedType(type);
-    if (type === 'ac') {
-      setSelectedBrand('panasonic');
-    } else {
-      setSelectedBrand(null);
-    }
-  };
-
-  const handleBrandSelect = (brand: DeviceBrand, enabled: boolean) => {
-    if (!enabled) return;
-    setSelectedBrand(brand);
-    setShowBrandDropdown(false);
+    setSelectedBrand(type === 'ac' ? 'panasonic' : null);
   };
 
   const handleContinue = () => {
@@ -69,164 +131,125 @@ export function AddDeviceSheet({ visible, onClose, onContinue }: AddDeviceSheetP
     }
   };
 
-  const handleClose = () => {
-    setSelectedType(null);
-    setSelectedBrand(null);
-    setShowBrandDropdown(false);
-    onClose();
-  };
-
-  const canContinue = selectedType === 'ac' && selectedBrand === 'panasonic';
-  const enabledBrand = brands.find((b) => b.brand === selectedBrand && b.enabled);
-  const dropdownLabel = enabledBrand
-    ? enabledBrand.label
-    : 'Select Brand';
+  const canContinue = selectedType === 'ac' && selectedBrand != null;
 
   return (
-    <Modal
-      visible={visible}
-      transparent
-      animationType="slide"
-      onRequestClose={handleClose}
-    >
-      <Pressable style={styles.overlay} onPress={handleClose}>
-        <Pressable style={styles.sheet} onPress={(e) => e.stopPropagation()}>
-          <View style={styles.handle} />
+    // animationType="slide" lets iOS handle the entrance natively.
+    // The sheet view starts at translateY=0, so hit testing is immediately correct.
+    <Modal visible={visible} transparent animationType="none" onRequestClose={dismiss}>
+      <View style={styles.root}>
+        {/* Backdrop — tap to close */}
+        <TouchableOpacity
+          style={StyleSheet.absoluteFill}
+          onPress={dismiss}
+          activeOpacity={1}
+        />
 
-          <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-            <Text style={styles.title}>Add Device</Text>
-
-            <Text style={styles.sectionLabel}>Device Type</Text>
-            <View style={styles.grid}>
-              {deviceTypes.map(({ type, label, icon: Icon, enabled }) => (
-                <TouchableOpacity
-                  key={type}
-                  style={[
-                    styles.typeCard,
-                    selectedType === type && styles.typeCardSelected,
-                    !enabled && styles.typeCardDisabled,
-                  ]}
-                  onPress={() => handleTypeSelect(type, enabled)}
-                  disabled={!enabled}
-                  activeOpacity={0.7}
-                >
-                  <Icon
-                    size={32}
-                    color={
-                      !enabled
-                        ? theme.text + '40'
-                        : selectedType === type
-                        ? theme.accent
-                        : theme.text
-                    }
-                  />
-                  <Text
-                    style={[
-                      styles.typeLabel,
-                      !enabled && styles.typeLabelDisabled,
-                      selectedType === type && styles.typeLabelSelected,
-                    ]}
-                  >
-                    {label}
-                  </Text>
-                  {!enabled && (
-                    <Text style={styles.comingSoon}>Coming soon</Text>
-                  )}
-                </TouchableOpacity>
-              ))}
+        {/* Positioning wrapper — box-none so it doesn't absorb backdrop taps */}
+        <View style={styles.positioner} pointerEvents="box-none">
+          <Animated.View style={[styles.sheet, { transform: [{ translateY }] }]}>
+            {/* Handle area — sole PanResponder owner. No Pressable in this subtree. */}
+            <View style={styles.handleArea} {...panResponder.panHandlers}>
+              <View style={styles.handle} />
             </View>
 
-            {selectedType === 'ac' && (
-              <>
-                <Text style={[styles.sectionLabel, styles.sectionSpacing]}>
-                  Brand
-                </Text>
-                <TouchableOpacity
-                  style={styles.dropdown}
-                  onPress={() => setShowBrandDropdown(!showBrandDropdown)}
-                  activeOpacity={0.7}
-                >
-                  <Text
+            <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+              <Text style={styles.title}>Add Device</Text>
+
+              <Text style={styles.sectionLabel}>Device Type</Text>
+              <View style={styles.grid}>
+                {deviceTypes.map(({ type, label, icon: Icon, enabled }) => (
+                  <TouchableOpacity
+                    key={type}
                     style={[
-                      styles.dropdownText,
-                      !selectedBrand && styles.dropdownPlaceholder,
+                      styles.typeCard,
+                      selectedType === type && styles.typeCardSelected,
+                      !enabled && styles.typeCardDisabled,
                     ]}
+                    onPress={() => handleTypeSelect(type, enabled)}
+                    disabled={!enabled}
+                    activeOpacity={0.7}
                   >
-                    {dropdownLabel}
-                  </Text>
-                  <ChevronDown size={20} color={theme.text} />
-                </TouchableOpacity>
+                    <Icon
+                      size={32}
+                      color={
+                        !enabled
+                          ? theme.text + '40'
+                          : selectedType === type
+                            ? theme.accent
+                            : theme.text
+                      }
+                    />
+                    <Text
+                      style={[
+                        styles.typeLabel,
+                        !enabled && styles.typeLabelDisabled,
+                        selectedType === type && styles.typeLabelSelected,
+                      ]}
+                    >
+                      {label}
+                    </Text>
+                    {!enabled && <Text style={styles.comingSoon}>Coming soon</Text>}
+                  </TouchableOpacity>
+                ))}
+              </View>
 
-                {showBrandDropdown && (
-                  <View style={styles.dropdownMenu}>
-                    {brands.map(({ brand, label, enabled }) => (
-                      <TouchableOpacity
-                        key={brand}
-                        style={[
-                          styles.dropdownItem,
-                          !enabled && styles.dropdownItemDisabled,
-                        ]}
-                        onPress={() => handleBrandSelect(brand, enabled)}
-                        disabled={!enabled}
-                        activeOpacity={0.7}
-                      >
-                        <Text
-                          style={[
-                            styles.dropdownItemText,
-                            !enabled && styles.dropdownItemTextDisabled,
-                          ]}
-                        >
-                          {label}
-                        </Text>
-                        {!enabled && (
-                          <Text style={styles.dropdownComingSoon}>
-                            Coming soon
-                          </Text>
-                        )}
-                      </TouchableOpacity>
-                    ))}
+              {selectedType === 'ac' && (
+                <>
+                  <Text style={[styles.sectionLabel, styles.sectionSpacing]}>Brand</Text>
+                  <View style={styles.pickerWrapper}>
+                    <Picker
+                      selectedValue={selectedBrand ?? brands[0]?.brand ?? 'panasonic'}
+                      onValueChange={(value) => setSelectedBrand(value as DeviceBrand)}
+                      style={styles.picker}
+                      itemStyle={styles.pickerItem}
+                    >
+                      {brands.map((b) => (
+                        <Picker.Item key={b.brand} label={b.label} value={b.brand} />
+                      ))}
+                    </Picker>
                   </View>
-                )}
-              </>
-            )}
-          </ScrollView>
+                </>
+              )}
+            </ScrollView>
 
-          <View style={styles.footer}>
-            <AppButton
-              label="Continue"
-              onPress={handleContinue}
-              disabled={!canContinue}
-            />
-          </View>
-        </Pressable>
-      </Pressable>
+            <View style={styles.footer}>
+              <AppButton label="Continue" onPress={handleContinue} disabled={!canContinue} />
+            </View>
+          </Animated.View>
+        </View>
+      </View>
     </Modal>
   );
 }
 
 const styles = StyleSheet.create({
-  overlay: {
+  root: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+  },
+  positioner: {
+    ...StyleSheet.absoluteFillObject,
     justifyContent: 'flex-end',
   },
   sheet: {
     backgroundColor: theme.paperBackground,
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
-    maxHeight: '80%',
+    maxHeight: '92%',
+  },
+  handleArea: {
+    alignItems: 'center',
+    height: 44,
+    justifyContent: 'center',
   },
   handle: {
     width: 40,
     height: 4,
     backgroundColor: theme.text + '40',
     borderRadius: 2,
-    alignSelf: 'center',
-    marginTop: 12,
-    marginBottom: 8,
   },
   content: {
-    padding: 24,
+    paddingHorizontal: 24,
   },
   title: {
     fontSize: 24,
@@ -285,52 +308,20 @@ const styles = StyleSheet.create({
     color: theme.textSecondary,
     marginTop: 4,
   },
-  dropdown: {
+  pickerWrapper: {
     backgroundColor: theme.surfaceLow,
     borderRadius: 12,
-    padding: 16,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    borderWidth: 1,
-    borderColor: theme.border,
-  },
-  dropdownText: {
-    fontSize: 16,
-    color: theme.text,
-    fontWeight: '500',
-  },
-  dropdownPlaceholder: {
-    color: theme.textSecondary,
-  },
-  dropdownMenu: {
-    backgroundColor: theme.surfaceLow,
-    borderRadius: 12,
-    marginTop: 8,
     borderWidth: 1,
     borderColor: theme.border,
     overflow: 'hidden',
+    marginBottom: 24,
   },
-  dropdownItem: {
-    padding: 16,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+  picker: {
+    width: '100%',
   },
-  dropdownItemDisabled: {
-    opacity: 0.5,
-  },
-  dropdownItemText: {
-    fontSize: 16,
+  pickerItem: {
     color: theme.text,
-    fontWeight: '500',
-  },
-  dropdownItemTextDisabled: {
-    color: theme.text + '60',
-  },
-  dropdownComingSoon: {
-    fontSize: 12,
-    color: theme.textSecondary,
+    fontSize: 16,
   },
   footer: {
     padding: 24,

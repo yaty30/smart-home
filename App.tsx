@@ -18,6 +18,7 @@ import type {
   RootStackParamList,
   RootStackScreenProps,
 } from "./src/navigation/types";
+import { HomeScreen } from "./src/screens/HomeScreen";
 import { RoomsScreen } from "./src/screens/RoomsScreen";
 import { RoomDetailScreen } from "./src/screens/RoomDetailScreen";
 import { DeviceControlScreen } from "./src/screens/DeviceControlScreen";
@@ -30,15 +31,16 @@ import { DevicesProvider } from "./src/store/devices";
 import { ControllersProvider } from "./src/store/controllers";
 
 const NAV_HIDE_ANIMATION_MS = 220;
-const SCREEN_SLIDE_ANIMATION_MS = 260;
+const SCREEN_SLIDE_ANIMATION_MS = 100;
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
-type MainTabKey = Extract<BottomNavTab, "home" | "settings">;
+type MainTabKey = Extract<BottomNavTab, "home" | "rooms" | "settings">;
 
 const tabIndexByKey: Record<MainTabKey, number> = {
   home: 0,
-  settings: 1,
+  rooms: 1,
+  settings: 2,
 };
 
 const navigationTheme = {
@@ -112,19 +114,25 @@ function MainNavigator({ navigation }: RootStackScreenProps<"Main">) {
   );
 
   const mainNavigation = useMemo(
-    () => ({
-      ...navigation,
-      navigate: (...args: unknown[]) => {
-        const [routeName] = args;
+    () =>
+      ({
+        ...navigation,
+        navigate: (...args: unknown[]) => {
+          const [routeName] = args;
 
-        if (routeName === "Home") {
-          switchTab("home");
-          return;
-        }
+          if (routeName === "Home") {
+            switchTab("home");
+            return;
+          }
 
-        navigateAway(...args);
-      },
-    }),
+          if (routeName === "Rooms") {
+            switchTab("rooms");
+            return;
+          }
+
+          navigateAway(...args);
+        },
+      }) as typeof navigation,
     [navigateAway, navigation, switchTab],
   );
 
@@ -137,10 +145,13 @@ function MainNavigator({ navigation }: RootStackScreenProps<"Main">) {
           styles.tabTrack,
           {
             transform: [{ translateX }],
-            width: screenWidth * 2,
+            width: screenWidth * 3,
           },
         ]}
       >
+        <View style={[styles.tabPage, { width: screenWidth }]}>
+          <HomeScreen navigation={mainNavigation} />
+        </View>
         <View style={[styles.tabPage, { width: screenWidth }]}>
           <RoomsScreen navigation={mainNavigation} />
         </View>
@@ -153,6 +164,7 @@ function MainNavigator({ navigation }: RootStackScreenProps<"Main">) {
         active={activeTab}
         compact={navCompact}
         onHomePress={() => switchTab("home")}
+        onRoomsPress={() => switchTab("rooms")}
         onSettingsPress={() => switchTab("settings")}
         visible={navVisible}
       />

@@ -1,6 +1,8 @@
 export type DeviceType = "ac" | "tv" | "light" | "fan";
 
-export type DeviceBrand = "panasonic" | "lg";
+export type DeviceBrand =
+  | "panasonic" | "lg" | "mitsubishi" | "hitachi"
+  | "toshiba" | "sharp" | "fujitsu" | "samsung" | "midea";
 
 export type DeviceTransport = "ir" | "rf";
 

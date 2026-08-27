@@ -1,4 +1,4 @@
-import { ChevronLeft, Plus, Wifi, WifiOff } from 'lucide-react-native';
+import { ChevronLeft, QrCode, Wifi, WifiOff } from 'lucide-react-native';
 import { StyleSheet, Text, TouchableOpacity, View, ScrollView, Alert } from 'react-native';
 import { useEffect } from 'react';
 import { useControllers } from '../store/controllers';
@@ -6,7 +6,6 @@ import { useDevices } from '../store/devices';
 import { useRooms } from '../store/rooms';
 import { theme } from '../theme/theme';
 import type { RootStackScreenProps } from '../navigation/types';
-import { AppButton } from '../components/AppButton';
 import { AppHeader, HeaderIconButton } from '../components/AppHeader';
 import { SwipeableItem } from '../components/SwipeableItem';
 import { controllerHealthService } from '../services/controllerHealthService';
@@ -67,6 +66,15 @@ export function ControllersScreen({ navigation }: ControllersScreenProps) {
             <ChevronLeft color={theme.accent} size={26} strokeWidth={2.35} />
           </HeaderIconButton>
         }
+        rightAction={
+          <HeaderIconButton
+            accessibilityLabel="Pair controller"
+            framed
+            onPress={() => navigation.navigate('PairController')}
+          >
+            <QrCode color={theme.accent} size={22} strokeWidth={2.5} />
+          </HeaderIconButton>
+        }
         title="Controllers"
       />
 
@@ -107,7 +115,13 @@ export function ControllersScreen({ navigation }: ControllersScreenProps) {
                         <Text numberOfLines={1} style={styles.controllerName}>
                           {controller.name}
                         </Text>
-                        <Text numberOfLines={1} style={styles.controllerStatus}>
+                        <Text
+                          numberOfLines={1}
+                          style={[
+                            styles.controllerStatus,
+                            controller.online && styles.controllerStatusOnline,
+                          ]}
+                        >
                           {controller.online ? 'Online' : 'Offline'}
                         </Text>
                       </View>
@@ -147,13 +161,6 @@ export function ControllersScreen({ navigation }: ControllersScreenProps) {
           </View>
         )}
 
-        <AppButton
-          label="Pair Controller"
-          leftIcon={<Plus color={theme.accentStrong} size={22} strokeWidth={2.6} />}
-          onPress={() => navigation.navigate('PairController')}
-          style={styles.pairButton}
-          vibe="strong"
-        />
       </ScrollView>
     </View>
   );
@@ -236,6 +243,9 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     letterSpacing: 0,
   },
+  controllerStatusOnline: {
+    color: '#4ADE80',
+  },
   controllerDetails: {
     backgroundColor: theme.controlBackground,
     borderColor: 'rgba(255, 255, 255, 0.06)',
@@ -262,8 +272,5 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     letterSpacing: 0,
     textAlign: 'right',
-  },
-  pairButton: {
-    marginTop: theme.spacing.lg,
   },
 });

@@ -47,7 +47,7 @@ const panasonicAcCapabilities = {
 export const DEBUG_DEVICES: Device[] = [
   {
     id: 'debug-device-living-ac',
-    name: 'Living Room Air Conditioner',
+    name: 'Air Conditioner',
     roomId: 'debug-room-living',
     controllerId: 'debug-controller-living',
     type: 'ac',
@@ -67,7 +67,7 @@ export const DEBUG_DEVICES: Device[] = [
   },
   {
     id: 'debug-device-living-tv',
-    name: 'Living Room TV',
+    name: 'TV',
     roomId: 'debug-room-living',
     controllerId: 'debug-controller-living',
     type: 'tv',
@@ -89,7 +89,7 @@ export const DEBUG_DEVICES: Device[] = [
   },
   {
     id: 'debug-device-bedroom-ac',
-    name: 'Bedroom Air Conditioner',
+    name: 'Air Conditioner',
     roomId: 'debug-room-bedroom',
     controllerId: 'debug-controller-bedroom',
     type: 'ac',

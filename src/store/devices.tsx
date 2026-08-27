@@ -10,6 +10,7 @@ type DevicesContextValue = {
   addDevice: (device: Device) => Promise<void>;
   removeDevice: (deviceId: string) => Promise<void>;
   removeDevicesByRoom: (roomId: string) => Promise<void>;
+  updateDeviceName: (deviceId: string, name: string) => Promise<void>;
   updateDeviceState: (deviceId: string, state: Partial<Device['state']>) => void;
   getDeviceById: (deviceId: string) => Device | undefined;
   getDevicesByRoom: (roomId: string) => Device[];
@@ -115,6 +116,17 @@ export function DevicesProvider({ children }: PropsWithChildren) {
     [devices, persistDevices]
   );
 
+  const updateDeviceName = useCallback(
+    async (deviceId: string, name: string) => {
+      const updated = devices.map((device) =>
+        device.id === deviceId ? { ...device, name: name.trim() } : device
+      );
+      setDevices(updated);
+      await persistDevices(updated);
+    },
+    [devices, persistDevices]
+  );
+
   const updateDeviceState = useCallback((deviceId: string, state: Partial<Device['state']>) => {
     setDevices((current) =>
       current.map((d) =>
@@ -159,6 +171,7 @@ export function DevicesProvider({ children }: PropsWithChildren) {
       addDevice,
       removeDevice,
       removeDevicesByRoom,
+      updateDeviceName,
       updateDeviceState,
       getDeviceById,
       getDevicesByRoom,
@@ -170,6 +183,7 @@ export function DevicesProvider({ children }: PropsWithChildren) {
       addDevice,
       removeDevice,
       removeDevicesByRoom,
+      updateDeviceName,
       updateDeviceState,
       getDeviceById,
       getDevicesByRoom,

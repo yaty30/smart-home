@@ -14,24 +14,25 @@ import { useRooms } from "../store/rooms";
 import { useDevices } from "../store/devices";
 import { useControllers } from "../store/controllers";
 import { theme } from "../theme/theme";
-import type { RootStackScreenProps } from "../navigation/types";
+import type { MainTabScreenProps } from "../navigation/types";
 
-type RoomsScreenProps = {
-  navigation: RootStackScreenProps<"Main">["navigation"];
-};
+type RoomsScreenProps = MainTabScreenProps;
 
 export function RoomsScreen({ navigation }: RoomsScreenProps) {
-  const { rooms, addRoom } = useRooms();
+  const { rooms } = useRooms();
   const { getDevicesByRoom } = useDevices();
   const { controllers } = useControllers();
   const [showAddRoomSheet, setShowAddRoomSheet] = useState(false);
 
-  const handleAddRoom = useCallback(
+  const handleScanController = useCallback(
     (name: string, icon: RoomIcon) => {
-      addRoom(name, icon);
       setShowAddRoomSheet(false);
+      navigation.navigate("PairController", {
+        roomIcon: icon,
+        roomName: name,
+      });
     },
-    [addRoom],
+    [navigation],
   );
 
   return (
@@ -94,7 +95,7 @@ export function RoomsScreen({ navigation }: RoomsScreenProps) {
       <AddRoomSheet
         visible={showAddRoomSheet}
         onClose={() => setShowAddRoomSheet(false)}
-        onAddRoom={handleAddRoom}
+        onScanController={handleScanController}
       />
     </View>
   );

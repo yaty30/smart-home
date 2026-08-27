@@ -1,20 +1,21 @@
-import { AirVent, ChevronLeft, Lightbulb, Plus, Trash2, Tv, Wifi, WifiOff, Power, MoreVertical, ChevronRight } from 'lucide-react-native';
+import { AirVent, ChevronLeft, Lightbulb, Plus, Tv, Wifi, WifiOff, Power, MoreVertical, ChevronRight } from 'lucide-react-native';
 import { Keyboard, Modal, Pressable, StyleSheet, Text, TextInput, TouchableOpacity, View, ScrollView, Alert } from 'react-native';
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useMemo } from 'react';
 import { useRooms } from '../store/rooms';
 import { useDevices } from '../store/devices';
 import { useControllers } from '../store/controllers';
 import { theme } from '../theme/theme';
 import type { RootStackScreenProps } from '../navigation/types';
-import type { DeviceType } from '../domain/device';
+import type { Device, DeviceBrand, DeviceType } from '../domain/device';
 import type { ComponentType } from 'react';
-import { AppButton } from '../components/AppButton';
 import { AppHeader, HeaderIconButton } from '../components/AppHeader';
 import { AddDeviceSheet } from '../components/AddDeviceSheet';
 import { createDevice } from '../domain/device';
 import { deviceService, executeDeviceCommand } from '../services/deviceService';
 import { controllerHealthService } from '../services/controllerHealthService';
 import { isDebugMode } from '../config/debug';
+import { PopupMenu, type PopupMenuItem } from '../components/PopupMenu';
+import { SwipeableItem } from '../components/SwipeableItem';
 
 type RoomDetailScreenProps = RootStackScreenProps<'RoomDetail'>;
 
@@ -23,6 +24,15 @@ type IconComponent = ComponentType<{
   size?: number;
   strokeWidth?: number;
 }>;
+
+type RenameTarget =
+  | {
+      type: 'room';
+    }
+  | {
+      type: 'device';
+      deviceId: string;
+    };
 
 const iconByDeviceType: Record<DeviceType, IconComponent> = {
   ac: AirVent,
@@ -54,11 +64,12 @@ const readQrVisible = (payload: unknown): boolean | null => {
 export function RoomDetailScreen({ navigation, route }: RoomDetailScreenProps) {
   const { roomId } = route.params;
   const { getRoomById, removeRoom, updateRoomName } = useRooms();
-  const { getDeviceById, getDevicesByRoom, removeDevice, removeDevicesByRoom, addDevice, updateDeviceState } = useDevices();
+  const { getDeviceById, getDevicesByRoom, removeDevice, removeDevicesByRoom, addDevice, updateDeviceName, updateDeviceState } = useDevices();
   const { controllers, getControllerById, updateControllerOnlineStatus } = useControllers();
   const [showAddDeviceSheet, setShowAddDeviceSheet] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
-  const [showRenameModal, setShowRenameModal] = useState(false);
+  const [renameTarget, setRenameTarget] = useState<RenameTarget | null>(null);
+  const [scrollEnabled, setScrollEnabled] = useState(true);
   const [qrVisible, setQrVisible] = useState(false);
   const [renameValue, setRenameValue] = useState('');
 
@@ -172,6 +183,11 @@ export function RoomDetailScreen({ navigation, route }: RoomDetailScreenProps) {
     );
   };
 
+  const handleOpenDeviceRename = useCallback((device: Device) => {
+    setRenameTarget({ type: 'device', deviceId: device.id });
+    setRenameValue(device.name);
+  }, []);
+
   const handleDeleteRoom = useCallback(() => {
     if (!room) {
       return;
@@ -252,27 +268,32 @@ export function RoomDetailScreen({ navigation, route }: RoomDetailScreenProps) {
 
     setShowMenu(false);
     setRenameValue(room.name);
-    setShowRenameModal(true);
+    setRenameTarget({ type: 'room' });
   }, [room]);
 
   const handleCloseRename = useCallback(() => {
     Keyboard.dismiss();
-    setShowRenameModal(false);
+    setRenameTarget(null);
     setRenameValue('');
   }, []);
 
   const handleSubmitRename = useCallback(() => {
     const trimmedName = renameValue.trim();
-    if (!trimmedName) {
+    if (!trimmedName || renameTarget === null) {
       return;
     }
 
-    updateRoomName(roomId, trimmedName);
+    if (renameTarget.type === 'room') {
+      updateRoomName(roomId, trimmedName);
+    } else {
+      void updateDeviceName(renameTarget.deviceId, trimmedName);
+    }
+
     handleCloseRename();
-  }, [handleCloseRename, renameValue, roomId, updateRoomName]);
+  }, [handleCloseRename, renameTarget, renameValue, roomId, updateDeviceName, updateRoomName]);
 
   const handleAddDevice = useCallback(
-    async (deviceType: DeviceType, brand: 'panasonic' | 'lg') => {
+    async (deviceType: DeviceType, brand: DeviceBrand) => {
       if (!room) {
         return;
       }
@@ -295,7 +316,8 @@ export function RoomDetailScreen({ navigation, route }: RoomDetailScreenProps) {
         return;
       }
 
-      const deviceName = `${room.name} ${deviceType === 'ac' ? 'Air Conditioner' : deviceType.toUpperCase()}`;
+      const deviceName =
+        deviceType === 'ac' ? 'Air Conditioner' : deviceType.toUpperCase();
 
       const device = createDevice(
         deviceName,
@@ -344,6 +366,30 @@ export function RoomDetailScreen({ navigation, route }: RoomDetailScreenProps) {
     [roomController, room, roomId, addDevice, navigation]
   );
 
+  const roomMenuItems = useMemo<PopupMenuItem[]>(
+    () => [
+      {
+        label: qrVisible ? 'Hide QR Code' : 'Show QR Code',
+        onPress: () => {
+          void handleToggleQrCode();
+        },
+      },
+      {
+        label: 'Rename Room',
+        onPress: handleOpenRename,
+      },
+      {
+        destructive: true,
+        label: 'Delete Room',
+        onPress: handleDeleteRoom,
+      },
+    ],
+    [handleDeleteRoom, handleOpenRename, handleToggleQrCode, qrVisible],
+  );
+
+  const renameTitle = renameTarget?.type === 'device' ? 'Rename Device' : 'Rename Room';
+  const renameLabel = renameTarget?.type === 'device' ? 'Device Name' : 'Room Name';
+
   if (!room) {
     return (
       <View style={styles.screen}>
@@ -381,47 +427,15 @@ export function RoomDetailScreen({ navigation, route }: RoomDetailScreenProps) {
         title={room.name}
       />
 
-      {showMenu ? (
-        <Pressable style={styles.menuBackdrop} onPress={() => setShowMenu(false)}>
-          <View style={styles.menuPanel}>
-            <TouchableOpacity
-              activeOpacity={0.74}
-              accessibilityRole="button"
-              accessibilityLabel={qrVisible ? 'Hide QR code' : 'Show QR code'}
-              onPress={() => {
-                void handleToggleQrCode();
-              }}
-              style={styles.menuItem}
-            >
-              <Text style={styles.menuItemText}>
-                {qrVisible ? 'Hide QR Code' : 'Show QR Code'}
-              </Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              activeOpacity={0.74}
-              accessibilityRole="button"
-              accessibilityLabel="Rename room"
-              onPress={handleOpenRename}
-              style={styles.menuItem}
-            >
-              <Text style={styles.menuItemText}>Rename Room</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              activeOpacity={0.74}
-              accessibilityRole="button"
-              accessibilityLabel="Delete room"
-              onPress={handleDeleteRoom}
-              style={[styles.menuItem, styles.menuItemDanger]}
-            >
-              <Text style={[styles.menuItemText, styles.menuItemTextDanger]}>
-                Delete Room
-              </Text>
-            </TouchableOpacity>
-          </View>
-        </Pressable>
-      ) : null}
+      <PopupMenu
+        items={roomMenuItems}
+        onRequestClose={() => setShowMenu(false)}
+        panelStyle={styles.roomMenuPanel}
+        visible={showMenu}
+      />
 
       <ScrollView
+        scrollEnabled={scrollEnabled}
         style={styles.scrollView}
         contentContainerStyle={styles.contentContainer}
       >
@@ -483,7 +497,14 @@ export function RoomDetailScreen({ navigation, route }: RoomDetailScreenProps) {
               const isPowered = device.state.power === true;
 
               return (
-                <View key={device.id} style={styles.deviceCardWrapper}>
+                <SwipeableItem
+                  key={device.id}
+                  onDelete={() => handleDeleteDevice(device.id, device.name)}
+                  onRename={() => handleOpenDeviceRename(device)}
+                  onSwipeEnd={() => setScrollEnabled(true)}
+                  onSwipeStart={() => setScrollEnabled(false)}
+                  style={styles.deviceCardWrapper}
+                >
                   <View style={[styles.deviceCard, isPowered && styles.deviceCardOn]}>
                     <TouchableOpacity
                       activeOpacity={0.84}
@@ -546,7 +567,7 @@ export function RoomDetailScreen({ navigation, route }: RoomDetailScreenProps) {
                       />
                     </TouchableOpacity>
                   </View>
-                </View>
+                </SwipeableItem>
               );
             })}
           </View>
@@ -563,18 +584,18 @@ export function RoomDetailScreen({ navigation, route }: RoomDetailScreenProps) {
         animationType="fade"
         onRequestClose={handleCloseRename}
         transparent
-        visible={showRenameModal}
+        visible={renameTarget !== null}
       >
         <Pressable style={styles.renameBackdrop} onPress={handleCloseRename}>
           <Pressable style={styles.renameDialog} onPress={(event) => event.stopPropagation()}>
-            <Text style={styles.renameTitle}>Rename Room</Text>
-            <Text style={styles.renameLabel}>Room Name</Text>
+            <Text style={styles.renameTitle}>{renameTitle}</Text>
+            <Text style={styles.renameLabel}>{renameLabel}</Text>
             <TextInput
               autoCapitalize="words"
               autoCorrect={false}
               onChangeText={setRenameValue}
               onSubmitEditing={handleSubmitRename}
-              placeholder="Living Room"
+              placeholder={renameTarget?.type === 'device' ? 'Air Conditioner' : 'Living Room'}
               placeholderTextColor={theme.textMuted}
               returnKeyType="done"
               style={styles.renameInput}
@@ -593,7 +614,7 @@ export function RoomDetailScreen({ navigation, route }: RoomDetailScreenProps) {
               <TouchableOpacity
                 activeOpacity={0.74}
                 accessibilityRole="button"
-                accessibilityLabel="Save room name"
+                accessibilityLabel={`Save ${renameTarget?.type ?? 'item'} name`}
                 disabled={renameValue.trim().length === 0}
                 onPress={handleSubmitRename}
                 style={[
@@ -619,38 +640,9 @@ const styles = StyleSheet.create({
   scrollView: {
     flex: 1,
   },
-  menuBackdrop: {
-    ...StyleSheet.absoluteFillObject,
-    zIndex: 20,
-  },
-  menuPanel: {
-    backgroundColor: theme.paperBackgroundElevated,
-    borderColor: theme.border,
-    borderRadius: 12,
-    borderWidth: 1,
-    elevation: 12,
-    minWidth: 190,
-    overflow: 'hidden',
-    position: 'absolute',
+  roomMenuPanel: {
     right: theme.spacing.lg,
     top: 116,
-  },
-  menuItem: {
-    paddingHorizontal: theme.spacing.lg,
-    paddingVertical: 14,
-  },
-  menuItemDanger: {
-    borderTopColor: theme.border,
-    borderTopWidth: 1,
-  },
-  menuItemText: {
-    color: theme.text,
-    fontSize: 14,
-    fontWeight: '700',
-    letterSpacing: 0,
-  },
-  menuItemTextDanger: {
-    color: theme.powerAccent,
   },
   contentContainer: {
     flexGrow: 1,

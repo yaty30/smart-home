@@ -6,6 +6,7 @@ import {
   AirVent,
   ChevronDown,
   Clock,
+  ClockFading,
   Ellipsis,
   Moon,
   Power,
@@ -64,6 +65,7 @@ import type {
   EspFanSpeed,
 } from "../types/device";
 import { normalizeTemperature } from "../utils/temperatureGauge";
+import { HeaderIconButton } from "../components/AppHeader";
 
 const temperatureRanges: Record<
   Exclude<AirConditionerMode, "fan">,
@@ -386,12 +388,12 @@ export function AirConditionerScreen({
         currentState === null
           ? currentState
           : {
-              ...currentState,
-              ac: {
-                ...currentState.ac,
-                ...acPatch,
-              },
+            ...currentState,
+            ac: {
+              ...currentState.ac,
+              ...acPatch,
             },
+          },
       );
     },
     [updateDeviceState],
@@ -403,12 +405,12 @@ export function AirConditionerScreen({
         currentState === null
           ? currentState
           : {
-              ...currentState,
-              display: {
-                ...currentState.display,
-                ...displayPatch,
-              },
+            ...currentState,
+            display: {
+              ...currentState.display,
+              ...displayPatch,
             },
+          },
       );
     },
     [updateDeviceState],
@@ -1136,8 +1138,21 @@ export function AirConditionerScreen({
           onBackPress={handleBackPress}
           title="Air Conditioner"
           rightAccessory={
-            <View style={styles.headerMenuButton}>
-              <Ellipsis color={theme.text} size={20} strokeWidth={2.2} />
+            <View style={{ display: 'flex', flexDirection: 'row', gap: theme.spacing.md }}>
+              <HeaderIconButton
+                accessibilityLabel="Add room"
+                framed
+                onPress={() => {} }
+              >
+                <ClockFading color={theme.accent} size={24} strokeWidth={2.6} />
+              </HeaderIconButton>
+              <HeaderIconButton
+                accessibilityLabel="Add room"
+                framed
+                onPress={() => {} }
+              >
+                <Ellipsis color={theme.accent} size={24} strokeWidth={2.6} />
+              </HeaderIconButton>
             </View>
           }
         />
@@ -1337,11 +1352,6 @@ export function AirConditionerScreen({
               <Text style={styles.cardSubtitle}>
                 This AC can have one automatic schedule.
               </Text>
-              <AppButton
-                label="Create Schedule"
-                onPress={handleCreateSchedule}
-                vibe="strong"
-              />
             </Section>
           ) : null}
 
@@ -1551,9 +1561,9 @@ export function AirConditionerScreen({
                       currentDraft === null
                         ? currentDraft
                         : {
-                            ...currentDraft,
-                            horizontalAirflow: nextLevel,
-                          },
+                          ...currentDraft,
+                          horizontalAirflow: nextLevel,
+                        },
                     );
                   }}
                   selectedLevel={
@@ -1581,9 +1591,9 @@ export function AirConditionerScreen({
                       currentDraft === null
                         ? currentDraft
                         : {
-                            ...currentDraft,
-                            verticalAirflow: nextLevel,
-                          },
+                          ...currentDraft,
+                          verticalAirflow: nextLevel,
+                        },
                     );
                   }}
                   selectedLevel={

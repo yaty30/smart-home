@@ -1,12 +1,20 @@
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
+import type { RoomIcon } from "../domain/roomIcon";
 
 export type RootStackParamList = {
   Main: undefined;
+  Rooms: undefined;
   RoomDetail: { roomId: string };
   DeviceControl: { deviceId: string };
   Controllers: undefined;
-  PairController: undefined;
+  PairController:
+    | {
+        roomId?: string;
+        roomName?: string;
+        roomIcon?: RoomIcon;
+      }
+    | undefined;
 };
 
 export type RootStackScreenProps<T extends keyof RootStackParamList> =
