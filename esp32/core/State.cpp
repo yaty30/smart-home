@@ -26,9 +26,11 @@ AcSchedule acSchedule = {
   false,                    // valid
   false,                    // enabled
   "22:30",                  // startTime
-  "07:30",                  // endTime
+  "",                       // endTime
   kPanasonicAcCool,         // mode
   24,                       // temperature
+  false,                    // quiet
+  false,                    // powerful
   kPanasonicAcSwingVAuto,   // swingVertical
   kPanasonicAcSwingHAuto    // swingHorizontal
 };

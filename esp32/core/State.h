@@ -23,9 +23,11 @@ struct AcSchedule {
   bool valid;
   bool enabled;
   char startTime[6];    // "HH:MM"
-  char endTime[6];      // "HH:MM"
+  char endTime[6];      // "HH:MM", or empty for no automatic off
   uint8_t mode;
   int temperature;
+  bool quiet;
+  bool powerful;
   uint8_t swingVertical;
   uint8_t swingHorizontal;
 };

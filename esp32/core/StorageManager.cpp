@@ -102,6 +102,8 @@ void saveSchedule(const AcSchedule& schedule) {
   preferences.putString("sched_end", schedule.endTime);
   preferences.putUChar("sched_mode", schedule.mode);
   preferences.putInt("sched_temp", schedule.temperature);
+  preferences.putBool("sched_quiet", schedule.quiet);
+  preferences.putBool("sched_powerful", schedule.powerful);
   preferences.putUChar("sched_swing_v", schedule.swingVertical);
   preferences.putUChar("sched_swing_h", schedule.swingHorizontal);
 }
@@ -127,7 +129,7 @@ bool loadSchedule(AcSchedule& schedule) {
   schedule.enabled = preferences.getBool("sched_enabled", false);
 
   String start = preferences.getString("sched_start", "22:30");
-  String end   = preferences.getString("sched_end",   "07:30");
+  String end   = preferences.getString("sched_end",   "");
   strncpy(schedule.startTime, start.c_str(), 5);
   schedule.startTime[5] = '\0';
   strncpy(schedule.endTime, end.c_str(), 5);
@@ -135,6 +137,11 @@ bool loadSchedule(AcSchedule& schedule) {
 
   schedule.mode           = preferences.getUChar("sched_mode", kPanasonicAcCool);
   schedule.temperature    = preferences.getInt("sched_temp", 24);
+  schedule.quiet          = preferences.getBool("sched_quiet", false);
+  schedule.powerful       = preferences.getBool("sched_powerful", false);
+  if (schedule.quiet && schedule.powerful) {
+    schedule.quiet = false;
+  }
   schedule.swingVertical  = preferences.getUChar("sched_swing_v", kPanasonicAcSwingVAuto);
   schedule.swingHorizontal = preferences.getUChar("sched_swing_h", kPanasonicAcSwingHAuto);
   return true;

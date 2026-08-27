@@ -14,9 +14,11 @@ import { theme } from '../theme/theme';
 type SwipeableItemProps = PropsWithChildren<{
   onDelete: () => void;
   onRename?: () => void;
+  onPress?: () => void;
   onSwipeEnd?: () => void;
   onSwipeStart?: () => void;
   style?: ViewStyle | ViewStyle[];
+  contentBackground?: string;
 }>;
 
 const SWIPE_THRESHOLD = -70;
@@ -28,12 +30,16 @@ export function SwipeableItem({
   children,
   onDelete,
   onRename,
+  onPress,
   onSwipeEnd,
   onSwipeStart,
   style,
+  contentBackground,
 }: SwipeableItemProps) {
   const translateX = useRef(new Animated.Value(0)).current;
   const lastOffset = useRef(0);
+  const gestureStartTime = useRef(0);
+  const gestureStartPos = useRef({ x: 0, y: 0 });
   const actionCount = onRename ? 2 : 1;
   const actionWidth =
     actionCount * ACTION_BUTTON_WIDTH +
@@ -41,24 +47,49 @@ export function SwipeableItem({
 
   const panResponder = useRef(
     PanResponder.create({
-      onStartShouldSetPanResponder: () => false,
-      onMoveShouldSetPanResponder: (_, gestureState) => {
-        return Math.abs(gestureState.dx) > 5 && Math.abs(gestureState.dx) > Math.abs(gestureState.dy);
-      },
-      onPanResponderGrant: () => {
-        onSwipeStart?.();
+      onStartShouldSetPanResponder: () => true,
+      onStartShouldSetPanResponderCapture: () => false,
+      onMoveShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponderCapture: () => false,
+      onPanResponderGrant: (evt) => {
+        gestureStartTime.current = Date.now();
+        gestureStartPos.current = { x: evt.nativeEvent.pageX, y: evt.nativeEvent.pageY };
         translateX.setOffset(lastOffset.current);
         translateX.setValue(0);
       },
       onPanResponderMove: (_, gestureState) => {
+        // Determine if this is a horizontal or vertical gesture
+        const isHorizontal = Math.abs(gestureState.dx) > Math.abs(gestureState.dy);
+
+        // If user is clearly scrolling vertically, release the gesture
+        if (!isHorizontal && Math.abs(gestureState.dy) > 10) {
+          return;
+        }
+
+        // Only call onSwipeStart when we're sure it's a horizontal swipe
+        if (isHorizontal && Math.abs(gestureState.dx) > 5) {
+          onSwipeStart?.();
+        }
+
         if (gestureState.dx < 0) {
           translateX.setValue(gestureState.dx);
         } else if (lastOffset.current < 0) {
           translateX.setValue(gestureState.dx);
         }
       },
-      onPanResponderRelease: (_, gestureState) => {
+      onPanResponderRelease: (evt, gestureState) => {
         translateX.flattenOffset();
+
+        const gestureDuration = Date.now() - gestureStartTime.current;
+        const totalMovement = Math.sqrt(gestureState.dx ** 2 + gestureState.dy ** 2);
+        const isHorizontal = Math.abs(gestureState.dx) > Math.abs(gestureState.dy);
+
+        // Detect tap: short duration, minimal movement
+        if (gestureDuration < 200 && totalMovement < 10 && lastOffset.current === 0) {
+          onPress?.();
+          onSwipeEnd?.();
+          return;
+        }
 
         const currentValue = gestureState.dx + lastOffset.current;
 
@@ -137,6 +168,7 @@ export function SwipeableItem({
       <Animated.View
         style={[
           styles.swipeableContent,
+          contentBackground ? { backgroundColor: contentBackground } : null,
           {
             transform: [{ translateX }],
           },

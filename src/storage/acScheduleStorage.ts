@@ -45,7 +45,7 @@ const isAcSchedule = (value: unknown): value is AcSchedule => {
   return (
     typeof candidate.enabled === "boolean" &&
     isScheduleTime(candidate.startTime) &&
-    isScheduleTime(candidate.endTime) &&
+    (candidate.endTime === null || isScheduleTime(candidate.endTime)) &&
     isScheduleMode(candidate.mode) &&
     typeof candidate.temperature === "number" &&
     (candidate.quiet === undefined || typeof candidate.quiet === "boolean") &&

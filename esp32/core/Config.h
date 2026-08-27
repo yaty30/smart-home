@@ -33,3 +33,7 @@ static const char WIFI_PASSWORD[] = "Briannothome";
 static const char PAIRING_TOKEN[] = "abc123";
 
 static const unsigned long IR_SEND_DELAY_MS = 50;
+
+// Schedule times are entered in the app as local wall-clock times.
+#define SCHEDULE_GMT_OFFSET_SEC (8 * 60 * 60)
+#define SCHEDULE_DAYLIGHT_OFFSET_SEC 0

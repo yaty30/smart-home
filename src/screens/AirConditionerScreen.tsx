@@ -39,11 +39,13 @@ import {
 import { Section } from "../components/Section";
 import { useDeviceConnection } from "../context/DeviceConnectionContext";
 import {
+  deleteAcScheduleFromDevice,
   getAcScheduleFromDevice,
   putAcScheduleToDevice,
 } from "../api/acScheduleApi";
 import {
   getAcSchedule,
+  removeAcSchedule,
   saveAcSchedule,
 } from "../storage/acScheduleStorage";
 import { AcScheduleSheet } from "../components/AcScheduleSheet";
@@ -983,6 +985,28 @@ export function AirConditionerScreen({
     [handleSaveSchedule, schedule],
   );
 
+  const handleDeleteSchedule = useCallback(async () => {
+    if (pairedDevice === null || schedule === null) {
+      return;
+    }
+
+    scheduleMutationVersion.current += 1;
+
+    try {
+      if (debugMode) {
+        await removeAcSchedule(pairedDevice);
+        setSchedule(null);
+        return;
+      }
+
+      await deleteAcScheduleFromDevice(pairedDevice);
+      setSchedule(null);
+      void removeAcSchedule(pairedDevice).catch(() => {});
+    } catch (error) {
+      console.warn("[Schedule] DELETE failed:", error);
+    }
+  }, [debugMode, pairedDevice, schedule]);
+
   return (
     <ScreenView>
       <ScrollView
@@ -1196,6 +1220,7 @@ export function AirConditionerScreen({
         loading={isScheduleLoading}
         onClose={() => setIsScheduleSheetVisible(false)}
         onSaveSchedule={handleSaveSchedule}
+        onDeleteSchedule={handleDeleteSchedule}
         onToggleScheduleEnabled={handleToggleScheduleEnabled}
         schedule={schedule}
         visible={isScheduleSheetVisible}

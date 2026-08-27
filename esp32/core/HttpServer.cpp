@@ -445,9 +445,15 @@ static String scheduleJson(const AcSchedule& s) {
   String body = "{";
   body += "\"enabled\":" + boolString(s.enabled) + ",";
   body += "\"startTime\":\"" + String(s.startTime) + "\",";
-  body += "\"endTime\":\"" + String(s.endTime) + "\",";
+  if (s.endTime[0] == '\0') {
+    body += "\"endTime\":null,";
+  } else {
+    body += "\"endTime\":\"" + String(s.endTime) + "\",";
+  }
   body += "\"mode\":\"" + modeString(s.mode) + "\",";
   body += "\"temperature\":" + String(s.temperature) + ",";
+  body += "\"quiet\":" + boolString(s.quiet) + ",";
+  body += "\"powerful\":" + boolString(s.powerful) + ",";
   body += "\"swingVertical\":\"" + swingVerticalString(s.swingVertical) + "\",";
   body += "\"swingHorizontal\":\"" + swingHorizontalString(s.swingHorizontal) + "\"";
   body += "}";
@@ -483,8 +489,9 @@ void handlePutSchedule() {
     if (pos < 0) return "";
     int colon = body.indexOf(':', pos + search.length());
     if (colon < 0) return "";
-    int quote1 = body.indexOf('"', colon + 1);
-    if (quote1 < 0) return "";
+    int quote1 = colon + 1;
+    while (quote1 < (int)body.length() && body[quote1] == ' ') quote1++;
+    if (quote1 >= (int)body.length() || body[quote1] != '"') return "";
     int quote2 = body.indexOf('"', quote1 + 1);
     if (quote2 < 0) return "";
     return body.substring(quote1 + 1, quote2);
@@ -521,16 +528,18 @@ void handlePutSchedule() {
   String swingV    = extractStr("swingVertical");
   String swingH    = extractStr("swingHorizontal");
   bool enabled     = extractBool("enabled", true);
+  bool quiet        = extractBool("quiet", false);
+  bool powerful     = extractBool("powerful", false);
 
   if (!isValidTimeString(startTime)) {
     sendJson(400, "{\"success\":false,\"error\":\"Invalid or missing startTime (HH:MM)\"}");
     return;
   }
-  if (!isValidTimeString(endTime)) {
-    sendJson(400, "{\"success\":false,\"error\":\"Invalid or missing endTime (HH:MM)\"}");
+  if (endTime.length() > 0 && !isValidTimeString(endTime)) {
+    sendJson(400, "{\"success\":false,\"error\":\"Invalid endTime (HH:MM)\"}");
     return;
   }
-  if (startTime == endTime) {
+  if (endTime.length() > 0 && startTime == endTime) {
     sendJson(400, "{\"success\":false,\"error\":\"startTime and endTime cannot be the same\"}");
     return;
   }
@@ -567,10 +576,13 @@ void handlePutSchedule() {
   acSchedule.endTime[5] = '\0';
   acSchedule.mode            = nextMode;
   acSchedule.temperature     = nextTemp;
+  acSchedule.quiet           = quiet && !powerful;
+  acSchedule.powerful        = powerful;
   acSchedule.swingVertical   = nextSwingV;
   acSchedule.swingHorizontal = nextSwingH;
 
   saveSchedule(acSchedule);
+  resetScheduleExecutionCursor();
 
   String respBody = "{\"success\":true,\"schedule\":" + scheduleJson(acSchedule) + "}";
   sendJson(200, respBody);
@@ -581,7 +593,10 @@ void handleDeleteSchedule() {
 
   acSchedule.valid   = false;
   acSchedule.enabled = false;
+  acSchedule.quiet   = false;
+  acSchedule.powerful = false;
   clearSchedule();
+  resetScheduleExecutionCursor();
 
   sendJson(200, "{\"success\":true}");
 }

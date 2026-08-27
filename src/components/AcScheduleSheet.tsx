@@ -2,7 +2,7 @@ import DateTimePicker, {
   type DateTimePickerEvent,
 } from "@react-native-community/datetimepicker";
 import * as Haptics from "expo-haptics";
-import { ChevronDown, Clock, Moon, Plus, Zap } from "lucide-react-native";
+import { ChevronDown, Clock, Moon, Plus, X, Zap } from "lucide-react-native";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Animated,
@@ -27,6 +27,7 @@ import { AppButton } from "./AppButton";
 import { ArcTemperatureGauge } from "./ArcTemperatureGauge";
 import { ModeSelector } from "./ModeSelector";
 import { Section } from "./Section";
+import { SwipeableItem } from "./SwipeableItem";
 import { theme } from "../theme/theme";
 import type { AcSchedule, ScheduleAirflow } from "../types/acSchedule";
 import type { AirConditionerMode, AirflowLevel } from "../types/airConditioner";
@@ -51,7 +52,7 @@ const temperatureRanges: Record<
 const defaultSchedule: AcSchedule = {
   enabled: true,
   startTime: "22:30",
-  endTime: "07:30",
+  endTime: null,
   days: [...NO_DAYS],
   mode: "cold",
   temperature: 24,
@@ -81,6 +82,16 @@ const dateFromTimeString = (time: string) => {
   return date;
 };
 
+const addMinutesToTimeString = (time: string, minutesToAdd: number) => {
+  const [hours = "0", minutes = "0"] = time.split(":");
+  const totalMinutes =
+    (Number(hours) * 60 + Number(minutes) + minutesToAdd + 24 * 60) % (24 * 60);
+
+  return `${formatTimePart(Math.floor(totalMinutes / 60))}:${formatTimePart(
+    totalMinutes % 60,
+  )}`;
+};
+
 // ─── useSheetPan ──────────────────────────────────────────────────────────────
 // Reusable gesture logic matching AddRoomSheet: handle area claims every touch,
 // content area only activates on downward drag while at scroll top.
@@ -93,23 +104,34 @@ function useSheetPan(
 
   const snapBack = useCallback(() => {
     Animated.spring(translateY, {
-      toValue: 0, useNativeDriver: false, bounciness: 4,
+      toValue: 0,
+      useNativeDriver: false,
+      bounciness: 4,
     }).start();
   }, [translateY]);
 
   // Stable ref so PanResponder (created once) always calls the latest snapBack.
   const snapBackRef = useRef(snapBack);
-  useEffect(() => { snapBackRef.current = snapBack; }, [snapBack]);
+  useEffect(() => {
+    snapBackRef.current = snapBack;
+  }, [snapBack]);
 
   const handlePan = useRef(
     PanResponder.create({
       onStartShouldSetPanResponder: () => true,
-      onPanResponderMove: (_, { dy }) => { translateY.setValue(Math.max(0, dy)); },
-      onPanResponderRelease: (_, { dy, vy }) => {
-        if (dy > 120 || vy > 0.8) { dismissRef.current(); }
-        else { snapBackRef.current(); }
+      onPanResponderMove: (_, { dy }) => {
+        translateY.setValue(Math.max(0, dy));
       },
-      onPanResponderTerminate: () => { snapBackRef.current(); },
+      onPanResponderRelease: (_, { dy, vy }) => {
+        if (dy > 120 || vy > 0.8) {
+          dismissRef.current();
+        } else {
+          snapBackRef.current();
+        }
+      },
+      onPanResponderTerminate: () => {
+        snapBackRef.current();
+      },
     }),
   ).current;
 
@@ -117,12 +139,19 @@ function useSheetPan(
     PanResponder.create({
       onMoveShouldSetPanResponder: (_, { dy, dx }) =>
         scrollAtTop.current && dy > 10 && dy > Math.abs(dx),
-      onPanResponderMove: (_, { dy }) => { translateY.setValue(Math.max(0, dy)); },
-      onPanResponderRelease: (_, { dy, vy }) => {
-        if (dy > 120 || vy > 0.8) { dismissRef.current(); }
-        else { snapBackRef.current(); }
+      onPanResponderMove: (_, { dy }) => {
+        translateY.setValue(Math.max(0, dy));
       },
-      onPanResponderTerminate: () => { snapBackRef.current(); },
+      onPanResponderRelease: (_, { dy, vy }) => {
+        if (dy > 120 || vy > 0.8) {
+          dismissRef.current();
+        } else {
+          snapBackRef.current();
+        }
+      },
+      onPanResponderTerminate: () => {
+        snapBackRef.current();
+      },
     }),
   ).current;
 
@@ -142,13 +171,24 @@ function ScheduleRow({ schedule, onToggleEnabled }: ScheduleRowProps) {
       <View style={s.rowLeft}>
         <View style={s.rowTimes}>
           <Clock size={14} color={theme.textSecondary} />
+          <Text style={s.rowTimeLabel}>On</Text>
           <Text style={s.rowTimeText}>{formatTime12h(schedule.startTime)}</Text>
           <ChevronDown
             size={12}
             color={theme.textSecondary}
             style={{ transform: [{ rotate: "-90deg" }] }}
           />
-          <Text style={s.rowTimeText}>{formatTime12h(schedule.endTime)}</Text>
+          <Text style={s.rowTimeLabel}>Off</Text>
+          <Text
+            style={[
+              s.rowTimeText,
+              schedule.endTime === null && s.rowTimeTextMuted,
+            ]}
+          >
+            {schedule.endTime === null
+              ? "No auto off"
+              : formatTime12h(schedule.endTime)}
+          </Text>
         </View>
         <View style={s.dayPills}>
           {DAY_LABELS.map((label, i) => (
@@ -227,7 +267,7 @@ const s = StyleSheet.create({
   scrollContent: {
     paddingBottom: 24,
     paddingHorizontal: 20,
-    gap: theme.spacing.lg
+    gap: theme.spacing.lg,
   },
   footer: {
     borderTopColor: theme.border,
@@ -262,6 +302,9 @@ const s = StyleSheet.create({
   },
 
   // schedule row
+  scheduleSwipeItem: {
+    borderRadius: 12,
+  },
   row: {
     alignItems: "center",
     backgroundColor: theme.surfaceLow,
@@ -284,6 +327,14 @@ const s = StyleSheet.create({
     color: theme.text,
     fontSize: 15,
     fontWeight: "500",
+  },
+  rowTimeTextMuted: {
+    color: theme.textSecondary,
+  },
+  rowTimeLabel: {
+    color: theme.textSecondary,
+    fontSize: 12,
+    fontWeight: "600",
   },
   dayPills: {
     flexDirection: "row",
@@ -341,6 +392,11 @@ const s = StyleSheet.create({
   timeLabelActive: {
     color: theme.accentStrong,
   },
+  timeLabelOptional: {
+    color: theme.textSecondary,
+    fontSize: 11,
+    fontWeight: "500",
+  },
   timeValue: {
     color: theme.text,
     fontSize: 18,
@@ -349,9 +405,26 @@ const s = StyleSheet.create({
   timeValueActive: {
     color: theme.accentStrong,
   },
+  timeValueMuted: {
+    color: theme.textSecondary,
+  },
   timePickerWrapper: {
     alignItems: "center",
     marginTop: 8,
+  },
+  clearEndButton: {
+    alignItems: "center",
+    alignSelf: "flex-end",
+    flexDirection: "row",
+    gap: 6,
+    marginTop: 10,
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+  },
+  clearEndText: {
+    color: theme.textSecondary,
+    fontSize: 13,
+    fontWeight: "600",
   },
   timePicker: {
     height: 160,
@@ -436,6 +509,7 @@ export type AcScheduleSheetProps = {
   loading: boolean;
   schedule: AcSchedule | null;
   onClose: () => void;
+  onDeleteSchedule: () => Promise<void>;
   onSaveSchedule: (schedule: AcSchedule) => Promise<void>;
   onToggleScheduleEnabled: (enabled: boolean) => Promise<void>;
 };
@@ -445,22 +519,28 @@ export function AcScheduleSheet({
   loading,
   schedule,
   onClose,
+  onDeleteSchedule,
   onSaveSchedule,
   onToggleScheduleEnabled,
 }: AcScheduleSheetProps) {
   const translateY = useRef(new Animated.Value(800)).current;
   const handleCloseRef = useRef(onClose);
   const [editorVisible, setEditorVisible] = useState(false);
+  const [scrollEnabled, setScrollEnabled] = useState(true);
   const [saving, setSaving] = useState(false);
 
-  useEffect(() => { handleCloseRef.current = onClose; }, [onClose]);
+  useEffect(() => {
+    handleCloseRef.current = onClose;
+  }, [onClose]);
 
   useEffect(() => {
     if (visible && !editorVisible) {
       // Reset before animating so re-opens always start from the bottom.
       translateY.setValue(800);
       Animated.timing(translateY, {
-        toValue: 0, duration: 320, useNativeDriver: false,
+        toValue: 0,
+        duration: 320,
+        useNativeDriver: false,
       }).start();
     }
   }, [editorVisible, visible, translateY]);
@@ -473,14 +553,21 @@ export function AcScheduleSheet({
 
   const dismiss = useCallback(() => {
     Animated.timing(translateY, {
-      toValue: 900, duration: 260, useNativeDriver: false,
+      toValue: 900,
+      duration: 260,
+      useNativeDriver: false,
     }).start(() => handleCloseRef.current());
   }, [translateY]);
 
   const dismissRef = useRef(dismiss);
-  useEffect(() => { dismissRef.current = dismiss; }, [dismiss]);
+  useEffect(() => {
+    dismissRef.current = dismiss;
+  }, [dismiss]);
 
-  const { scrollAtTop, handlePan, contentPan } = useSheetPan(translateY, dismissRef);
+  const { scrollAtTop, handlePan, contentPan } = useSheetPan(
+    translateY,
+    dismissRef,
+  );
 
   const handleSave = useCallback(
     async (draft: AcSchedule) => {
@@ -520,10 +607,11 @@ export function AcScheduleSheet({
                   <View style={s.handle} />
                 </View>
 
-                <View style={s.contentOuter} {...contentPan.panHandlers}>
+                <View style={s.contentOuter}>
                   <ScrollView
                     style={s.scroll}
                     contentContainerStyle={s.scrollContent}
+                    scrollEnabled={scrollEnabled}
                     onScroll={({ nativeEvent }) => {
                       scrollAtTop.current = nativeEvent.contentOffset.y <= 0;
                     }}
@@ -541,19 +629,30 @@ export function AcScheduleSheet({
                       </TouchableOpacity>
                     </View>
 
-                    {loading && (
-                      <Text style={s.emptyText}>Loading…</Text>
-                    )}
+                    {loading && <Text style={s.emptyText}>Loading…</Text>}
 
                     {!loading && schedule === null && (
-                      <Text style={s.emptyText}>No schedule set. Tap + to create one.</Text>
+                      <Text style={s.emptyText}>
+                        No schedule set. Tap + to create one.
+                      </Text>
                     )}
 
                     {!loading && schedule !== null && (
-                      <ScheduleRow
-                        schedule={schedule}
-                        onToggleEnabled={onToggleScheduleEnabled}
-                      />
+                      <SwipeableItem
+                        onDelete={() => {
+                          void onDeleteSchedule();
+                        }}
+                        onPress={() => setEditorVisible(true)}
+                        onSwipeEnd={() => setScrollEnabled(true)}
+                        onSwipeStart={() => setScrollEnabled(false)}
+                        style={s.scheduleSwipeItem}
+                        contentBackground={theme.paperBackground}
+                      >
+                        <ScheduleRow
+                          schedule={schedule}
+                          onToggleEnabled={onToggleScheduleEnabled}
+                        />
+                      </SwipeableItem>
                     )}
                   </ScrollView>
                 </View>
@@ -593,31 +692,44 @@ function ScheduleEditorSheet({
 }: ScheduleEditorSheetProps) {
   const translateY = useRef(new Animated.Value(800)).current;
   const handleCloseRef = useRef(onClose);
-  useEffect(() => { handleCloseRef.current = onClose; }, [onClose]);
+  useEffect(() => {
+    handleCloseRef.current = onClose;
+  }, [onClose]);
 
   // open / close animation
   useEffect(() => {
     if (visible) {
       Animated.timing(translateY, {
-        toValue: 0, duration: 320, useNativeDriver: false,
+        toValue: 0,
+        duration: 320,
+        useNativeDriver: false,
       }).start();
     }
   }, [visible, translateY]);
 
   const dismiss = useCallback(() => {
     Animated.timing(translateY, {
-      toValue: 900, duration: 260, useNativeDriver: false,
+      toValue: 900,
+      duration: 260,
+      useNativeDriver: false,
     }).start(() => handleCloseRef.current());
   }, [translateY]);
 
   const dismissRef = useRef(dismiss);
-  useEffect(() => { dismissRef.current = dismiss; }, [dismiss]);
+  useEffect(() => {
+    dismissRef.current = dismiss;
+  }, [dismiss]);
 
-  const { scrollAtTop, handlePan, contentPan } = useSheetPan(translateY, dismissRef);
+  const { scrollAtTop, handlePan, contentPan } = useSheetPan(
+    translateY,
+    dismissRef,
+  );
 
   // form state
   const [draft, setDraft] = useState<AcSchedule>(initial);
-  useEffect(() => { setDraft(initial); }, [initial]);
+  useEffect(() => {
+    setDraft(initial);
+  }, [initial]);
 
   const [activeTimePicker, setActiveTimePicker] = useState<TimeField>("start");
   const [isAdjustingTemperature, setIsAdjustingTemperature] = useState(false);
@@ -630,6 +742,20 @@ function ScheduleEditorSheet({
     },
     [activeTimePicker],
   );
+
+  const handleSelectEndTime = useCallback(() => {
+    setActiveTimePicker("end");
+    setDraft((prev) => ({
+      ...prev,
+      endTime: prev.endTime ?? addMinutesToTimeString(prev.startTime, 60),
+    }));
+  }, []);
+
+  const handleClearEndTime = useCallback(() => {
+    Haptics.selectionAsync().catch(() => undefined);
+    setActiveTimePicker("start");
+    setDraft((prev) => ({ ...prev, endTime: null }));
+  }, []);
 
   const handleToggleQuiet = useCallback(() => {
     Haptics.selectionAsync().catch(() => undefined);
@@ -672,7 +798,12 @@ function ScheduleEditorSheet({
   if (!visible) return null;
 
   return (
-    <Modal visible={visible} transparent animationType="none" onRequestClose={dismiss}>
+    <Modal
+      visible={visible}
+      transparent
+      animationType="none"
+      onRequestClose={dismiss}
+    >
       <View style={s.modalRoot}>
         <TouchableOpacity
           style={[StyleSheet.absoluteFill, s.backdrop]}
@@ -686,288 +817,331 @@ function ScheduleEditorSheet({
         >
           <Animated.View style={[s.sheet, { transform: [{ translateY }] }]}>
             <SafeAreaView style={s.safeArea}>
-            {/* drag handle */}
-            <View style={s.handleArea} {...handlePan.panHandlers}>
-              <View style={s.handle} />
-            </View>
+              {/* drag handle */}
+              <View style={s.handleArea} {...handlePan.panHandlers}>
+                <View style={s.handle} />
+              </View>
 
-            {/* scrollable content */}
-            <View
-              style={s.contentOuter}
-              {...(isAdjustingTemperature ? {} : contentPan.panHandlers)}
-            >
-              <ScrollView
-                style={s.scroll}
-                contentContainerStyle={s.scrollContent}
-                keyboardShouldPersistTaps="handled"
-                onScroll={({ nativeEvent }) => {
-                  scrollAtTop.current = nativeEvent.contentOffset.y <= 0;
-                }}
-                scrollEnabled={!isAdjustingTemperature}
-                scrollEventThrottle={16}
-                showsVerticalScrollIndicator={false}
+              {/* scrollable content */}
+              <View
+                style={s.contentOuter}
+                {...(isAdjustingTemperature ? {} : contentPan.panHandlers)}
               >
-                <Text style={s.editorTitle}>New Schedule</Text>
+                <ScrollView
+                  style={s.scroll}
+                  contentContainerStyle={s.scrollContent}
+                  keyboardShouldPersistTaps="handled"
+                  onScroll={({ nativeEvent }) => {
+                    scrollAtTop.current = nativeEvent.contentOffset.y <= 0;
+                  }}
+                  scrollEnabled={!isAdjustingTemperature}
+                  scrollEventThrottle={16}
+                  showsVerticalScrollIndicator={false}
+                >
+                  <Text style={s.editorTitle}>AC Schedule</Text>
 
-                {/* ── Time ── */}
-                <Section>
-                  <View style={s.timeRow}>
-                    <TouchableOpacity
-                      style={[
-                        s.timeButton,
-                        activeTimePicker === "start" && s.timeButtonActive,
-                      ]}
-                      onPress={() => setActiveTimePicker("start")}
-                      activeOpacity={0.7}
-                    >
-                      <Text
-                        style={[
-                          s.timeLabel,
-                          activeTimePicker === "start" && s.timeLabelActive,
-                        ]}
-                      >
-                        Start
-                      </Text>
-                      <Text
-                        style={[
-                          s.timeValue,
-                          activeTimePicker === "start" && s.timeValueActive,
-                        ]}
-                      >
-                        {formatTime12h(draft.startTime)}
-                      </Text>
-                    </TouchableOpacity>
-
-                    <ChevronDown
-                      size={16}
-                      color={theme.textSecondary}
-                      style={{ transform: [{ rotate: "-90deg" }] }}
-                    />
-
-                    <TouchableOpacity
-                      style={[
-                        s.timeButton,
-                        activeTimePicker === "end" && s.timeButtonActive,
-                      ]}
-                      onPress={() => setActiveTimePicker("end")}
-                      activeOpacity={0.7}
-                    >
-                      <Text
-                        style={[
-                          s.timeLabel,
-                          activeTimePicker === "end" && s.timeLabelActive,
-                        ]}
-                      >
-                        End
-                      </Text>
-                      <Text
-                        style={[
-                          s.timeValue,
-                          activeTimePicker === "end" && s.timeValueActive,
-                        ]}
-                      >
-                        {formatTime12h(draft.endTime)}
-                      </Text>
-                    </TouchableOpacity>
-                  </View>
-
-                  <View style={s.timePickerWrapper}>
-                    <DateTimePicker
-                      mode="time"
-                      display="spinner"
-                      value={dateFromTimeString(
-                        activeTimePicker === "start"
-                          ? draft.startTime
-                          : draft.endTime,
-                      )}
-                      onChange={handleTimeChange}
-                      style={s.timePicker}
-                      textColor={theme.text}
-                    />
-                  </View>
-                </Section>
-
-                <View style={{gap: theme.spacing.lg}}>
-                {/* ── Days ── */}
-                <Section>
-                  <View style={s.daysRow}>
-                    {DAY_FULL.map((day, i) => (
+                  {/* ── Time ── */}
+                  <Section>
+                    <View style={s.timeRow}>
                       <TouchableOpacity
-                        key={day}
                         style={[
-                          s.dayToggle,
-                          draft.days[i] === true && s.dayToggleActive,
+                          s.timeButton,
+                          activeTimePicker === "start" && s.timeButtonActive,
                         ]}
-                        onPress={() => toggleDay(i)}
+                        onPress={() => setActiveTimePicker("start")}
                         activeOpacity={0.7}
                       >
                         <Text
                           style={[
-                            s.dayToggleText,
-                            draft.days[i] === true && s.dayToggleTextActive,
+                            s.timeLabel,
+                            activeTimePicker === "start" && s.timeLabelActive,
                           ]}
                         >
-                          {day}
+                          Turn On
+                        </Text>
+                        <Text
+                          style={[
+                            s.timeValue,
+                            activeTimePicker === "start" && s.timeValueActive,
+                          ]}
+                        >
+                          {formatTime12h(draft.startTime)}
                         </Text>
                       </TouchableOpacity>
-                    ))}
-                  </View>
-                </Section>
 
-                {/* ── Mode ── */}
-                <Section>
-	                  <ModeSelector
-	                    selectedMode={draft.mode}
-	                    isPowered={true}
-	                    onChangeMode={(mode) => {
-	                      setDraft((prev) => ({
-                        ...prev,
-                        mode: mode as Exclude<AirConditionerMode, "fan">,
-                        temperature: Math.min(
-                          Math.max(
-                            prev.temperature,
-                            (temperatureRanges[
-                              mode as Exclude<AirConditionerMode, "fan">
-                            ] ?? temperatureRanges.auto).min,
-                          ),
-                          (temperatureRanges[
-                            mode as Exclude<AirConditionerMode, "fan">
-                          ] ?? temperatureRanges.auto).max,
-                        ),
-                      }));
-                    }}
-                  />
-                </Section>
-
-                {/* ── Temperature ── */}
-                <Section>
-                  <View style={s.temperatureHeader}>
-                    <View style={s.temperatureTitleGroup}>
-                      <Text style={s.temperatureTitle}>Temperature</Text>
-                      <Text style={s.temperatureSubtitle}>
-                        {draft.temperature}°C target
-                      </Text>
-                    </View>
-                    <View style={s.temperatureActions}>
-                      <TouchableOpacity
-                        activeOpacity={0.75}
-                        accessibilityLabel="Toggle quiet mode"
-                        accessibilityRole="switch"
-                        accessibilityState={{ checked: Boolean(draft.quiet) }}
-                        onPress={handleToggleQuiet}
-                        style={[
-                          s.featureButton,
-                          draft.quiet ? s.quietButtonOn : s.featureButtonOff,
-                        ]}
-                      >
-                        <Moon
-                          color={draft.quiet ? theme.quietAccent : theme.text}
-                          size={20}
-                          strokeWidth={2.4}
-                        />
-                      </TouchableOpacity>
+                      <ChevronDown
+                        size={16}
+                        color={theme.textSecondary}
+                        style={{ transform: [{ rotate: "-90deg" }] }}
+                      />
 
                       <TouchableOpacity
-                        activeOpacity={0.75}
-                        accessibilityLabel="Toggle powerful mode"
-                        accessibilityRole="switch"
-                        accessibilityState={{ checked: Boolean(draft.powerful) }}
-                        onPress={handleTogglePowerful}
                         style={[
-                          s.featureButton,
-                          draft.powerful ? s.powerfulButtonOn : s.featureButtonOff,
+                          s.timeButton,
+                          activeTimePicker === "end" && s.timeButtonActive,
                         ]}
+                        onPress={handleSelectEndTime}
+                        activeOpacity={0.7}
                       >
-                        <Zap
-                          color={draft.powerful ? theme.powerfulAccent : theme.text}
-                          size={20}
-                          strokeWidth={2.4}
-                        />
+                        <Text
+                          style={[
+                            s.timeLabel,
+                            activeTimePicker === "end" && s.timeLabelActive,
+                          ]}
+                        >
+                          Turn Off
+                          <Text style={s.timeLabelOptional}> Optional</Text>
+                        </Text>
+                        <Text
+                          style={[
+                            s.timeValue,
+                            activeTimePicker === "end" && s.timeValueActive,
+                            draft.endTime === null && s.timeValueMuted,
+                          ]}
+                        >
+                          {draft.endTime === null
+                            ? "No auto off"
+                            : formatTime12h(draft.endTime)}
+                        </Text>
                       </TouchableOpacity>
                     </View>
+
+                    {draft.endTime !== null && (
+                      <TouchableOpacity
+                        activeOpacity={0.72}
+                        accessibilityLabel="Clear turn off time"
+                        accessibilityRole="button"
+                        onPress={handleClearEndTime}
+                        style={s.clearEndButton}
+                      >
+                        <X
+                          color={theme.textSecondary}
+                          size={15}
+                          strokeWidth={2.4}
+                        />
+                        <Text style={s.clearEndText}>Clear turn off</Text>
+                      </TouchableOpacity>
+                    )}
+
+                    <View style={s.timePickerWrapper}>
+                      <DateTimePicker
+                        mode="time"
+                        display="spinner"
+                        value={dateFromTimeString(
+                          activeTimePicker === "start"
+                            ? draft.startTime
+                            : (draft.endTime ?? draft.startTime),
+                        )}
+                        onChange={handleTimeChange}
+                        style={s.timePicker}
+                        textColor={theme.text}
+                      />
+                    </View>
+                  </Section>
+
+                  <View style={{ gap: theme.spacing.lg }}>
+                    {/* ── Days ── */}
+                    <Section>
+                      <View style={s.daysRow}>
+                        {DAY_FULL.map((day, i) => (
+                          <TouchableOpacity
+                            key={day}
+                            style={[
+                              s.dayToggle,
+                              draft.days[i] === true && s.dayToggleActive,
+                            ]}
+                            onPress={() => toggleDay(i)}
+                            activeOpacity={0.7}
+                          >
+                            <Text
+                              style={[
+                                s.dayToggleText,
+                                draft.days[i] === true && s.dayToggleTextActive,
+                              ]}
+                            >
+                              {day}
+                            </Text>
+                          </TouchableOpacity>
+                        ))}
+                      </View>
+                    </Section>
+
+                    {/* ── Mode ── */}
+                    <Section>
+                      <ModeSelector
+                        selectedMode={draft.mode}
+                        isPowered={true}
+                        onChangeMode={(mode) => {
+                          setDraft((prev) => ({
+                            ...prev,
+                            mode: mode as Exclude<AirConditionerMode, "fan">,
+                            temperature: Math.min(
+                              Math.max(
+                                prev.temperature,
+                                (
+                                  temperatureRanges[
+                                    mode as Exclude<AirConditionerMode, "fan">
+                                  ] ?? temperatureRanges.auto
+                                ).min,
+                              ),
+                              (
+                                temperatureRanges[
+                                  mode as Exclude<AirConditionerMode, "fan">
+                                ] ?? temperatureRanges.auto
+                              ).max,
+                            ),
+                          }));
+                        }}
+                      />
+                    </Section>
+
+                    {/* ── Temperature ── */}
+                    <Section>
+                      <View style={s.temperatureHeader}>
+                        <View style={s.temperatureTitleGroup}>
+                          <Text style={s.temperatureTitle}>Temperature</Text>
+                          <Text style={s.temperatureSubtitle}>
+                            {draft.temperature}°C target
+                          </Text>
+                        </View>
+                        <View style={s.temperatureActions}>
+                          <TouchableOpacity
+                            activeOpacity={0.75}
+                            accessibilityLabel="Toggle quiet mode"
+                            accessibilityRole="switch"
+                            accessibilityState={{
+                              checked: Boolean(draft.quiet),
+                            }}
+                            onPress={handleToggleQuiet}
+                            style={[
+                              s.featureButton,
+                              draft.quiet
+                                ? s.quietButtonOn
+                                : s.featureButtonOff,
+                            ]}
+                          >
+                            <Moon
+                              color={
+                                draft.quiet ? theme.quietAccent : theme.text
+                              }
+                              size={20}
+                              strokeWidth={2.4}
+                            />
+                          </TouchableOpacity>
+
+                          <TouchableOpacity
+                            activeOpacity={0.75}
+                            accessibilityLabel="Toggle powerful mode"
+                            accessibilityRole="switch"
+                            accessibilityState={{
+                              checked: Boolean(draft.powerful),
+                            }}
+                            onPress={handleTogglePowerful}
+                            style={[
+                              s.featureButton,
+                              draft.powerful
+                                ? s.powerfulButtonOn
+                                : s.featureButtonOff,
+                            ]}
+                          >
+                            <Zap
+                              color={
+                                draft.powerful
+                                  ? theme.powerfulAccent
+                                  : theme.text
+                              }
+                              size={20}
+                              strokeWidth={2.4}
+                            />
+                          </TouchableOpacity>
+                        </View>
+                      </View>
+
+                      <ArcTemperatureGauge
+                        size={280}
+                        temperature={draft.temperature}
+                        isPowered={true}
+                        minTemperature={tempRange.min}
+                        maxTemperature={tempRange.max}
+                        onChangeTemperature={(t) =>
+                          setDraft((prev) => ({
+                            ...prev,
+                            temperature: normalizeTemperature(
+                              t,
+                              tempRange.min,
+                              tempRange.max,
+                            ),
+                          }))
+                        }
+                        onInteractionStart={() => {
+                          setIsAdjustingTemperature(true);
+                        }}
+                        onInteractionEnd={() =>
+                          setIsAdjustingTemperature(false)
+                        }
+                      />
+                    </Section>
+
+                    {/* ── Airflow ── */}
+                    <Section>
+                      <VerticalAirflowSelector
+                        selectedLevel={
+                          draft.verticalAirflow === "auto"
+                            ? "one"
+                            : (draft.verticalAirflow as AirflowLevel)
+                        }
+                        isAuto={draft.verticalAirflow === "auto"}
+                        isPowered={true}
+                        onChangeAuto={(auto) => {
+                          setDraft((prev) => ({
+                            ...prev,
+                            verticalAirflow: auto ? "auto" : "one",
+                          }));
+                        }}
+                        onChangeLevel={(level) => {
+                          setDraft((prev) => ({
+                            ...prev,
+                            verticalAirflow: level as AirflowLevel,
+                          }));
+                        }}
+                      />
+                    </Section>
+
+                    <Section>
+                      <HorizontalAirflowSelector
+                        selectedLevel={
+                          draft.horizontalAirflow === "auto"
+                            ? "one"
+                            : (draft.horizontalAirflow as AirflowLevel)
+                        }
+                        isAuto={draft.horizontalAirflow === "auto"}
+                        isPowered={true}
+                        onChangeAuto={(auto) => {
+                          setDraft((prev) => ({
+                            ...prev,
+                            horizontalAirflow: auto ? "auto" : "one",
+                          }));
+                        }}
+                        onChangeLevel={(level) => {
+                          setDraft((prev) => ({
+                            ...prev,
+                            horizontalAirflow: level as AirflowLevel,
+                          }));
+                        }}
+                      />
+                    </Section>
                   </View>
+                </ScrollView>
+              </View>
 
-                  <ArcTemperatureGauge
-                    size={280}
-                    temperature={draft.temperature}
-                    isPowered={true}
-                    minTemperature={tempRange.min}
-                    maxTemperature={tempRange.max}
-                    onChangeTemperature={(t) =>
-                      setDraft((prev) => ({
-                        ...prev,
-                        temperature: normalizeTemperature(
-                          t, tempRange.min, tempRange.max,
-                        ),
-                      }))
-	                    }
-	                    onInteractionStart={() => {
-	                      setIsAdjustingTemperature(true);
-	                    }}
-                    onInteractionEnd={() => setIsAdjustingTemperature(false)}
-                  />
-                </Section>
-
-                {/* ── Airflow ── */}
-                <Section>
-                  <VerticalAirflowSelector
-                    selectedLevel={
-                      draft.verticalAirflow === "auto"
-                        ? "one"
-                        : (draft.verticalAirflow as AirflowLevel)
-                    }
-	                    isAuto={draft.verticalAirflow === "auto"}
-	                    isPowered={true}
-	                    onChangeAuto={(auto) => {
-	                      setDraft((prev) => ({
-                        ...prev,
-                        verticalAirflow: auto ? "auto" : "one",
-                      }));
-	                    }}
-	                    onChangeLevel={(level) => {
-	                      setDraft((prev) => ({
-                        ...prev,
-                        verticalAirflow: level as AirflowLevel,
-                      }));
-                    }}
-                  />
-                </Section>
-
-                <Section>
-                  <HorizontalAirflowSelector
-                    selectedLevel={
-                      draft.horizontalAirflow === "auto"
-                        ? "one"
-                        : (draft.horizontalAirflow as AirflowLevel)
-                    }
-	                    isAuto={draft.horizontalAirflow === "auto"}
-	                    isPowered={true}
-	                    onChangeAuto={(auto) => {
-	                      setDraft((prev) => ({
-                        ...prev,
-                        horizontalAirflow: auto ? "auto" : "one",
-                      }));
-	                    }}
-	                    onChangeLevel={(level) => {
-	                      setDraft((prev) => ({
-                        ...prev,
-                        horizontalAirflow: level as AirflowLevel,
-                      }));
-                    }}
-                  />
-                </Section>
-                </View>
-              </ScrollView>
-            </View>
-
-            {/* footer */}
-            <View style={s.footer}>
-              <AppButton
-                label={saving ? "Saving…" : "Save Schedule"}
-                onPress={() => onSave(draft)}
-                disabled={saving}
-              />
-            </View>
+              {/* footer */}
+              <View style={s.footer}>
+                <AppButton
+                  label={saving ? "Saving…" : "Save Schedule"}
+                  onPress={() => onSave(draft)}
+                  disabled={saving}
+                />
+              </View>
             </SafeAreaView>
           </Animated.View>
         </KeyboardAvoidingView>

@@ -5,3 +5,4 @@
 void initScheduleManager();
 void handleScheduleExecution();
 bool isNtpTimeAvailable();
+void resetScheduleExecutionCursor();
