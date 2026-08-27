@@ -22,6 +22,17 @@ unsigned long pendingIRQueuedAt = 0;
 bool isPaired = false;
 bool pairingMode = true;
 
+AcSchedule acSchedule = {
+  false,                    // valid
+  false,                    // enabled
+  "22:30",                  // startTime
+  "07:30",                  // endTime
+  kPanasonicAcCool,         // mode
+  24,                       // temperature
+  kPanasonicAcSwingVAuto,   // swingVertical
+  kPanasonicAcSwingHAuto    // swingHorizontal
+};
+
 String jsonEscape(const String& value) {
   String escaped;
   escaped.reserve(value.length() + 8);

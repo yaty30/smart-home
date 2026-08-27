@@ -48,6 +48,8 @@ const isAcSchedule = (value: unknown): value is AcSchedule => {
     isScheduleTime(candidate.endTime) &&
     isScheduleMode(candidate.mode) &&
     typeof candidate.temperature === "number" &&
+    (candidate.quiet === undefined || typeof candidate.quiet === "boolean") &&
+    (candidate.powerful === undefined || typeof candidate.powerful === "boolean") &&
     isScheduleAirflow(candidate.horizontalAirflow) &&
     isScheduleAirflow(candidate.verticalAirflow)
   );

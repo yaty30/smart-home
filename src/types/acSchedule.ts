@@ -6,8 +6,12 @@ export type AcSchedule = {
   enabled: boolean;
   startTime: string;
   endTime: string;
+  // Mon–Sun, index 0 = Monday. Not yet persisted to ESP32; defaults to all true.
+  days: boolean[];
   mode: Exclude<AirConditionerMode, "fan">;
   temperature: number;
+  quiet?: boolean;
+  powerful?: boolean;
   horizontalAirflow: ScheduleAirflow;
   verticalAirflow: ScheduleAirflow;
 };

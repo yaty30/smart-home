@@ -2,7 +2,9 @@
 #include "Display.h"
 #include "HttpServer.h"
 #include "Pairing.h"
+#include "ScheduleManager.h"
 #include "StateManager.h"
+#include "StorageManager.h"
 #include "WebSocketServer.h"
 #include "WiFiManager.h"
 
@@ -20,6 +22,7 @@ void setup() {
 
   initHttpServer();
   initWebSocketServer();
+  initScheduleManager();
 }
 
 void loop() {
@@ -28,5 +31,6 @@ void loop() {
   handlePairingButton();
   updateDisplayForWiFi();
   processQueuedIR();
+  handleScheduleExecution();
   delay(1);
 }

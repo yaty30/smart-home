@@ -18,6 +18,10 @@ void initStateManager() {
     Serial.println("Restored state from Preferences");
   }
 
+  if (loadSchedule(acSchedule)) {
+    Serial.println("Restored schedule from Preferences");
+  }
+
   pairingMode = !isPaired;
   if (isPaired) {
     displayState.qrVisible = false;

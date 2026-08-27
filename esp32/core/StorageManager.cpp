@@ -89,3 +89,53 @@ void savePairingState(bool paired) {
   preferences.putUChar("version", STORAGE_VERSION);
   preferences.putBool("paired", paired);
 }
+
+void saveSchedule(const AcSchedule& schedule) {
+  if (!storageReady) {
+    return;
+  }
+
+  preferences.putUChar("version", STORAGE_VERSION);
+  preferences.putBool("sched_valid", schedule.valid);
+  preferences.putBool("sched_enabled", schedule.enabled);
+  preferences.putString("sched_start", schedule.startTime);
+  preferences.putString("sched_end", schedule.endTime);
+  preferences.putUChar("sched_mode", schedule.mode);
+  preferences.putInt("sched_temp", schedule.temperature);
+  preferences.putUChar("sched_swing_v", schedule.swingVertical);
+  preferences.putUChar("sched_swing_h", schedule.swingHorizontal);
+}
+
+void clearSchedule() {
+  if (!storageReady) {
+    return;
+  }
+
+  preferences.putBool("sched_valid", false);
+}
+
+bool loadSchedule(AcSchedule& schedule) {
+  if (!storageReady) {
+    return false;
+  }
+
+  if (!preferences.getBool("sched_valid", false)) {
+    return false;
+  }
+
+  schedule.valid   = true;
+  schedule.enabled = preferences.getBool("sched_enabled", false);
+
+  String start = preferences.getString("sched_start", "22:30");
+  String end   = preferences.getString("sched_end",   "07:30");
+  strncpy(schedule.startTime, start.c_str(), 5);
+  schedule.startTime[5] = '\0';
+  strncpy(schedule.endTime, end.c_str(), 5);
+  schedule.endTime[5] = '\0';
+
+  schedule.mode           = preferences.getUChar("sched_mode", kPanasonicAcCool);
+  schedule.temperature    = preferences.getInt("sched_temp", 24);
+  schedule.swingVertical  = preferences.getUChar("sched_swing_v", kPanasonicAcSwingVAuto);
+  schedule.swingHorizontal = preferences.getUChar("sched_swing_h", kPanasonicAcSwingHAuto);
+  return true;
+}

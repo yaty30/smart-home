@@ -1,11 +1,6 @@
 import * as Haptics from "expo-haptics";
-import DateTimePicker, {
-  type DateTimePickerEvent,
-} from "@react-native-community/datetimepicker";
 import {
   AirVent,
-  ChevronDown,
-  Clock,
   ClockFading,
   Ellipsis,
   Moon,
@@ -16,14 +11,10 @@ import {
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Animated,
-  Modal,
   type NativeScrollEvent,
   type NativeSyntheticEvent,
-  Platform,
-  Pressable,
   ScrollView,
   StyleSheet,
-  Switch,
   Text,
   TouchableOpacity,
   useWindowDimensions,
@@ -48,10 +39,14 @@ import {
 import { Section } from "../components/Section";
 import { useDeviceConnection } from "../context/DeviceConnectionContext";
 import {
+  getAcScheduleFromDevice,
+  putAcScheduleToDevice,
+} from "../api/acScheduleApi";
+import {
   getAcSchedule,
-  removeAcSchedule,
   saveAcSchedule,
 } from "../storage/acScheduleStorage";
+import { AcScheduleSheet } from "../components/AcScheduleSheet";
 import { theme } from "../theme/theme";
 import type { AcSchedule, ScheduleAirflow } from "../types/acSchedule";
 import type {
@@ -126,18 +121,6 @@ const espPositionToAirflowLevel: Record<
 
 const DEVICE_COMMAND_TIMEOUT_MS = 1500;
 const TEMPERATURE_COMMAND_DEBOUNCE_MS = 400;
-type TimeField = "start" | "end";
-type SchedulerViewState = "empty" | "summary" | "editor" | "confirmDelete";
-
-const defaultSchedule: AcSchedule = {
-  enabled: true,
-  endTime: "07:30",
-  horizontalAirflow: "auto",
-  mode: "cold",
-  startTime: "22:30",
-  temperature: 24,
-  verticalAirflow: "auto",
-};
 
 const modePills: { id: AirConditionerMode; label: string }[] = [
   { id: "auto", label: "Auto" },
@@ -227,20 +210,14 @@ export function AirConditionerScreen({
   const [powerful, setPowerful] = useState(false);
   const [qrVisible, setQrVisible] = useState(false);
   const [isAdjustingTemperature, setIsAdjustingTemperature] = useState(false);
-  const [savedSchedule, setSavedSchedule] = useState<AcSchedule | null>(null);
-  const [draftSchedule, setDraftSchedule] = useState<AcSchedule | null>(null);
-  const [schedulerViewState, setSchedulerViewState] =
-    useState<SchedulerViewState>("empty");
-  const [scheduleValidationError, setScheduleValidationError] = useState<
-    string | null
-  >(null);
-  const [activeTimePicker, setActiveTimePicker] = useState<TimeField | null>(
-    null,
-  );
+  const [isScheduleSheetVisible, setIsScheduleSheetVisible] = useState(false);
+  const [isScheduleLoading, setIsScheduleLoading] = useState(false);
+  const [schedule, setSchedule] = useState<AcSchedule | null>(null);
   const [isHeaderScrolled, setIsHeaderScrolled] = useState(false);
   const latestTemperature = useRef(temperature);
   const latestFanSpeed = useRef<FanSpeed>(fanSpeed);
   const latestHeaderScrolled = useRef(false);
+  const scheduleMutationVersion = useRef(0);
   const temperatureCommandTimer = useRef<ReturnType<typeof setTimeout> | null>(
     null,
   );
@@ -256,9 +233,6 @@ export function AirConditionerScreen({
   const temperatureRange = useMemo(() => {
     return temperatureRangeForMode(mode);
   }, [mode]);
-  const scheduleTemperatureRange = useMemo(() => {
-    return temperatureRangeForMode(draftSchedule?.mode ?? "cold");
-  }, [draftSchedule?.mode]);
   const canControlDevice =
     isDeviceConnected && pairedDevice !== null && deviceState !== null;
   const liveControlsEnabled = canControlDevice && power;
@@ -276,6 +250,44 @@ export function AirConditionerScreen({
     return "Device offline";
   }, [deviceConnectionStatus, deviceState]);
 
+  const scheduleDeviceKey =
+    pairedDevice === null ? null : `${pairedDevice.host}|${pairedDevice.token}`;
+
+  useEffect(() => {
+    if (pairedDevice === null) {
+      setSchedule(null);
+      setIsScheduleLoading(false);
+      return;
+    }
+
+    let cancelled = false;
+    const loadVersion = scheduleMutationVersion.current;
+    setIsScheduleLoading(true);
+
+    const loadSchedule = debugMode
+      ? getAcSchedule(pairedDevice)
+      : getAcScheduleFromDevice(pairedDevice);
+
+    void loadSchedule
+      .then((fetchedSchedule) => {
+        if (cancelled || scheduleMutationVersion.current !== loadVersion) return;
+        setSchedule(fetchedSchedule);
+      })
+      .catch(() => {
+        if (cancelled || scheduleMutationVersion.current !== loadVersion) return;
+        setSchedule(null);
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setIsScheduleLoading(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [debugMode, scheduleDeviceKey]);
+
   useEffect(() => {
     Animated.timing(controlEnabledProgress, {
       duration: 220,
@@ -290,37 +302,6 @@ export function AirConditionerScreen({
       outputRange: [0.52, 1],
     }),
   };
-
-  useEffect(() => {
-    let isMounted = true;
-
-    const loadSchedule = async () => {
-      if (pairedDevice === null) {
-        setSavedSchedule(null);
-        setDraftSchedule(null);
-        setSchedulerViewState("empty");
-        return;
-      }
-
-      const storedSchedule = await getAcSchedule(pairedDevice);
-
-      if (!isMounted) {
-        return;
-      }
-
-      setSavedSchedule(storedSchedule);
-      setDraftSchedule(null);
-      setScheduleValidationError(null);
-      setActiveTimePicker(null);
-      setSchedulerViewState(storedSchedule === null ? "empty" : "summary");
-    };
-
-    void loadSchedule();
-
-    return () => {
-      isMounted = false;
-    };
-  }, [pairedDevice]);
 
   useEffect(() => {
     if (deviceState === null) {
@@ -943,170 +924,6 @@ export function AirConditionerScreen({
     ],
   );
 
-  const handleScheduleTemperatureChange = useCallback(
-    (nextTemperature: number) => {
-      setDraftSchedule((currentDraft) => {
-        if (currentDraft === null) {
-          return currentDraft;
-        }
-
-        return {
-          ...currentDraft,
-          temperature: normalizeTemperature(
-            nextTemperature,
-            scheduleTemperatureRange.min,
-            scheduleTemperatureRange.max,
-          ),
-        };
-      });
-    },
-    [scheduleTemperatureRange.max, scheduleTemperatureRange.min],
-  );
-
-  const handleScheduleModeChange = useCallback(
-    (nextMode: AirConditionerMode) => {
-      if (nextMode === "fan") {
-        return;
-      }
-
-      const nextRange = temperatureRangeForMode(nextMode);
-      triggerPressHaptic();
-      setDraftSchedule((currentDraft) => {
-        if (currentDraft === null) {
-          return currentDraft;
-        }
-
-        return {
-          ...currentDraft,
-          mode: nextMode,
-          temperature: normalizeTemperature(
-            currentDraft.temperature,
-            nextRange.min,
-            nextRange.max,
-          ),
-        };
-      });
-    },
-    [triggerPressHaptic],
-  );
-
-  const handleScheduleTimeChange = useCallback(
-    (field: TimeField, event: DateTimePickerEvent, selectedDate?: Date) => {
-      if (Platform.OS !== "ios") {
-        setActiveTimePicker(null);
-      }
-
-      if (event.type === "dismissed" || selectedDate === undefined) {
-        return;
-      }
-
-      setScheduleValidationError(null);
-      setDraftSchedule((currentDraft) => {
-        if (currentDraft === null) {
-          return currentDraft;
-        }
-
-        return {
-          ...currentDraft,
-          [field === "start" ? "startTime" : "endTime"]:
-            timeStringFromDate(selectedDate),
-        };
-      });
-    },
-    [],
-  );
-
-  const handleCreateSchedule = useCallback(() => {
-    triggerPressHaptic();
-    setDraftSchedule(defaultSchedule);
-    setScheduleValidationError(null);
-    setSchedulerViewState("editor");
-  }, [triggerPressHaptic]);
-
-  const handleEditSchedule = useCallback(() => {
-    if (savedSchedule === null) {
-      return;
-    }
-
-    triggerPressHaptic();
-    setDraftSchedule({ ...savedSchedule });
-    setScheduleValidationError(null);
-    setSchedulerViewState("editor");
-  }, [savedSchedule, triggerPressHaptic]);
-
-  const handleCancelScheduleEditing = useCallback(() => {
-    triggerPressHaptic();
-    setDraftSchedule(null);
-    setScheduleValidationError(null);
-    setActiveTimePicker(null);
-    setSchedulerViewState(savedSchedule === null ? "empty" : "summary");
-  }, [savedSchedule, triggerPressHaptic]);
-
-  const handleSaveSchedule = useCallback(async () => {
-    if (draftSchedule === null) {
-      return;
-    }
-
-    if (draftSchedule.startTime === draftSchedule.endTime) {
-      setScheduleValidationError("Start and end time cannot be the same.");
-      return;
-    }
-
-    if (pairedDevice === null) {
-      setScheduleValidationError("Device is not available.");
-      return;
-    }
-
-    triggerPressHaptic();
-    await saveAcSchedule(pairedDevice, draftSchedule);
-    setSavedSchedule(draftSchedule);
-    setDraftSchedule(null);
-    setScheduleValidationError(null);
-    setActiveTimePicker(null);
-    setSchedulerViewState("summary");
-  }, [draftSchedule, pairedDevice, triggerPressHaptic]);
-
-  const handleToggleScheduleEnabled = useCallback(
-    async (nextEnabled: boolean) => {
-      if (savedSchedule === null || pairedDevice === null) {
-        return;
-      }
-
-      triggerPressHaptic();
-      const nextSchedule = {
-        ...savedSchedule,
-        enabled: nextEnabled,
-      };
-      await saveAcSchedule(pairedDevice, nextSchedule);
-      setSavedSchedule(nextSchedule);
-    },
-    [pairedDevice, savedSchedule, triggerPressHaptic],
-  );
-
-  const handleRequestDeleteSchedule = useCallback(() => {
-    triggerPressHaptic();
-    setSchedulerViewState("confirmDelete");
-  }, [triggerPressHaptic]);
-
-  const handleCancelDeleteSchedule = useCallback(() => {
-    triggerPressHaptic();
-    setSchedulerViewState(savedSchedule === null ? "empty" : "summary");
-  }, [savedSchedule, triggerPressHaptic]);
-
-  const handleDeleteSchedule = useCallback(async () => {
-    if (pairedDevice === null) {
-      return;
-    }
-
-    triggerPressHaptic();
-    await removeAcSchedule(pairedDevice);
-    setSavedSchedule(null);
-    setDraftSchedule(null);
-    setScheduleValidationError(null);
-    setActiveTimePicker(null);
-    setSchedulerViewState("empty");
-  }, [pairedDevice, triggerPressHaptic]);
-
   const handleScroll = useCallback(
     (event: NativeSyntheticEvent<NativeScrollEvent>) => {
       const nextIsHeaderScrolled = event.nativeEvent.contentOffset.y > 0;
@@ -1119,6 +936,51 @@ export function AirConditionerScreen({
       setIsHeaderScrolled(nextIsHeaderScrolled);
     },
     [],
+  );
+
+  const handleSaveSchedule = useCallback(
+    async (nextSchedule: AcSchedule) => {
+      if (pairedDevice === null) {
+        throw new Error("No paired device available for schedule");
+      }
+
+      scheduleMutationVersion.current += 1;
+
+      if (debugMode) {
+        await saveAcSchedule(pairedDevice, nextSchedule);
+        setSchedule(nextSchedule);
+        return;
+      }
+
+      const savedSchedule = await putAcScheduleToDevice(
+        pairedDevice,
+        nextSchedule,
+      );
+      const scheduleWithDays = {
+        ...savedSchedule,
+        days: nextSchedule.days,
+        powerful: nextSchedule.powerful,
+        quiet: nextSchedule.quiet,
+      };
+
+      setSchedule(scheduleWithDays);
+      void saveAcSchedule(pairedDevice, scheduleWithDays).catch(() => {});
+    },
+    [debugMode, pairedDevice],
+  );
+
+  const handleToggleScheduleEnabled = useCallback(
+    async (enabled: boolean) => {
+      if (schedule === null) {
+        return;
+      }
+
+      await handleSaveSchedule({
+        ...schedule,
+        enabled,
+      });
+    },
+    [handleSaveSchedule, schedule],
   );
 
   return (
@@ -1140,14 +1002,14 @@ export function AirConditionerScreen({
           rightAccessory={
             <View style={{ display: 'flex', flexDirection: 'row', gap: theme.spacing.md }}>
               <HeaderIconButton
-                accessibilityLabel="Add room"
+                accessibilityLabel="Schedule"
                 framed
-                onPress={() => {} }
+                onPress={() => setIsScheduleSheetVisible(true)}
               >
                 <ClockFading color={theme.accent} size={24} strokeWidth={2.6} />
               </HeaderIconButton>
               <HeaderIconButton
-                accessibilityLabel="Add room"
+                accessibilityLabel="More options"
                 framed
                 onPress={() => {} }
               >
@@ -1329,351 +1191,18 @@ export function AirConditionerScreen({
 
           <View style={styles.scheduleTitleRow}>
             <Text style={styles.sectionTitle}>Schedule</Text>
-            {savedSchedule !== null && schedulerViewState !== "editor" ? (
-              <Switch
-                accessibilityLabel="Toggle AC schedule"
-                ios_backgroundColor={theme.controlBackground}
-                onValueChange={handleToggleScheduleEnabled}
-                thumbColor={
-                  savedSchedule.enabled ? theme.accent : theme.textSecondary
-                }
-                trackColor={{
-                  false: theme.controlBackgroundPressed,
-                  true: theme.accentMuted,
-                }}
-                value={savedSchedule.enabled}
-              />
-            ) : null}
           </View>
-
-          {schedulerViewState === "empty" ? (
-            <Section style={styles.emptyScheduleCard}>
-              <Text style={styles.cardTitle}>No schedule</Text>
-              <Text style={styles.cardSubtitle}>
-                This AC can have one automatic schedule.
-              </Text>
-            </Section>
-          ) : null}
-
-          {schedulerViewState === "summary" && savedSchedule !== null ? (
-            <Section>
-              <Text style={styles.cardSubtitle}>
-                {savedSchedule.enabled ? "Runs every day" : "Schedule paused"}
-              </Text>
-
-              <View style={styles.timeGrid}>
-                {(["start", "end"] as const).map((field) => (
-                  <TouchableOpacity
-                    activeOpacity={0.78}
-                    accessibilityRole="button"
-                    key={field}
-                    onPress={() => {
-                      handleEditSchedule();
-                      setActiveTimePicker(field);
-                    }}
-                    style={styles.summaryTimeField}
-                  >
-                    <Text style={styles.timeLabel}>
-                      {field === "start" ? "Start at" : "End at"}
-                    </Text>
-                    <View style={styles.summaryTimeValueRow}>
-                      <Text style={styles.summaryTimeValue}>
-                        {formatTime12h(
-                          field === "start"
-                            ? savedSchedule.startTime
-                            : savedSchedule.endTime,
-                        )}
-                      </Text>
-                      <ChevronDown
-                        color={theme.textSecondary}
-                        size={17}
-                        strokeWidth={2.4}
-                      />
-                    </View>
-                  </TouchableOpacity>
-                ))}
-              </View>
-
-              <View style={styles.summaryRows}>
-                <View style={styles.summaryRow}>
-                  <Text style={styles.summaryLabel}>Temperature</Text>
-                  <Text style={styles.summaryValue}>
-                    {savedSchedule.temperature}°C
-                  </Text>
-                </View>
-                <View style={styles.summaryRow}>
-                  <Text style={styles.summaryLabel}>Mode</Text>
-                  <Text style={styles.summaryValue}>
-                    {displayMode(savedSchedule.mode)}
-                  </Text>
-                </View>
-                <View style={styles.summaryRow}>
-                  <Text style={styles.summaryLabel}>Horizontal</Text>
-                  <Text style={styles.summaryValue}>
-                    {displayAirflow(savedSchedule.horizontalAirflow)}
-                  </Text>
-                </View>
-                <View style={styles.summaryRow}>
-                  <Text style={styles.summaryLabel}>Vertical</Text>
-                  <Text style={styles.summaryValue}>
-                    {displayAirflow(savedSchedule.verticalAirflow)}
-                  </Text>
-                </View>
-              </View>
-
-              <View style={styles.scheduleActionRow}>
-                <AppButton
-                  label="Edit Schedule"
-                  onPress={handleEditSchedule}
-                  style={styles.actionButton}
-                  variant="secondary"
-                />
-                <AppButton
-                  label="Delete"
-                  onPress={handleRequestDeleteSchedule}
-                  style={styles.actionButton}
-                  variant="danger"
-                />
-              </View>
-            </Section>
-          ) : null}
-
-          {schedulerViewState === "confirmDelete" ? (
-            <Section>
-              <Text style={styles.cardTitle}>Delete schedule?</Text>
-              <Text style={styles.cardSubtitle}>
-                This will remove the AC schedule. The current AC state will not
-                be changed.
-              </Text>
-              <View style={styles.scheduleActionRow}>
-                <AppButton
-                  label="Cancel"
-                  onPress={handleCancelDeleteSchedule}
-                  style={styles.actionButton}
-                  variant="secondary"
-                />
-                <AppButton
-                  label="Delete"
-                  onPress={handleDeleteSchedule}
-                  style={styles.actionButton}
-                  variant="destructive"
-                />
-              </View>
-            </Section>
-          ) : null}
-
-          {schedulerViewState === "editor" && draftSchedule !== null ? (
-            <>
-              <Section>
-                <Text style={styles.cardTitle}>
-                  {savedSchedule === null ? "Create schedule" : "Edit schedule"}
-                </Text>
-                <Text style={styles.cardSubtitle}>
-                  Save changes to make this automatic schedule active.
-                </Text>
-              </Section>
-
-              <Section>
-                <Text style={styles.cardTitle}>Time</Text>
-                <View style={styles.timeGrid}>
-                  {(["start", "end"] as const).map((field) => (
-                    <View key={field} style={styles.timeField}>
-                      <Text style={styles.timeLabel}>
-                        {field === "start" ? "Start" : "End"}
-                      </Text>
-                      <TouchableOpacity
-                        activeOpacity={0.78}
-                        accessibilityRole="button"
-                        onPress={() => setActiveTimePicker(field)}
-                        style={styles.timeButton}
-                      >
-                        <Text style={styles.timeValue}>
-                          {field === "start"
-                            ? draftSchedule.startTime
-                            : draftSchedule.endTime}
-                        </Text>
-                        <Clock color={theme.text} size={20} strokeWidth={2.3} />
-                      </TouchableOpacity>
-                    </View>
-                  ))}
-                </View>
-                {scheduleValidationError ? (
-                  <Text style={styles.validationText}>
-                    {scheduleValidationError}
-                  </Text>
-                ) : null}
-                {activeTimePicker && Platform.OS !== "ios" ? (
-                  <DateTimePicker
-                    display="default"
-                    mode="time"
-                    onChange={(event, selectedDate) =>
-                      handleScheduleTimeChange(
-                        activeTimePicker,
-                        event,
-                        selectedDate,
-                      )
-                    }
-                    value={dateFromTimeString(
-                      activeTimePicker === "start"
-                        ? draftSchedule.startTime
-                        : draftSchedule.endTime,
-                    )}
-                  />
-                ) : null}
-              </Section>
-
-              <Section>
-                <ArcTemperatureGauge
-                  isPowered
-                  maxTemperature={scheduleTemperatureRange.max}
-                  minTemperature={scheduleTemperatureRange.min}
-                  onChangeTemperature={handleScheduleTemperatureChange}
-                  size={gaugeSize}
-                  temperature={draftSchedule.temperature}
-                />
-              </Section>
-
-              <Section>
-                <ModeSelector
-                  isPowered
-                  onChangeMode={handleScheduleModeChange}
-                  selectedMode={draftSchedule.mode}
-                />
-              </Section>
-
-              <Section style={styles.airflowCard}>
-                <HorizontalAirflowSelector
-                  isAuto={draftSchedule.horizontalAirflow === "auto"}
-                  isPowered
-                  onChangeAuto={(nextAuto) => {
-                    if (!nextAuto) {
-                      return;
-                    }
-
-                    setDraftSchedule((currentDraft) =>
-                      currentDraft === null
-                        ? currentDraft
-                        : { ...currentDraft, horizontalAirflow: "auto" },
-                    );
-                  }}
-                  onChangeLevel={(nextLevel) => {
-                    setDraftSchedule((currentDraft) =>
-                      currentDraft === null
-                        ? currentDraft
-                        : {
-                          ...currentDraft,
-                          horizontalAirflow: nextLevel,
-                        },
-                    );
-                  }}
-                  selectedLevel={
-                    draftSchedule.horizontalAirflow === "auto"
-                      ? "three"
-                      : draftSchedule.horizontalAirflow
-                  }
-                />
-                <VerticalAirflowSelector
-                  isAuto={draftSchedule.verticalAirflow === "auto"}
-                  isPowered
-                  onChangeAuto={(nextAuto) => {
-                    if (!nextAuto) {
-                      return;
-                    }
-
-                    setDraftSchedule((currentDraft) =>
-                      currentDraft === null
-                        ? currentDraft
-                        : { ...currentDraft, verticalAirflow: "auto" },
-                    );
-                  }}
-                  onChangeLevel={(nextLevel) => {
-                    setDraftSchedule((currentDraft) =>
-                      currentDraft === null
-                        ? currentDraft
-                        : {
-                          ...currentDraft,
-                          verticalAirflow: nextLevel,
-                        },
-                    );
-                  }}
-                  selectedLevel={
-                    draftSchedule.verticalAirflow === "auto"
-                      ? "one"
-                      : draftSchedule.verticalAirflow
-                  }
-                />
-              </Section>
-
-              <View style={styles.scheduleActionRow}>
-                <AppButton
-                  label="Cancel"
-                  onPress={handleCancelScheduleEditing}
-                  style={styles.actionButton}
-                  variant="secondary"
-                />
-                <AppButton
-                  label="Save Schedule"
-                  onPress={handleSaveSchedule}
-                  style={styles.actionButton}
-                  vibe="strong"
-                />
-              </View>
-            </>
-          ) : null}
-
-          {/* {isDeviceConnected && deviceState?.display.pairingMode !== true ? (
-            <Section>
-              <DisplayControls
-                canControlQr
-                isDisabled={!canControlDevice}
-                onChangeQrVisible={handleQrVisibilityChange}
-                qrVisible={qrVisible}
-              />
-            </Section>
-          ) : null} */}
         </View>
       </ScrollView>
 
-      {activeTimePicker && Platform.OS === "ios" && draftSchedule !== null ? (
-        <Modal
-          animationType="fade"
-          transparent
-          visible
-          onRequestClose={() => setActiveTimePicker(null)}
-        >
-          <Pressable
-            accessibilityRole="button"
-            onPress={() => setActiveTimePicker(null)}
-            style={styles.timePickerBackdrop}
-          >
-            <Pressable
-              onPress={(event) => event.stopPropagation()}
-              style={styles.timePickerPanel}
-            >
-              <DateTimePicker
-                display="spinner"
-                locale="en_US"
-                mode="time"
-                onChange={(event, selectedDate) =>
-                  handleScheduleTimeChange(
-                    activeTimePicker,
-                    event,
-                    selectedDate,
-                  )
-                }
-                value={dateFromTimeString(
-                  activeTimePicker === "start"
-                    ? draftSchedule.startTime
-                    : draftSchedule.endTime,
-                )}
-                textColor={theme.text}
-                themeVariant="dark"
-                style={styles.timePicker}
-              />
-            </Pressable>
-          </Pressable>
-        </Modal>
-      ) : null}
+      <AcScheduleSheet
+        loading={isScheduleLoading}
+        onClose={() => setIsScheduleSheetVisible(false)}
+        onSaveSchedule={handleSaveSchedule}
+        onToggleScheduleEnabled={handleToggleScheduleEnabled}
+        schedule={schedule}
+        visible={isScheduleSheetVisible}
+      />
     </ScreenView>
   );
 }

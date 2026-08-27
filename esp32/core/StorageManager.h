@@ -7,3 +7,6 @@ bool loadStoredState(AcState& storedAcState, DisplayState& storedDisplayState, b
 void saveACState(const AcState& state);
 void saveDisplayState(const DisplayState& state);
 void savePairingState(bool paired);
+void saveSchedule(const AcSchedule& schedule);
+void clearSchedule();
+bool loadSchedule(AcSchedule& schedule);

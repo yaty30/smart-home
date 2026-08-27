@@ -19,8 +19,20 @@ struct DisplayState {
   bool qrVisible;
 };
 
+struct AcSchedule {
+  bool valid;
+  bool enabled;
+  char startTime[6];    // "HH:MM"
+  char endTime[6];      // "HH:MM"
+  uint8_t mode;
+  int temperature;
+  uint8_t swingVertical;
+  uint8_t swingHorizontal;
+};
+
 extern AcState acState;
 extern DisplayState displayState;
+extern AcSchedule acSchedule;
 extern bool pendingIR;
 extern AcState pendingState;
 extern unsigned long pendingIRQueuedAt;

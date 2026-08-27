@@ -6,8 +6,10 @@
 #include "Config.h"
 #include "Display.h"
 #include "Pairing.h"
+#include "ScheduleManager.h"
 #include "State.h"
 #include "StateManager.h"
+#include "StorageManager.h"
 #include "WebSocketServer.h"
 #include "WiFiManager.h"
 
@@ -419,10 +421,178 @@ void handleDynamicRoute() {
   sendNotFound();
 }
 
+// ─── Schedule helpers ──────────────────────────────────────────────────────────
+
+static bool isValidTimeString(const String& t) {
+  // Expects "HH:MM", 5 chars, digits and colon only
+  if (t.length() != 5 || t[2] != ':') {
+    return false;
+  }
+  for (int i = 0; i < 5; i++) {
+    if (i == 2) {
+      continue;
+    }
+    if (!isDigit(t[i])) {
+      return false;
+    }
+  }
+  int h = t.substring(0, 2).toInt();
+  int m = t.substring(3, 5).toInt();
+  return h >= 0 && h <= 23 && m >= 0 && m <= 59;
+}
+
+static String scheduleJson(const AcSchedule& s) {
+  String body = "{";
+  body += "\"enabled\":" + boolString(s.enabled) + ",";
+  body += "\"startTime\":\"" + String(s.startTime) + "\",";
+  body += "\"endTime\":\"" + String(s.endTime) + "\",";
+  body += "\"mode\":\"" + modeString(s.mode) + "\",";
+  body += "\"temperature\":" + String(s.temperature) + ",";
+  body += "\"swingVertical\":\"" + swingVerticalString(s.swingVertical) + "\",";
+  body += "\"swingHorizontal\":\"" + swingHorizontalString(s.swingHorizontal) + "\"";
+  body += "}";
+  return body;
+}
+
+void handleGetSchedule() {
+  logRequestContent("handleGetSchedule");
+
+  if (!acSchedule.valid) {
+    sendJson(404, "{\"success\":false,\"error\":\"No schedule set\"}");
+    return;
+  }
+
+  String body = "{\"success\":true,\"schedule\":" + scheduleJson(acSchedule) + "}";
+  sendJson(200, body);
+}
+
+void handlePutSchedule() {
+  logRequestContent("handlePutSchedule");
+
+  if (!server.hasArg("plain")) {
+    sendJson(400, "{\"success\":false,\"error\":\"JSON body required\"}");
+    return;
+  }
+
+  // Minimal JSON field extraction — avoids pulling in ArduinoJson
+  String body = server.arg("plain");
+
+  auto extractStr = [&](const char* key) -> String {
+    String search = "\"" + String(key) + "\"";
+    int pos = body.indexOf(search);
+    if (pos < 0) return "";
+    int colon = body.indexOf(':', pos + search.length());
+    if (colon < 0) return "";
+    int quote1 = body.indexOf('"', colon + 1);
+    if (quote1 < 0) return "";
+    int quote2 = body.indexOf('"', quote1 + 1);
+    if (quote2 < 0) return "";
+    return body.substring(quote1 + 1, quote2);
+  };
+
+  auto extractBool = [&](const char* key, bool fallback) -> bool {
+    String search = "\"" + String(key) + "\"";
+    int pos = body.indexOf(search);
+    if (pos < 0) return fallback;
+    int colon = body.indexOf(':', pos + search.length());
+    if (colon < 0) return fallback;
+    int start = colon + 1;
+    while (start < (int)body.length() && body[start] == ' ') start++;
+    if (body.substring(start, start + 4) == "true") return true;
+    if (body.substring(start, start + 5) == "false") return false;
+    return fallback;
+  };
+
+  auto extractInt = [&](const char* key, int fallback) -> int {
+    String search = "\"" + String(key) + "\"";
+    int pos = body.indexOf(search);
+    if (pos < 0) return fallback;
+    int colon = body.indexOf(':', pos + search.length());
+    if (colon < 0) return fallback;
+    int start = colon + 1;
+    while (start < (int)body.length() && body[start] == ' ') start++;
+    return body.substring(start).toInt();
+  };
+
+  String startTime = extractStr("startTime");
+  String endTime   = extractStr("endTime");
+  String modeStr   = extractStr("mode");
+  int temperature  = extractInt("temperature", -1);
+  String swingV    = extractStr("swingVertical");
+  String swingH    = extractStr("swingHorizontal");
+  bool enabled     = extractBool("enabled", true);
+
+  if (!isValidTimeString(startTime)) {
+    sendJson(400, "{\"success\":false,\"error\":\"Invalid or missing startTime (HH:MM)\"}");
+    return;
+  }
+  if (!isValidTimeString(endTime)) {
+    sendJson(400, "{\"success\":false,\"error\":\"Invalid or missing endTime (HH:MM)\"}");
+    return;
+  }
+  if (startTime == endTime) {
+    sendJson(400, "{\"success\":false,\"error\":\"startTime and endTime cannot be the same\"}");
+    return;
+  }
+
+  uint8_t nextMode;
+  if (!parseMode(modeStr, nextMode) || nextMode == kPanasonicAcFan) {
+    sendJson(400, "{\"success\":false,\"error\":\"Invalid mode (auto|cool|dry|heat)\"}");
+    return;
+  }
+
+  int nextTemp;
+  if (!parseTemperatureValue(temperature, nextTemp)) {
+    sendJson(400, "{\"success\":false,\"error\":\"Invalid temperature (16-30)\"}");
+    return;
+  }
+
+  uint8_t nextSwingV = kPanasonicAcSwingVAuto;
+  if (swingV.length() > 0 && !parseSwingVertical(swingV, nextSwingV)) {
+    sendJson(400, "{\"success\":false,\"error\":\"Invalid swingVertical\"}");
+    return;
+  }
+
+  uint8_t nextSwingH = kPanasonicAcSwingHAuto;
+  if (swingH.length() > 0 && !parseSwingHorizontal(swingH, nextSwingH)) {
+    sendJson(400, "{\"success\":false,\"error\":\"Invalid swingHorizontal\"}");
+    return;
+  }
+
+  acSchedule.valid    = true;
+  acSchedule.enabled  = enabled;
+  strncpy(acSchedule.startTime, startTime.c_str(), 5);
+  acSchedule.startTime[5] = '\0';
+  strncpy(acSchedule.endTime, endTime.c_str(), 5);
+  acSchedule.endTime[5] = '\0';
+  acSchedule.mode            = nextMode;
+  acSchedule.temperature     = nextTemp;
+  acSchedule.swingVertical   = nextSwingV;
+  acSchedule.swingHorizontal = nextSwingH;
+
+  saveSchedule(acSchedule);
+
+  String respBody = "{\"success\":true,\"schedule\":" + scheduleJson(acSchedule) + "}";
+  sendJson(200, respBody);
+}
+
+void handleDeleteSchedule() {
+  logRequestContent("handleDeleteSchedule");
+
+  acSchedule.valid   = false;
+  acSchedule.enabled = false;
+  clearSchedule();
+
+  sendJson(200, "{\"success\":true}");
+}
+
 void setupRoutes() {
   server.on("/", HTTP_GET, handleRoot);
   server.on("/status", HTTP_GET, handleStatus);
   server.on("/ac", HTTP_GET, handleAC);
+  server.on("/ac/schedule", HTTP_GET, handleGetSchedule);
+  server.on("/ac/schedule", HTTP_PUT, handlePutSchedule);
+  server.on("/ac/schedule", HTTP_DELETE, handleDeleteSchedule);
   server.on("/pair/complete", HTTP_POST, handlePairComplete);
   server.on("/power/on", HTTP_GET, handlePowerOn);
   server.on("/power/off", HTTP_GET, handlePowerOff);

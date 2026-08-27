@@ -63,9 +63,9 @@ function HeroCard({ device, onOpenControl }: HeroCardProps) {
         <View style={heroStyles.nameLine}>
           <View style={{ display: 'flex', flexDirection: 'row', gap: 6 }}>
             <Star size={14} color={theme.accent} fill={theme.accent} style={heroStyles.starIcon} />
-            <Text style={{...heroStyles.label, color: theme.accentGlow}} numberOfLines={1}>{room}</Text>
+            <Text style={{ ...heroStyles.label, color: theme.accentGlow }} numberOfLines={1}>{room}</Text>
           </View>
-          <Text style={{...heroStyles.label, fontSize: 22}} numberOfLines={1}>{device.name}</Text>
+          <Text style={{ ...heroStyles.label, fontSize: 22 }} numberOfLines={1}>{device.name}</Text>
         </View>
         <View style={[heroStyles.powerBadge, isOn ? heroStyles.powerBadgeOn : heroStyles.powerBadgeOff]}>
           <Text style={[heroStyles.powerBadgeText, isOn ? heroStyles.powerBadgeTextOn : heroStyles.powerBadgeTextOff]}>
@@ -419,9 +419,8 @@ export function HomeScreen({ navigation }: MainTabScreenProps) {
             <Text style={styles.sectionTitle}>Devices</Text>
             <View style={styles.grid}>
               {visibleDevices.map((device) => (
-                <View style={styles.gridItem}>
+                <View style={styles.gridItem} key={device.id}>
                   <DeviceCard
-                    key={device.id}
                     device={device}
                     onPress={() => navigation.navigate('DeviceControl', { deviceId: device.id })}
                   />
