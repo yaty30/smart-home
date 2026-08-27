@@ -29,7 +29,6 @@ import { RoomsProvider } from "./src/store/rooms";
 import { DevicesProvider } from "./src/store/devices";
 import { ControllersProvider } from "./src/store/controllers";
 
-const DEBUG_MODE = true;
 const NAV_HIDE_ANIMATION_MS = 220;
 const SCREEN_SLIDE_ANIMATION_MS = 260;
 

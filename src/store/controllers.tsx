@@ -1,6 +1,8 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { createContext, type PropsWithChildren, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import type { Controller } from '../domain/controller';
+import { isDebugMode } from '../config/debug';
+import { DEBUG_CONTROLLERS } from './debugData';
 
 type ControllersContextValue = {
   controllers: Controller[];
@@ -34,10 +36,16 @@ const isControllerArray = (value: unknown): value is Controller[] => {
 };
 
 export function ControllersProvider({ children }: PropsWithChildren) {
-  const [controllers, setControllers] = useState<Controller[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const [controllers, setControllers] = useState<Controller[]>(
+    isDebugMode ? DEBUG_CONTROLLERS : []
+  );
+  const [isLoading, setIsLoading] = useState(!isDebugMode);
 
   useEffect(() => {
+    if (isDebugMode) {
+      return undefined;
+    }
+
     let isMounted = true;
 
     const loadControllers = async () => {
@@ -66,6 +74,10 @@ export function ControllersProvider({ children }: PropsWithChildren) {
   }, []);
 
   const persistControllers = useCallback(async (controllersToSave: Controller[]) => {
+    if (isDebugMode) {
+      return;
+    }
+
     try {
       await AsyncStorage.setItem(CONTROLLERS_STORAGE_KEY, JSON.stringify(controllersToSave));
     } catch (error) {

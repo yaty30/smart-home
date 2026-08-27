@@ -7,6 +7,7 @@ import { AirConditionerScreen } from './AirConditionerScreen';
 import { useEffect } from 'react';
 import { deviceService } from '../services/deviceService';
 import { DeviceConnectionProvider } from '../context/DeviceConnectionContext';
+import { isDebugMode } from '../config/debug';
 
 type DeviceControlScreenProps = RootStackScreenProps<'DeviceControl'>;
 
@@ -40,7 +41,7 @@ export function DeviceControlScreen({ navigation, route }: DeviceControlScreenPr
 
   if (device.type === 'ac') {
     return (
-      <DeviceConnectionProvider deviceId={deviceId} debugMode={false}>
+      <DeviceConnectionProvider deviceId={deviceId} debugMode={isDebugMode}>
         <AirConditionerScreen
           deviceId={deviceId}
           onBackPress={() => navigation.goBack()}

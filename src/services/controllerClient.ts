@@ -1,5 +1,6 @@
 import type { Controller } from '../domain/controller';
 import type { Device } from '../domain/device';
+import { isDebugMode } from '../config/debug';
 
 export type DeviceCommand = {
   type: string;
@@ -15,6 +16,13 @@ export class ControllerClient {
     device: Device,
     command: DeviceCommand
   ): Promise<boolean> {
+    if (isDebugMode) {
+      console.log(
+        `[ControllerClient] Debug command simulated for ${controller.name} (${device.name}): ${command.type}`
+      );
+      return true;
+    }
+
     if (!controller.online) {
       console.log(
         `[ControllerClient] Command dropped: controller ${controller.name} is offline`
@@ -126,6 +134,10 @@ export class ControllerClient {
   }
 
   async checkHealth(controller: Controller): Promise<boolean> {
+    if (isDebugMode) {
+      return controller.online;
+    }
+
     const host = controller.ip.replace(/\/+$/, '');
     const abortController = new AbortController();
     const timeout = setTimeout(() => abortController.abort(), 3000);

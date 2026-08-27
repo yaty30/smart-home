@@ -1,6 +1,8 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { createContext, type PropsWithChildren, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import type { Device } from '../domain/device';
+import { isDebugMode } from '../config/debug';
+import { DEBUG_DEVICES } from './debugData';
 
 type DevicesContextValue = {
   devices: Device[];
@@ -37,10 +39,16 @@ const isDeviceArray = (value: unknown): value is Device[] => {
 };
 
 export function DevicesProvider({ children }: PropsWithChildren) {
-  const [devices, setDevices] = useState<Device[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const [devices, setDevices] = useState<Device[]>(
+    isDebugMode ? DEBUG_DEVICES : []
+  );
+  const [isLoading, setIsLoading] = useState(!isDebugMode);
 
   useEffect(() => {
+    if (isDebugMode) {
+      return undefined;
+    }
+
     let isMounted = true;
 
     const loadDevices = async () => {
@@ -69,6 +77,10 @@ export function DevicesProvider({ children }: PropsWithChildren) {
   }, []);
 
   const persistDevices = useCallback(async (devicesToSave: Device[]) => {
+    if (isDebugMode) {
+      return;
+    }
+
     try {
       await AsyncStorage.setItem(DEVICES_STORAGE_KEY, JSON.stringify(devicesToSave));
     } catch (error) {

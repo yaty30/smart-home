@@ -12,6 +12,8 @@ import type { Room } from "../domain/room";
 import { createRoom } from "../domain/room";
 import type { RoomIcon } from "../domain/roomIcon";
 import { isRoomIcon } from "../domain/roomIcon";
+import { isDebugMode } from "../config/debug";
+import { DEBUG_ROOMS } from "./debugData";
 
 type RoomsContextValue = {
   rooms: Room[];
@@ -56,10 +58,16 @@ const parseStoredRooms = (value: unknown): Room[] | null => {
 };
 
 export function RoomsProvider({ children }: PropsWithChildren) {
-  const [rooms, setRooms] = useState<Room[]>(initialRooms);
-  const [isLoading, setIsLoading] = useState(true);
+  const [rooms, setRooms] = useState<Room[]>(
+    isDebugMode ? DEBUG_ROOMS : initialRooms,
+  );
+  const [isLoading, setIsLoading] = useState(!isDebugMode);
 
   useEffect(() => {
+    if (isDebugMode) {
+      return undefined;
+    }
+
     let isMounted = true;
 
     const loadRooms = async () => {
@@ -89,6 +97,10 @@ export function RoomsProvider({ children }: PropsWithChildren) {
   }, []);
 
   const persistRooms = useCallback(async (roomsToSave: Room[]) => {
+    if (isDebugMode) {
+      return;
+    }
+
     try {
       await AsyncStorage.setItem(ROOMS_STORAGE_KEY, JSON.stringify(roomsToSave));
     } catch (error) {

@@ -1,5 +1,6 @@
 import { controllerClient } from './controllerClient';
 import type { Controller } from '../domain/controller';
+import { isDebugMode } from '../config/debug';
 
 export class ControllerHealthService {
   private intervalId: NodeJS.Timeout | null = null;
@@ -10,6 +11,10 @@ export class ControllerHealthService {
     onStatusUpdate: (controllerId: string, online: boolean) => void,
     intervalMs = this.healthCheckInterval
   ): void {
+    if (isDebugMode) {
+      return;
+    }
+
     if (this.intervalId) {
       this.stop();
     }

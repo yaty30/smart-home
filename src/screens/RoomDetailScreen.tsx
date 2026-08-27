@@ -14,6 +14,7 @@ import { AddDeviceSheet } from '../components/AddDeviceSheet';
 import { createDevice } from '../domain/device';
 import { deviceService, executeDeviceCommand } from '../services/deviceService';
 import { controllerHealthService } from '../services/controllerHealthService';
+import { isDebugMode } from '../config/debug';
 
 type RoomDetailScreenProps = RootStackScreenProps<'RoomDetail'>;
 
@@ -87,6 +88,10 @@ export function RoomDetailScreen({ navigation, route }: RoomDetailScreenProps) {
   useEffect(() => {
     if (!roomController) {
       setQrVisible(false);
+      return undefined;
+    }
+
+    if (isDebugMode) {
       return undefined;
     }
 
@@ -202,6 +207,11 @@ export function RoomDetailScreen({ navigation, route }: RoomDetailScreenProps) {
 
     if (!roomController) {
       Alert.alert('No Controller Found', 'This room does not have a controller assigned yet.');
+      return;
+    }
+
+    if (isDebugMode) {
+      setQrVisible((current) => !current);
       return;
     }
 
@@ -541,15 +551,6 @@ export function RoomDetailScreen({ navigation, route }: RoomDetailScreenProps) {
             })}
           </View>
         )}
-
-        <View style={styles.deleteSection}>
-          <AppButton
-            label="Delete Room"
-            leftIcon={<Trash2 color={theme.powerAccent} size={20} strokeWidth={2.4} />}
-            onPress={handleDeleteRoom}
-            variant="destructive"
-          />
-        </View>
       </ScrollView>
 
       <AddDeviceSheet
