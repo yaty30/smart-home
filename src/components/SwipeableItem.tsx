@@ -19,8 +19,10 @@ type SwipeableItemProps = PropsWithChildren<{
   style?: ViewStyle | ViewStyle[];
 }>;
 
-const SWIPE_THRESHOLD = -80;
-const ACTION_BUTTON_WIDTH = 80;
+const SWIPE_THRESHOLD = -70;
+const ACTION_BUTTON_WIDTH = 74;
+const ACTION_BUTTON_GAP = theme.spacing.sm;
+const ACTION_BUTTON_RADIUS = theme.radiusMedium;
 
 export function SwipeableItem({
   children,
@@ -33,7 +35,9 @@ export function SwipeableItem({
   const translateX = useRef(new Animated.Value(0)).current;
   const lastOffset = useRef(0);
   const actionCount = onRename ? 2 : 1;
-  const actionWidth = actionCount * ACTION_BUTTON_WIDTH;
+  const actionWidth =
+    actionCount * ACTION_BUTTON_WIDTH +
+    (onRename ? ACTION_BUTTON_GAP * 2 : 0);
 
   const panResponder = useRef(
     PanResponder.create({
@@ -101,7 +105,13 @@ export function SwipeableItem({
 
   return (
     <View style={[styles.container, style]}>
-      <View style={[styles.actionButtonContainer, { width: actionWidth }]}>
+      <View
+        style={[
+          styles.actionButtonContainer,
+          onRename && styles.actionButtonContainerWithRename,
+          { width: actionWidth },
+        ]}
+      >
         {onRename ? (
           <TouchableOpacity
             activeOpacity={0.8}
@@ -152,12 +162,17 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     flexDirection: 'row',
+    gap: ACTION_BUTTON_GAP,
+  },
+  actionButtonContainerWithRename: {
+    paddingLeft: ACTION_BUTTON_GAP,
   },
   actionButton: {
     width: ACTION_BUTTON_WIDTH,
     height: '100%',
     justifyContent: 'center',
     alignItems: 'center',
+    borderRadius: ACTION_BUTTON_RADIUS,
   },
   renameButton: {
     backgroundColor: theme.accent,

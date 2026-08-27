@@ -1189,9 +1189,6 @@ export function AirConditionerScreen({
             </View>
           </CollapsibleView>
 
-          <View style={styles.scheduleTitleRow}>
-            <Text style={styles.sectionTitle}>Schedule</Text>
-          </View>
         </View>
       </ScrollView>
 
