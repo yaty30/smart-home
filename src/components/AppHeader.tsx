@@ -1,7 +1,7 @@
-import type { ReactNode } from "react";
+import { useMemo, type ReactNode } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 
-import { theme } from "../theme/theme";
+import { type Theme, useTheme } from "../theme/theme";
 
 type AppHeaderProps = {
   leftAction?: ReactNode;
@@ -20,6 +20,9 @@ const HEADER_TOP_PADDING = 72;
 const ACTION_SLOT_WIDTH = 62;
 
 export function AppHeader({ leftAction, rightAction, title }: AppHeaderProps) {
+  const theme = useTheme();
+  const styles = useMemo(() => createStyles(theme), [theme]);
+
   return (
     <View style={styles.header}>
       <View style={styles.actionSlot}>{leftAction}</View>
@@ -39,6 +42,9 @@ export function HeaderIconButton({
   framed = false,
   onPress,
 }: HeaderIconButtonProps) {
+  const theme = useTheme();
+  const styles = useMemo(() => createStyles(theme), [theme]);
+
   return (
     <Pressable
       accessibilityLabel={accessibilityLabel}
@@ -56,7 +62,7 @@ export function HeaderIconButton({
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (theme: Theme) => StyleSheet.create({
   header: {
     alignItems: "center",
     flexDirection: "row",

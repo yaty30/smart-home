@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Animated,
   Pressable,
@@ -7,7 +7,7 @@ import {
   TouchableOpacity,
   type ViewStyle,
 } from 'react-native';
-import { theme } from '../theme/theme';
+import { type Theme, useTheme } from '../theme/theme';
 
 export type PopupMenuItem = {
   label: string;
@@ -31,6 +31,8 @@ export function PopupMenu({
   panelStyle,
   visible,
 }: PopupMenuProps) {
+  const theme = useTheme();
+  const styles = useMemo(() => createStyles(theme), [theme]);
   const [shouldRender, setShouldRender] = useState(visible);
   const progress = useRef(new Animated.Value(visible ? 1 : 0)).current;
 
@@ -115,7 +117,7 @@ export function PopupMenu({
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (theme: Theme) => StyleSheet.create({
   backdrop: {
     ...StyleSheet.absoluteFillObject,
     zIndex: 20,

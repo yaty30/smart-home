@@ -13,7 +13,7 @@ import type { MainTabScreenProps } from '../navigation/types';
 import { useControllers } from '../store/controllers';
 import { useDevices } from '../store/devices';
 import { useRooms } from '../store/rooms';
-import { theme } from '../theme/theme';
+import { type Theme, useTheme } from '../theme/theme';
 
 function timeGreeting(): string {
   const h = new Date().getHours();
@@ -52,6 +52,8 @@ type HeroCardProps = {
 };
 
 function HeroCard({ device, onOpenControl }: HeroCardProps) {
+  const theme = useTheme();
+  const heroStyles = useMemo(() => createHeroStyles(theme), [theme]);
   const isOn = device.state.power === true;
   const summary = device.type === 'ac' ? acStateSummary(device) : '';
   const { getRoomById } = useRooms();
@@ -92,6 +94,9 @@ type RoomSelectorProps = {
 };
 
 function RoomSelector({ rooms, selectedId, onSelect, onRoomsPress }: RoomSelectorProps) {
+  const theme = useTheme();
+  const roomSelectorStyles = useMemo(() => createRoomSelectorStyles(theme), [theme]);
+
   return (
     <ScrollView
       horizontal
@@ -123,7 +128,7 @@ function RoomSelector({ rooms, selectedId, onSelect, onRoomsPress }: RoomSelecto
   );
 }
 
-const roomSelectorStyles = StyleSheet.create({
+const createRoomSelectorStyles = (theme: Theme) => StyleSheet.create({
   row: {
     flexDirection: 'row',
     gap: theme.spacing.sm,
@@ -177,6 +182,8 @@ type SummaryCardProps = {
 };
 
 function SummaryCard({ onlineCount, allOnline, temps, humidities }: SummaryCardProps) {
+  const theme = useTheme();
+  const summaryStyles = useMemo(() => createSummaryStyles(theme), [theme]);
   const avgTemp = temps.length > 0 ? Math.round(temps.reduce((a, b) => a + b, 0) / temps.length) : null;
   const avgHumidity = humidities.length > 0 ? Math.round(humidities.reduce((a, b) => a + b, 0) / humidities.length) : null;
 
@@ -214,7 +221,7 @@ function SummaryCard({ onlineCount, allOnline, temps, humidities }: SummaryCardP
   );
 }
 
-const summaryStyles = StyleSheet.create({
+const createSummaryStyles = (theme: Theme) => StyleSheet.create({
   card: {
     backgroundColor: theme.paperBackground,
     borderRadius: theme.radiusMedium,
@@ -287,6 +294,8 @@ type DeviceCardProps = {
 };
 
 function DeviceCard({ device, onPress }: DeviceCardProps) {
+  const theme = useTheme();
+  const deviceCardStyles = useMemo(() => createDeviceCardStyles(theme), [theme]);
   const isOn = device.state.power === true;
   return (
     <TouchableOpacity style={deviceCardStyles.card} onPress={onPress} activeOpacity={0.78}>
@@ -300,7 +309,7 @@ function DeviceCard({ device, onPress }: DeviceCardProps) {
   );
 }
 
-const deviceCardStyles = StyleSheet.create({
+const createDeviceCardStyles = (theme: Theme) => StyleSheet.create({
   card: {
     flex: 1,
     backgroundColor: theme.surfaceWarm,
@@ -341,6 +350,8 @@ const deviceCardStyles = StyleSheet.create({
 // ─── Screen ───────────────────────────────────────────────────────────────────
 
 export function HomeScreen({ navigation }: MainTabScreenProps) {
+  const theme = useTheme();
+  const styles = useMemo(() => createStyles(theme), [theme]);
   const { rooms } = useRooms();
   const { devices } = useDevices();
   const { controllers } = useControllers();
@@ -434,7 +445,7 @@ export function HomeScreen({ navigation }: MainTabScreenProps) {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (theme: Theme) => StyleSheet.create({
   safeArea: {
     flex: 1,
     backgroundColor: theme.root,
@@ -485,7 +496,7 @@ const styles = StyleSheet.create({
 
 // ─── Sub-component StyleSheets ─────────────────────────────────────────────────
 
-const heroStyles = StyleSheet.create({
+const createHeroStyles = (theme: Theme) => StyleSheet.create({
   card: {
     backgroundColor: theme.surfaceWarm,
     borderRadius: theme.radiusMedium,
@@ -568,4 +579,3 @@ const heroStyles = StyleSheet.create({
     color: theme.textOnAccent,
   },
 });
-

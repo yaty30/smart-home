@@ -1,5 +1,14 @@
-import type { AcSchedule, ScheduleAirflow } from "../types/acSchedule";
-import type { AirConditionerMode, AirflowLevel } from "../types/airConditioner";
+import type {
+  AcSchedule,
+  ScheduleAirflow,
+  ScheduleFanSpeed,
+  ScheduleRepeatFrequency,
+} from "../types/acSchedule";
+import type {
+  AirConditionerMode,
+  AirflowLevel,
+  FanSpeed,
+} from "../types/airConditioner";
 import type { PairedDevice } from "../types/device";
 
 const TIMEOUT_MS = 4000;
@@ -30,6 +39,17 @@ function espToScheduleAirflow(value: string): ScheduleAirflow {
   return positionToAirflowLevel[value] ?? "auto";
 }
 
+function scheduleFanSpeedToEsp(fanSpeed: ScheduleFanSpeed): string {
+  return fanSpeed === "auto" ? "auto" : String(fanSpeed);
+}
+
+function espToScheduleFanSpeed(value: unknown): ScheduleFanSpeed {
+  if (value === "auto") return "auto";
+
+  const fanSpeed = Number(value);
+  return [1, 2, 3, 4, 5].includes(fanSpeed) ? (fanSpeed as FanSpeed) : "auto";
+}
+
 function modeToEsp(mode: Exclude<AirConditionerMode, "fan">): string {
   if (mode === "cold") return "cool";
   return mode;
@@ -41,6 +61,12 @@ function espToMode(value: string): Exclude<AirConditionerMode, "fan"> {
 }
 
 const ALL_DAYS: boolean[] = [true, true, true, true, true, true, true];
+
+function parseRepeatFrequency(value: unknown): ScheduleRepeatFrequency {
+  return value === "weekly" || value === "bi-weekly" || value === "one-time"
+    ? value
+    : "one-time";
+}
 
 function parseScheduleResponse(obj: Record<string, unknown>): AcSchedule {
   const endTime =
@@ -55,8 +81,11 @@ function parseScheduleResponse(obj: Record<string, unknown>): AcSchedule {
     days: Array.isArray(obj.days) ? (obj.days as boolean[]) : [...ALL_DAYS],
     mode: espToMode(String(obj.mode)),
     temperature: Number(obj.temperature),
+    fanSpeed: espToScheduleFanSpeed(obj.fan ?? obj.fanSpeed),
     quiet: Boolean(obj.quiet),
     powerful: Boolean(obj.powerful),
+    repeatEnabled: Boolean(obj.repeatEnabled),
+    repeatFrequency: parseRepeatFrequency(obj.repeatFrequency),
     horizontalAirflow: espToScheduleAirflow(String(obj.swingHorizontal)),
     verticalAirflow: espToScheduleAirflow(String(obj.swingVertical)),
   };
@@ -105,8 +134,11 @@ export async function putAcScheduleToDevice(
     endTime: schedule.endTime ?? null,
     mode: modeToEsp(schedule.mode),
     temperature: schedule.temperature,
+    fan: scheduleFanSpeedToEsp(schedule.fanSpeed ?? "auto"),
     quiet: Boolean(schedule.quiet),
     powerful: Boolean(schedule.powerful),
+    repeatEnabled: Boolean(schedule.repeatEnabled),
+    repeatFrequency: schedule.repeatFrequency ?? "one-time",
     swingVertical: scheduleAirflowToEsp(schedule.verticalAirflow),
     swingHorizontal: scheduleAirflowToEsp(schedule.horizontalAirflow),
   });

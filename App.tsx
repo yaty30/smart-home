@@ -1,5 +1,6 @@
 import {
   DarkTheme,
+  DefaultTheme,
   NavigationContainer,
   useFocusEffect,
 } from "@react-navigation/native";
@@ -25,7 +26,12 @@ import { DeviceControlScreen } from "./src/screens/DeviceControlScreen";
 import { SettingsScreen } from "./src/screens/SettingsScreen";
 import { ControllersScreen } from "./src/screens/ControllersScreen";
 import { PairControllerScreen } from "./src/screens/PairControllerScreen";
-import { theme } from "./src/theme/theme";
+import {
+  ThemeProvider,
+  type Theme,
+  useTheme,
+  useThemeMode,
+} from "./src/theme/theme";
 import { RoomsProvider } from "./src/store/rooms";
 import { DevicesProvider } from "./src/store/devices";
 import { ControllersProvider } from "./src/store/controllers";
@@ -43,19 +49,9 @@ const tabIndexByKey: Record<MainTabKey, number> = {
   settings: 2,
 };
 
-const navigationTheme = {
-  ...DarkTheme,
-  colors: {
-    ...DarkTheme.colors,
-    background: theme.root,
-    border: theme.border,
-    card: theme.root,
-    primary: theme.accent,
-    text: theme.text,
-  },
-};
-
 function MainNavigator({ navigation }: RootStackScreenProps<"Main">) {
+  const theme = useTheme();
+  const styles = useMemo(() => createStyles(theme), [theme]);
   const [activeTab, setActiveTab] = useState<MainTabKey>("home");
   const [navCompact, setNavCompact] = useState(false);
   const [navVisible, setNavVisible] = useState(true);
@@ -173,6 +169,8 @@ function MainNavigator({ navigation }: RootStackScreenProps<"Main">) {
 }
 
 function AppStack() {
+  const theme = useTheme();
+
   return (
     <Stack.Navigator
       screenOptions={{
@@ -190,6 +188,24 @@ function AppStack() {
 }
 
 function AppContent() {
+  const theme = useTheme();
+  const { mode } = useThemeMode();
+  const navigationTheme = useMemo(() => {
+    const baseTheme = mode === "light" ? DefaultTheme : DarkTheme;
+
+    return {
+      ...baseTheme,
+      colors: {
+        ...baseTheme.colors,
+        background: theme.root,
+        border: theme.border,
+        card: theme.root,
+        primary: theme.accent,
+        text: theme.text,
+      },
+    };
+  }, [mode, theme]);
+
   return (
     <NavigationContainer theme={navigationTheme}>
       <AppStack />
@@ -197,12 +213,16 @@ function AppContent() {
   );
 }
 
-export default function App() {
+function AppRoot() {
+  const theme = useTheme();
+  const { mode } = useThemeMode();
+  const styles = useMemo(() => createStyles(theme), [theme]);
+
   return (
     <View style={styles.appRoot}>
       <StatusBar
         backgroundColor={theme.root}
-        barStyle="light-content"
+        barStyle={mode === "light" ? "dark-content" : "light-content"}
         translucent={false}
       />
       <RoomsProvider>
@@ -216,7 +236,15 @@ export default function App() {
   );
 }
 
-const styles = StyleSheet.create({
+export default function App() {
+  return (
+    <ThemeProvider>
+      <AppRoot />
+    </ThemeProvider>
+  );
+}
+
+const createStyles = (theme: Theme) => StyleSheet.create({
   appRoot: {
     backgroundColor: theme.root,
     flex: 1,

@@ -1,7 +1,8 @@
 import { StyleSheet, Text, View } from 'react-native';
+import { useMemo } from 'react';
 import { useDevices } from '../store/devices';
 import { useControllers } from '../store/controllers';
-import { theme } from '../theme/theme';
+import { type Theme, useTheme } from '../theme/theme';
 import type { RootStackScreenProps } from '../navigation/types';
 import { AirConditionerScreen } from './AirConditionerScreen';
 import { useEffect } from 'react';
@@ -12,6 +13,8 @@ import { isDebugMode } from '../config/debug';
 type DeviceControlScreenProps = RootStackScreenProps<'DeviceControl'>;
 
 export function DeviceControlScreen({ navigation, route }: DeviceControlScreenProps) {
+  const theme = useTheme();
+  const styles = useMemo(() => createStyles(theme), [theme]);
   const { deviceId } = route.params;
   const { getDeviceById, updateDeviceState } = useDevices();
   const { getControllerById } = useControllers();
@@ -59,7 +62,7 @@ export function DeviceControlScreen({ navigation, route }: DeviceControlScreenPr
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (theme: Theme) => StyleSheet.create({
   screen: {
     alignItems: 'center',
     backgroundColor: theme.root,

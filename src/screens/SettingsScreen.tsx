@@ -1,13 +1,15 @@
-import { Settings as SettingsIcon } from "lucide-react-native";
+import { Moon, Settings as SettingsIcon, Sun } from "lucide-react-native";
+import { useMemo } from "react";
 import {
   StyleSheet,
+  Switch,
   Text,
   TouchableOpacity,
   View,
   ScrollView,
 } from "react-native";
 import { AppHeader } from "../components/AppHeader";
-import { theme } from "../theme/theme";
+import { type Theme, useTheme, useThemeMode } from "../theme/theme";
 import type { RootStackScreenProps } from "../navigation/types";
 
 type SettingsScreenProps = {
@@ -15,6 +17,10 @@ type SettingsScreenProps = {
 };
 
 export function SettingsScreen({ navigation }: SettingsScreenProps) {
+  const theme = useTheme();
+  const { isLight, toggleTheme } = useThemeMode();
+  const styles = useMemo(() => createStyles(theme), [theme]);
+
   return (
     <View style={styles.screen}>
       <AppHeader title="Settings" />
@@ -40,12 +46,39 @@ export function SettingsScreen({ navigation }: SettingsScreenProps) {
             </Text>
           </View>
         </TouchableOpacity>
+
+        <View style={styles.settingCard}>
+          <View style={styles.settingIcon}>
+            {isLight ? (
+              <Sun color={theme.accent} size={22} strokeWidth={2.2} />
+            ) : (
+              <Moon color={theme.accent} size={22} strokeWidth={2.2} />
+            )}
+          </View>
+          <View style={styles.settingInfo}>
+            <Text style={styles.settingName}>Light Theme</Text>
+            <Text style={styles.settingDescription}>
+              {isLight ? "Light appearance enabled" : "Use a brighter appearance"}
+            </Text>
+          </View>
+          <Switch
+            accessibilityLabel="Toggle light theme"
+            ios_backgroundColor={theme.controlBackground}
+            onValueChange={toggleTheme}
+            thumbColor={isLight ? theme.accent : theme.textSecondary}
+            trackColor={{
+              false: theme.controlBackgroundPressed,
+              true: theme.accentMuted,
+            }}
+            value={isLight}
+          />
+        </View>
       </ScrollView>
     </View>
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (theme: Theme) => StyleSheet.create({
   screen: {
     backgroundColor: theme.root,
     flex: 1,
@@ -54,6 +87,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: theme.spacing.lg,
     paddingTop: theme.spacing.xl,
     paddingBottom: 120,
+    gap: theme.spacing.md,
   },
   scrollView: {
     flex: 1,

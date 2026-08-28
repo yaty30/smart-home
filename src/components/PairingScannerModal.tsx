@@ -4,7 +4,7 @@ import {
   useCameraPermissions,
 } from "expo-camera";
 import { AlertCircle, X } from "lucide-react-native";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Modal,
@@ -16,7 +16,7 @@ import {
 } from "react-native";
 
 import { useDeviceConnection } from "../context/DeviceConnectionContext";
-import { theme } from "../theme/theme";
+import { type Theme, useTheme } from "../theme/theme";
 import type { PairedDevice } from "../types/device";
 import {
   notifyPairingComplete,
@@ -72,6 +72,8 @@ export function PairingScannerModal({
   onPaired,
   visible,
 }: PairingScannerModalProps) {
+  const theme = useTheme();
+  const styles = useMemo(() => createStyles(theme), [theme]);
   const { pairDevice } = useDeviceConnection();
   const [isPairing, setIsPairing] = useState(false);
   const [canScan, setCanScan] = useState(true);
@@ -179,7 +181,7 @@ export function PairingScannerModal({
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (theme: Theme) => StyleSheet.create({
   scannerScreen: {
     backgroundColor: theme.root,
     flex: 1,

@@ -1,6 +1,6 @@
 import { Picker } from '@react-native-picker/picker';
 import { AirVent, Lightbulb, Tv } from 'lucide-react-native';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Animated,
   Modal,
@@ -11,7 +11,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import { theme } from '../theme/theme';
+import { type Theme, useTheme } from '../theme/theme';
 import { AppButton } from './AppButton';
 
 type DeviceType = 'ac' | 'tv' | 'light';
@@ -29,6 +29,8 @@ type AddDeviceSheetProps = {
 const OFFSCREEN = 800;
 
 export function AddDeviceSheet({ visible, onClose, onContinue }: AddDeviceSheetProps) {
+  const theme = useTheme();
+  const styles = useMemo(() => createStyles(theme), [theme]);
   const [selectedType, setSelectedType] = useState<DeviceType | null>(null);
   const [selectedBrand, setSelectedBrand] = useState<DeviceBrand | null>(null);
   // Start off-screen; we animate in ourselves so animationType="none" on the Modal.
@@ -223,7 +225,7 @@ export function AddDeviceSheet({ visible, onClose, onContinue }: AddDeviceSheetP
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (theme: Theme) => StyleSheet.create({
   root: {
     flex: 1,
   },

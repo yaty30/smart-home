@@ -1,5 +1,5 @@
 import { Plus } from "lucide-react-native";
-import { useCallback, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import {
   StyleSheet,
   Text,
@@ -13,12 +13,14 @@ import { getRoomIcon, type RoomIcon } from "../domain/roomIcon";
 import { useRooms } from "../store/rooms";
 import { useDevices } from "../store/devices";
 import { useControllers } from "../store/controllers";
-import { theme } from "../theme/theme";
+import { type Theme, useTheme } from "../theme/theme";
 import type { MainTabScreenProps } from "../navigation/types";
 
 type RoomsScreenProps = MainTabScreenProps;
 
 export function RoomsScreen({ navigation }: RoomsScreenProps) {
+  const theme = useTheme();
+  const styles = useMemo(() => createStyles(theme), [theme]);
   const { rooms } = useRooms();
   const { getDevicesByRoom } = useDevices();
   const { controllers } = useControllers();
@@ -101,7 +103,7 @@ export function RoomsScreen({ navigation }: RoomsScreenProps) {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (theme: Theme) => StyleSheet.create({
   screen: {
     backgroundColor: theme.root,
     flex: 1,

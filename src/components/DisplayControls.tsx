@@ -1,8 +1,8 @@
-import type { ComponentType } from "react";
+import { useMemo, type ComponentType } from "react";
 import { Hexagon, QrCode } from "lucide-react-native";
 import { StyleSheet, Switch, Text, View } from "react-native";
 
-import { theme } from "../theme/theme";
+import { type Theme, useTheme } from "../theme/theme";
 
 type DisplayControlsProps = {
   canControlQr: boolean;
@@ -34,6 +34,9 @@ function DisplayToggle({
   disabled = false,
   onChange,
 }: DisplayToggleProps) {
+  const theme = useTheme();
+  const styles = useMemo(() => createStyles(theme), [theme]);
+
   return (
     <View style={[styles.row, disabled && styles.rowDisabled]}>
       <View style={[styles.iconFrame, enabled && styles.iconFrameActive]}>
@@ -68,6 +71,9 @@ export function DisplayControls({
   onChangeQrVisible,
   qrVisible,
 }: DisplayControlsProps) {
+  const theme = useTheme();
+  const styles = useMemo(() => createStyles(theme), [theme]);
+
   if (!canControlQr) {
     return null;
   }
@@ -90,7 +96,7 @@ export function DisplayControls({
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (theme: Theme) => StyleSheet.create({
   container: {
     gap: theme.spacing.md,
   },

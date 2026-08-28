@@ -1,6 +1,6 @@
 import * as Haptics from "expo-haptics";
 import { House, Settings as SettingsIcon, ShelvingUnit } from "lucide-react-native";
-import { useEffect, useRef } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import {
   Animated,
   Platform,
@@ -9,7 +9,7 @@ import {
   View,
 } from "react-native";
 
-import { theme } from "../theme/theme";
+import { type Theme, theme, useTheme } from "../theme/theme";
 
 export const BOTTOM_NAV_CLEARANCE = 60;
 const NAV_ITEM_SIZE = 52;
@@ -40,6 +40,8 @@ export function BottomNav({
   onSettingsPress,
   visible = true,
 }: BottomNavProps) {
+  const activeTheme = useTheme();
+  const styles = useMemo(() => createStyles(activeTheme), [activeTheme]);
   const visibleProgress = useRef(new Animated.Value(visible ? 1 : 0)).current;
   const activeProgress = useRef(
     new Animated.Value(activeIndexByTab[active]),
@@ -118,7 +120,7 @@ export function BottomNav({
           style={styles.item}
         >
           <House
-            color={active === "home" ? theme.textOnAccent : theme.textMuted}
+            color={active === "home" ? activeTheme.textOnAccent : activeTheme.textMuted}
             size={22}
             strokeWidth={2.4}
           />
@@ -136,7 +138,7 @@ export function BottomNav({
           style={styles.item}
         >
           <ShelvingUnit
-            color={active === "rooms" ? theme.textOnAccent : theme.textMuted}
+            color={active === "rooms" ? activeTheme.textOnAccent : activeTheme.textMuted}
             size={22}
             strokeWidth={2.4}
           />
@@ -154,7 +156,7 @@ export function BottomNav({
           style={styles.item}
         >
           <SettingsIcon
-            color={active === "settings" ? theme.textOnAccent : theme.textMuted}
+            color={active === "settings" ? activeTheme.textOnAccent : activeTheme.textMuted}
             size={22}
             strokeWidth={2.1}
           />
@@ -164,7 +166,7 @@ export function BottomNav({
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (theme: Theme) => StyleSheet.create({
   wrap: {
     alignItems: "center",
     bottom: Platform.OS === "ios" ? 28 : 18,

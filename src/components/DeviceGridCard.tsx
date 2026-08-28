@@ -1,5 +1,5 @@
 import { Power, PowerOff, Trash2 } from "lucide-react-native";
-import type { ComponentType } from "react";
+import { useMemo, type ComponentType } from "react";
 import {
   type GestureResponderEvent,
   StyleSheet,
@@ -8,7 +8,7 @@ import {
   View,
 } from "react-native";
 
-import { theme } from "../theme/theme";
+import { type Theme, useTheme } from "../theme/theme";
 
 type IconComponent = ComponentType<{
   color?: string;
@@ -27,6 +27,8 @@ export function CardPowerButton({
   isOn,
   onToggle,
 }: CardPowerButtonProps) {
+  const theme = useTheme();
+  const styles = useMemo(() => createStyles(theme), [theme]);
   const PowerIcon = isOn ? PowerOff : Power;
 
   return (
@@ -71,6 +73,9 @@ export function DeviceGridCard({
   onPress,
   onTogglePower,
 }: DeviceGridCardProps) {
+  const theme = useTheme();
+  const styles = useMemo(() => createStyles(theme), [theme]);
+
   return (
     <TouchableOpacity
       activeOpacity={0.84}
@@ -135,7 +140,7 @@ export function DeviceGridCard({
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (theme: Theme) => StyleSheet.create({
   card: {
     backgroundColor: theme.surfaceLow,
     borderColor: "rgba(255, 255, 255, 0.06)",

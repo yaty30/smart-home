@@ -16,7 +16,7 @@ import {
   View,
 } from 'react-native';
 import { ROOM_ICONS, DEFAULT_ROOM_ICON, type RoomIcon } from '../domain/roomIcon';
-import { theme } from '../theme/theme';
+import { type Theme, useTheme } from '../theme/theme';
 import { AppButton } from './AppButton';
 
 type AddRoomSheetProps = {
@@ -26,6 +26,8 @@ type AddRoomSheetProps = {
 };
 
 export function AddRoomSheet({ visible, onClose, onScanController }: AddRoomSheetProps) {
+  const theme = useTheme();
+  const styles = useMemo(() => createStyles(theme), [theme]);
   const [roomName, setRoomName] = useState('');
   const [selectedIcon, setSelectedIcon] = useState<RoomIcon>(DEFAULT_ROOM_ICON);
   // Always starts at 0 — entrance is handled by Modal's animationType="slide".
@@ -225,7 +227,7 @@ export function AddRoomSheet({ visible, onClose, onScanController }: AddRoomShee
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (theme: Theme) => StyleSheet.create({
   root: {
     flex: 1,
   },

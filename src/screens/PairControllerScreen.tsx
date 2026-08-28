@@ -1,8 +1,8 @@
 import { AlertCircle, X } from 'lucide-react-native';
-import { useState, useCallback, useEffect, useRef } from 'react';
+import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import { Alert, SafeAreaView, StyleSheet, Text, View, TextInput, Modal, Pressable, ActivityIndicator } from 'react-native';
 import { AppButton } from '../components/AppButton';
-import { theme } from '../theme/theme';
+import { type Theme, useTheme } from '../theme/theme';
 import type { RootStackScreenProps } from '../navigation/types';
 import {
   CameraView,
@@ -21,6 +21,8 @@ import {
 type PairControllerScreenProps = RootStackScreenProps<'PairController'>;
 
 export function PairControllerScreen({ navigation, route }: PairControllerScreenProps) {
+  const theme = useTheme();
+  const styles = useMemo(() => createStyles(theme), [theme]);
   const [permission, requestPermission] = useCameraPermissions();
   const [permissionError, setPermissionError] = useState<string | null>(null);
   const [isPairing, setIsPairing] = useState(false);
@@ -360,7 +362,7 @@ export function PairControllerScreen({ navigation, route }: PairControllerScreen
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (theme: Theme) => StyleSheet.create({
   safeArea: {
     backgroundColor: theme.root,
     flex: 1,

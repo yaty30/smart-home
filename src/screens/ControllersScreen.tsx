@@ -1,10 +1,10 @@
 import { ChevronLeft, QrCode, Wifi, WifiOff } from 'lucide-react-native';
 import { StyleSheet, Text, TouchableOpacity, View, ScrollView, Alert } from 'react-native';
-import { useEffect } from 'react';
+import { useEffect, useMemo } from 'react';
 import { useControllers } from '../store/controllers';
 import { useDevices } from '../store/devices';
 import { useRooms } from '../store/rooms';
-import { theme } from '../theme/theme';
+import { type Theme, useTheme } from '../theme/theme';
 import type { RootStackScreenProps } from '../navigation/types';
 import { AppHeader, HeaderIconButton } from '../components/AppHeader';
 import { SwipeableItem } from '../components/SwipeableItem';
@@ -13,6 +13,8 @@ import { controllerHealthService } from '../services/controllerHealthService';
 type ControllersScreenProps = RootStackScreenProps<'Controllers'>;
 
 export function ControllersScreen({ navigation }: ControllersScreenProps) {
+  const theme = useTheme();
+  const styles = useMemo(() => createStyles(theme), [theme]);
   const { controllers, removeController, updateControllerOnlineStatus } = useControllers();
   const { getDevicesByController } = useDevices();
   const { getRoomById } = useRooms();
@@ -166,7 +168,7 @@ export function ControllersScreen({ navigation }: ControllersScreenProps) {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (theme: Theme) => StyleSheet.create({
   screen: {
     backgroundColor: theme.root,
     flex: 1,

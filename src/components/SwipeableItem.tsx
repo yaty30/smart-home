@@ -1,6 +1,5 @@
 import { Pencil, Trash2 } from 'lucide-react-native';
-import type { PropsWithChildren } from 'react';
-import { useRef } from 'react';
+import { useMemo, useRef, type PropsWithChildren } from 'react';
 import {
   Animated,
   PanResponder,
@@ -9,7 +8,7 @@ import {
   View,
   type ViewStyle,
 } from 'react-native';
-import { theme } from '../theme/theme';
+import { type Theme, theme, useTheme } from '../theme/theme';
 
 type SwipeableItemProps = PropsWithChildren<{
   onDelete: () => void;
@@ -36,6 +35,8 @@ export function SwipeableItem({
   style,
   contentBackground,
 }: SwipeableItemProps) {
+  const activeTheme = useTheme();
+  const styles = useMemo(() => createStyles(activeTheme), [activeTheme]);
   const translateX = useRef(new Animated.Value(0)).current;
   const lastOffset = useRef(0);
   const gestureStartTime = useRef(0);
@@ -151,7 +152,7 @@ export function SwipeableItem({
             onPress={() => handleAction(onRename)}
             style={[styles.actionButton, styles.renameButton]}
           >
-            <Pencil color={theme.text} size={20} strokeWidth={2.4} />
+            <Pencil color={activeTheme.text} size={20} strokeWidth={2.4} />
           </TouchableOpacity>
         ) : null}
         <TouchableOpacity
@@ -161,7 +162,7 @@ export function SwipeableItem({
           onPress={() => handleAction(onDelete)}
           style={[styles.actionButton, styles.deleteButton]}
         >
-          <Trash2 color={theme.text} size={20} strokeWidth={2.4} />
+          <Trash2 color={activeTheme.text} size={20} strokeWidth={2.4} />
         </TouchableOpacity>
       </View>
 
@@ -181,7 +182,7 @@ export function SwipeableItem({
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (theme: Theme) => StyleSheet.create({
   container: {
     position: 'relative',
     overflow: 'hidden',

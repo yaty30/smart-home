@@ -1,7 +1,6 @@
 import { BlurView } from "expo-blur";
 import { ChevronLeft } from "lucide-react-native";
-import type { ReactNode } from "react";
-import { useEffect, useRef } from "react";
+import { useEffect, useMemo, useRef, type ReactNode } from "react";
 import {
   Animated,
   StyleSheet,
@@ -10,7 +9,7 @@ import {
   View,
 } from "react-native";
 
-import { theme } from "../theme/theme";
+import { type Theme, useTheme } from "../theme/theme";
 
 type ACHeaderProps = {
   eyebrow?: string;
@@ -27,6 +26,8 @@ export function ACHeader({
   rightAccessory,
   title = "Air Conditioner",
 }: ACHeaderProps) {
+  const theme = useTheme();
+  const styles = useMemo(() => createStyles(theme), [theme]);
   const glassOpacity = useRef(new Animated.Value(isScrolled ? 1 : 0)).current;
 
   useEffect(() => {
@@ -76,7 +77,7 @@ export function ACHeader({
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (theme: Theme) => StyleSheet.create({
   headerWrap: {
     backgroundColor: "transparent",
     paddingTop: 2,

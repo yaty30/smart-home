@@ -1,6 +1,11 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
-import type { AcSchedule, ScheduleAirflow } from "../types/acSchedule";
+import type {
+  AcSchedule,
+  ScheduleAirflow,
+  ScheduleFanSpeed,
+  ScheduleRepeatFrequency,
+} from "../types/acSchedule";
 import type { AirConditionerMode, AirflowLevel } from "../types/airConditioner";
 import type { PairedDevice } from "../types/device";
 
@@ -36,6 +41,19 @@ const isScheduleAirflow = (value: unknown): value is ScheduleAirflow => {
   return value === "auto" || isAirflowLevel(value);
 };
 
+const isScheduleFanSpeed = (value: unknown): value is ScheduleFanSpeed => {
+  return value === "auto" || (typeof value === "number" && [1, 2, 3, 4, 5].includes(value));
+};
+
+const isScheduleRepeatFrequency = (
+  value: unknown,
+): value is ScheduleRepeatFrequency => {
+  return (
+    typeof value === "string" &&
+    ["one-time", "weekly", "bi-weekly"].includes(value)
+  );
+};
+
 const isAcSchedule = (value: unknown): value is AcSchedule => {
   if (typeof value !== "object" || value === null) {
     return false;
@@ -48,8 +66,14 @@ const isAcSchedule = (value: unknown): value is AcSchedule => {
     (candidate.endTime === null || isScheduleTime(candidate.endTime)) &&
     isScheduleMode(candidate.mode) &&
     typeof candidate.temperature === "number" &&
+    (candidate.fanSpeed === undefined ||
+      isScheduleFanSpeed(candidate.fanSpeed)) &&
     (candidate.quiet === undefined || typeof candidate.quiet === "boolean") &&
     (candidate.powerful === undefined || typeof candidate.powerful === "boolean") &&
+    (candidate.repeatEnabled === undefined ||
+      typeof candidate.repeatEnabled === "boolean") &&
+    (candidate.repeatFrequency === undefined ||
+      isScheduleRepeatFrequency(candidate.repeatFrequency)) &&
     isScheduleAirflow(candidate.horizontalAirflow) &&
     isScheduleAirflow(candidate.verticalAirflow)
   );

@@ -2,8 +2,7 @@ import { DropletOff, Flame, Snowflake, Sparkles, SunSnow } from 'lucide-react-na
 
 import type { AirConditionerMode, ControlOption } from '../types/airConditioner';
 import { ControlButtonGroup } from './ControlButtonGroup';
-import { Text } from 'react-native';
-import { theme } from '../theme/theme';
+import { useTheme } from '../theme/theme';
 
 const modes: ControlOption<AirConditionerMode>[] = [
   {
@@ -41,6 +40,8 @@ export function ModeSelector({
   isDisabled = false,
   onChangeMode,
 }: ModeSelectorProps) {
+  const theme = useTheme();
+
   return (
     <ControlButtonGroup
       isDisabled={isDisabled}

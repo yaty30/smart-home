@@ -16,7 +16,7 @@ import type {
   ControlOptionType,
 } from "../types/airConditioner";
 import { ControlButtonGroup } from "./ControlButtonGroup";
-import { theme } from "../theme/theme";
+import { useTheme } from "../theme/theme";
 
 const defaultAirConWindPosition = { top: 5, right: 2, size: 13, pl: 0 };
 export type AirflowOption = "auto" | AirflowLevel;
@@ -173,6 +173,8 @@ export function HorizontalAirflowSelector({
   onChangeLevel,
   onChangeAuto,
 }: AirflowSelectorProps) {
+  const theme = useTheme();
+
   const handleChange = (nextValue: AirflowOption) => {
     if (nextValue === "auto") {
       onChangeAuto(true);
@@ -203,6 +205,8 @@ export function VerticalAirflowSelector({
   onChangeLevel,
   onChangeAuto,
 }: AirflowSelectorProps) {
+  const theme = useTheme();
+
   const handleChange = (nextValue: AirflowOption) => {
     if (nextValue === "auto") {
       onChangeAuto(true);

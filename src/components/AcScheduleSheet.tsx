@@ -2,8 +2,35 @@ import DateTimePicker, {
   type DateTimePickerEvent,
 } from "@react-native-community/datetimepicker";
 import * as Haptics from "expo-haptics";
-import { ChevronDown, Clock, Moon, Plus, X, Zap } from "lucide-react-native";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  Blend,
+  CalendarFold,
+  ChevronDown,
+  Clock,
+  DropletOff,
+  Fan,
+  Flame,
+  Moon,
+  Plus,
+  Repeat,
+  Sparkles,
+  Thermometer,
+  X,
+  Zap,
+  Snowflake,
+  DraftingCompass,
+} from "lucide-react-native";
+import {
+  cloneElement,
+  isValidElement,
+  type ReactNode,
+  type ReactElement,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import {
   Animated,
   KeyboardAvoidingView,
@@ -20,18 +47,30 @@ import {
 } from "react-native";
 
 import {
+  horizontalAirflowOptions,
   HorizontalAirflowSelector,
+  verticalAirflowOptions,
   VerticalAirflowSelector,
 } from "./AirflowSelectors";
 import { AppButton } from "./AppButton";
 import { ArcTemperatureGauge } from "./ArcTemperatureGauge";
-import { ModeSelector } from "./ModeSelector";
+import { FanSpeedControl } from "./FanSpeedControl";
 import { Section } from "./Section";
 import { SwipeableItem } from "./SwipeableItem";
-import { theme } from "../theme/theme";
-import type { AcSchedule, ScheduleAirflow } from "../types/acSchedule";
-import type { AirConditionerMode, AirflowLevel } from "../types/airConditioner";
+import { type Theme, useTheme } from "../theme/theme";
+import type {
+  AcSchedule,
+  ScheduleAirflow,
+  ScheduleFanSpeed,
+  ScheduleRepeatFrequency,
+} from "../types/acSchedule";
+import type {
+  AirConditionerMode,
+  AirflowLevel,
+  FanSpeed,
+} from "../types/airConditioner";
 import { normalizeTemperature } from "../utils/temperatureGauge";
+import MaterialCommunityIcons from "react-native-vector-icons/MaterialCommunityIcons";
 
 type TimeField = "start" | "end";
 
@@ -56,10 +95,72 @@ const defaultSchedule: AcSchedule = {
   days: [...NO_DAYS],
   mode: "cold",
   temperature: 24,
+  fanSpeed: "auto",
   quiet: false,
   powerful: false,
+  repeatEnabled: false,
+  repeatFrequency: "one-time",
   horizontalAirflow: "auto",
   verticalAirflow: "auto",
+};
+
+const repeatOptions: { label: string; value: ScheduleRepeatFrequency }[] = [
+  { label: "One time", value: "one-time" },
+  { label: "Weekly", value: "weekly" },
+  { label: "Bi-weekly", value: "bi-weekly" },
+];
+
+const modeStyles = {
+  opacity: 0.86,
+};
+
+const modeOptions: {
+  id: Exclude<AirConditionerMode, "fan">;
+  label: string;
+  icon: ReactNode;
+}[] = [
+    {
+      id: "auto",
+      label: "Auto",
+      icon: <Sparkles style={modeStyles} size={18} color="#F6C453" />,
+    },
+    {
+      id: "cold",
+      label: "Cold",
+      icon: <Snowflake style={modeStyles} size={18} color="#4DA3FF" />,
+    },
+    {
+      id: "dry",
+      label: "Dry",
+      icon: <DropletOff style={modeStyles} size={18} color="#A67CFF" />,
+    },
+    {
+      id: "heat",
+      label: "Heat",
+      icon: <Flame style={modeStyles} size={18} color="#FF6B35" />,
+    },
+  ];
+
+const modeLabels: Record<Exclude<AirConditionerMode, "fan">, string> = {
+  auto: "Auto",
+  cold: "Cold",
+  dry: "Dry",
+  heat: "Heat",
+};
+
+const airflowLabels: Record<ScheduleAirflow, string> = {
+  auto: "Auto",
+  one: "1",
+  two: "2",
+  three: "3",
+  four: "4",
+  five: "5",
+};
+
+const repeatLabels: Record<ScheduleRepeatFrequency, string> = {
+  "one-time": "One time",
+  weekly: "Weekly",
+  "bi-weekly": "Bi-weekly",
 };
 
 const formatTimePart = (value: number) => String(value).padStart(2, "0");
@@ -91,6 +192,16 @@ const addMinutesToTimeString = (time: string, minutesToAdd: number) => {
     totalMinutes % 60,
   )}`;
 };
+
+const formatFanSpeed = (fanSpeed?: ScheduleFanSpeed) =>
+  fanSpeed === undefined || fanSpeed === "auto" ? "Auto" : `Level ${fanSpeed}`;
+
+const formatRepeat = (schedule: AcSchedule) =>
+  schedule.repeatEnabled
+    ? repeatLabels[schedule.repeatFrequency ?? "weekly"]
+    : repeatLabels["one-time"];
+
+const formatAirflow = (airflow: ScheduleAirflow) => airflowLabels[airflow];
 
 // ─── useSheetPan ──────────────────────────────────────────────────────────────
 // Reusable gesture logic matching AddRoomSheet: handle area claims every touch,
@@ -166,29 +277,43 @@ type ScheduleRowProps = {
 };
 
 function ScheduleRow({ schedule, onToggleEnabled }: ScheduleRowProps) {
+  const theme = useTheme();
+  const s = useMemo(() => createStyles(theme), [theme]);
+  const verticalAirflowOption = verticalAirflowOptions.find(
+    (option) => option.id === schedule.verticalAirflow,
+  );
+  const horizontalAirflowOption = horizontalAirflowOptions.find(
+    (option) => option.id === schedule.horizontalAirflow,
+  );
+  const VerticalAirflowIcon = verticalAirflowOption?.icon;
+  const HorizontalAirflowIcon = horizontalAirflowOption?.icon;
+
+  const modeIcon = modeOptions?.find(m => m.id === schedule.mode)?.icon ?? null
+
   return (
-    <View style={s.row}>
+    <View style={{ ...s.row, borderColor: schedule.enabled ? theme.accent : theme.accentMuted }}>
       <View style={s.rowLeft}>
         <View style={s.rowTimes}>
           <Clock size={14} color={theme.textSecondary} />
           <Text style={s.rowTimeLabel}>On</Text>
           <Text style={s.rowTimeText}>{formatTime12h(schedule.startTime)}</Text>
-          <ChevronDown
-            size={12}
-            color={theme.textSecondary}
-            style={{ transform: [{ rotate: "-90deg" }] }}
-          />
-          <Text style={s.rowTimeLabel}>Off</Text>
-          <Text
-            style={[
-              s.rowTimeText,
-              schedule.endTime === null && s.rowTimeTextMuted,
-            ]}
-          >
-            {schedule.endTime === null
-              ? "No auto off"
-              : formatTime12h(schedule.endTime)}
-          </Text>
+          {schedule.endTime != null &&
+            <>
+              <ChevronDown
+                size={12}
+                color={theme.textSecondary}
+                style={{ transform: [{ rotate: "-90deg" }] }}
+              />
+              <Text style={s.rowTimeLabel}>Off</Text>
+              <Text
+                style={[
+                  s.rowTimeText,
+                  schedule.endTime === null && s.rowTimeTextMuted,
+                ]}
+              >
+                {formatTime12h(schedule.endTime)}
+              </Text></>
+          }
         </View>
         <View style={s.dayPills}>
           {DAY_LABELS.map((label, i) => (
@@ -207,6 +332,94 @@ function ScheduleRow({ schedule, onToggleEnabled }: ScheduleRowProps) {
             </View>
           ))}
         </View>
+        <View style={s.rowDetails}>
+          <View style={s.rowDetailPill}>
+            {/* <Text style={s.rowDetailText}></Text> */}
+            {isValidElement(modeIcon)
+              ? cloneElement(modeIcon as ReactElement<{ size?: number }>, {
+                size: 14,
+              })
+              : null}
+          </View>
+          <View style={s.rowDetailPill}>
+            <View style={s.rowDetailInline}>
+              <View style={s.rowDetailIconFrame}>
+                <Fan size={16} color={theme.accentGlow} />
+              </View>
+
+              {schedule.fanSpeed === undefined ||
+                schedule.fanSpeed === "auto" ? (
+                <Text style={s.rowDetailText}>Auto</Text>
+              ) : (
+                <View style={s.rowDetailIconFrame}>
+                  <MaterialCommunityIcons
+                    color={theme.accent}
+                    name={`numeric-${schedule.fanSpeed}`}
+                    size={20}
+                    style={s.rowDetailNumericIcon}
+                  />
+                </View>
+              )}
+            </View>
+          </View>
+          <View style={s.rowDetailPill}>
+            <View style={{ transform: [{ rotate: "-90deg" }] }}>
+              <DraftingCompass color={theme.accentGlow} size={16} />
+            </View>
+            {VerticalAirflowIcon ? (
+              <View
+                style={{
+                  transform: [
+                    { rotate: `${verticalAirflowOption?.iconRotation ?? 0}deg` },
+                  ],
+                }}
+              >
+                <VerticalAirflowIcon
+                  color={theme.accent}
+                  size={16}
+                  strokeWidth={2.2}
+                />
+              </View>
+            ) : (
+              <Text style={s.rowDetailText}>Auto</Text>
+            )}
+          </View>
+
+          <View style={s.rowDetailPill}>
+            <DraftingCompass size={16} color={theme.accentGlow} />
+            {HorizontalAirflowIcon ? (
+              <View
+                style={{
+                  transform: [
+                    {
+                      rotate: `${horizontalAirflowOption?.iconRotation ?? 0}deg`,
+                    },
+                  ],
+                }}
+              >
+                <HorizontalAirflowIcon
+                  color={theme.accent}
+                  size={16}
+                  strokeWidth={2.2}
+                />
+              </View>
+            ) : (
+              <Text style={s.rowDetailText}>Auto</Text>
+            )}
+          </View>
+
+          {schedule.powerful || schedule.quiet &&
+            <View style={s.rowDetailPill}>
+              <View>{schedule.powerful ? <Zap size={16} color={theme.powerfulAccent} /> : schedule.quiet ? <Moon size={16} color={theme.quietAccent} /> : null}</View>
+            </View>
+          }
+
+          <View style={s.rowDetailPill}>
+            <Repeat size={16} color={theme.accentGlow} />
+            <Text style={s.rowDetailText}>{formatRepeat(schedule)}</Text>
+          </View>
+
+        </View>
       </View>
       <Switch
         value={schedule.enabled}
@@ -220,7 +433,7 @@ function ScheduleRow({ schedule, onToggleEnabled }: ScheduleRowProps) {
 
 // ─── Styles ──────────────────────────────────────────────────────────────────
 
-const s = StyleSheet.create({
+const createStyles = (theme: Theme) => StyleSheet.create({
   // shared sheet chrome
   modalRoot: {
     flex: 1,
@@ -309,6 +522,7 @@ const s = StyleSheet.create({
     alignItems: "center",
     backgroundColor: theme.surfaceLow,
     borderRadius: 12,
+    borderWidth: 1,
     flexDirection: "row",
     justifyContent: "space-between",
     paddingHorizontal: 14,
@@ -316,7 +530,8 @@ const s = StyleSheet.create({
   },
   rowLeft: {
     flex: 1,
-    gap: 6,
+    gap: theme.spacing.lg,
+    minWidth: 0,
   },
   rowTimes: {
     alignItems: "center",
@@ -357,6 +572,51 @@ const s = StyleSheet.create({
   },
   dayPillTextActive: {
     color: "#fff",
+  },
+  rowDetails: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 6,
+  },
+  rowDetailPill: {
+    alignItems: "center",
+    backgroundColor: theme.paperBackground,
+    borderColor: theme.border,
+    borderRadius: 8,
+    borderWidth: StyleSheet.hairlineWidth,
+    flexDirection: "row",
+    gap: 4,
+    justifyContent: "center",
+    minHeight: 30,
+    paddingHorizontal: theme.spacing.sm,
+    paddingVertical: 5,
+  },
+  rowDetailLabel: {
+    color: theme.textSecondary,
+    fontSize: 11,
+    fontWeight: "700",
+  },
+  rowDetailText: {
+    color: theme.text,
+    fontSize: 11,
+    fontWeight: "700",
+    lineHeight: 14,
+  },
+  rowDetailInline: {
+    alignItems: "center",
+    flexDirection: "row",
+    justifyContent: "center",
+  },
+  rowDetailIconFrame: {
+    alignItems: "center",
+    height: 20,
+    justifyContent: "center",
+    width: 20,
+  },
+  rowDetailNumericIcon: {
+    height: 20,
+    lineHeight: 20,
+    textAlign: "center",
   },
 
   // editor sheet
@@ -454,6 +714,63 @@ const s = StyleSheet.create({
   dayToggleTextActive: {
     color: "#fff",
   },
+  repeatButtonRow: {
+    flexDirection: "row",
+    gap: theme.spacing.sm,
+  },
+  repeatButton: {
+    alignItems: "center",
+    backgroundColor: theme.surfaceLow,
+    borderColor: theme.accentMuted,
+    borderRadius: theme.radiusRound,
+    borderWidth: 1,
+    flex: 1,
+    justifyContent: "center",
+    minHeight: 44,
+    paddingHorizontal: 8,
+    paddingVertical: 12,
+  },
+  repeatButtonSelected: {
+    borderColor: theme.accentSolid,
+  },
+  repeatButtonText: {
+    color: theme.textSecondary,
+    fontSize: 13,
+    fontWeight: "800",
+    letterSpacing: 0,
+    textAlign: "center",
+  },
+  repeatButtonTextSelected: {
+    color: theme.accentStrong,
+  },
+  modePillRow: {
+    flexDirection: "row",
+    gap: theme.spacing.sm,
+  },
+  modePill: {
+    alignItems: "center",
+    backgroundColor: "rgba(255, 255, 255, 0.04)",
+    borderColor: theme.accentMuted,
+    borderRadius: theme.radiusRound,
+    borderWidth: 1,
+    flex: 1,
+    flexDirection: "row",
+    gap: theme.spacing.xs,
+    justifyContent: "center",
+    paddingVertical: 12,
+  },
+  modePillSelected: {
+    borderColor: theme.accentSolid,
+  },
+  modePillText: {
+    color: theme.textSecondary,
+    fontSize: 14,
+    fontWeight: "800",
+    letterSpacing: 0,
+  },
+  modePillTextSelected: {
+    color: theme.accentStrong,
+  },
   temperatureHeader: {
     alignItems: "flex-start",
     flexDirection: "row",
@@ -464,6 +781,7 @@ const s = StyleSheet.create({
     flex: 1,
     gap: 4,
     minWidth: 0,
+    flexDirection: 'row',
   },
   temperatureTitle: {
     color: theme.text,
@@ -523,6 +841,8 @@ export function AcScheduleSheet({
   onSaveSchedule,
   onToggleScheduleEnabled,
 }: AcScheduleSheetProps) {
+  const theme = useTheme();
+  const s = useMemo(() => createStyles(theme), [theme]);
   const translateY = useRef(new Animated.Value(800)).current;
   const handleCloseRef = useRef(onClose);
   const [editorVisible, setEditorVisible] = useState(false);
@@ -690,6 +1010,8 @@ function ScheduleEditorSheet({
   onClose,
   onSave,
 }: ScheduleEditorSheetProps) {
+  const theme = useTheme();
+  const s = useMemo(() => createStyles(theme), [theme]);
   const translateY = useRef(new Animated.Value(800)).current;
   const handleCloseRef = useRef(onClose);
   useEffect(() => {
@@ -789,6 +1111,18 @@ function ScheduleEditorSheet({
       return { ...prev, days };
     });
   }, []);
+
+  const handleSelectRepeatFrequency = useCallback(
+    (repeatFrequency: ScheduleRepeatFrequency) => {
+      Haptics.selectionAsync().catch(() => undefined);
+      setDraft((prev) => ({
+        ...prev,
+        repeatEnabled: repeatFrequency !== "one-time",
+        repeatFrequency,
+      }));
+    },
+    [],
+  );
 
   const tempRange = useMemo(
     () => temperatureRanges[draft.mode] ?? temperatureRanges.auto,
@@ -942,6 +1276,46 @@ function ScheduleEditorSheet({
                   <View style={{ gap: theme.spacing.lg }}>
                     {/* ── Days ── */}
                     <Section>
+                      <View style={s.temperatureTitleGroup}>
+                        <Repeat color={theme.text} size={18} />
+                        <Text style={s.temperatureTitle}>Repeat</Text>
+                      </View>
+                      <View style={s.repeatButtonRow}>
+                        {repeatOptions.map((option) => {
+                          const selected =
+                            (draft.repeatFrequency ?? "one-time") === option.value;
+
+                          return (
+                            <TouchableOpacity
+                              activeOpacity={0.8}
+                              accessibilityRole="button"
+                              accessibilityState={{ selected }}
+                              key={option.value}
+                              onPress={() =>
+                                handleSelectRepeatFrequency(option.value)
+                              }
+                              style={[
+                                s.repeatButton,
+                                selected && s.repeatButtonSelected,
+                              ]}
+                            >
+                              <Text
+                                style={[
+                                  s.repeatButtonText,
+                                  selected && s.repeatButtonTextSelected,
+                                ]}
+                              >
+                                {option.label}
+                              </Text>
+                            </TouchableOpacity>
+                          );
+                        })}
+                      </View>
+
+                      <View style={{ ...s.temperatureTitleGroup, marginTop: theme.spacing.sm }}>
+                        <CalendarFold color={theme.text} size={18} />
+                        <Text style={s.temperatureTitle}>On</Text>
+                      </View>
                       <View style={s.daysRow}>
                         {DAY_FULL.map((day, i) => (
                           <TouchableOpacity
@@ -968,38 +1342,60 @@ function ScheduleEditorSheet({
 
                     {/* ── Mode ── */}
                     <Section>
-                      <ModeSelector
-                        selectedMode={draft.mode}
-                        isPowered={true}
-                        onChangeMode={(mode) => {
-                          setDraft((prev) => ({
-                            ...prev,
-                            mode: mode as Exclude<AirConditionerMode, "fan">,
-                            temperature: Math.min(
-                              Math.max(
-                                prev.temperature,
-                                (
-                                  temperatureRanges[
-                                    mode as Exclude<AirConditionerMode, "fan">
-                                  ] ?? temperatureRanges.auto
-                                ).min,
-                              ),
-                              (
-                                temperatureRanges[
-                                  mode as Exclude<AirConditionerMode, "fan">
-                                ] ?? temperatureRanges.auto
-                              ).max,
-                            ),
-                          }));
-                        }}
-                      />
+                      <View style={s.temperatureTitleGroup}>
+                        <Blend color={theme.text} size={18} />
+                        <Text style={s.temperatureTitle}>Mode</Text>
+                      </View>
+                      <View style={s.modePillRow}>
+                        {modeOptions.map((modeOption) => {
+                          const selected = draft.mode === modeOption.id;
+
+                          return (
+                            <TouchableOpacity
+                              activeOpacity={0.8}
+                              accessibilityRole="button"
+                              accessibilityState={{ selected }}
+                              key={modeOption.id}
+                              onPress={() => {
+                                const nextRange = temperatureRanges[modeOption.id];
+
+                                setDraft((prev) => ({
+                                  ...prev,
+                                  mode: modeOption.id,
+                                  temperature: Math.min(
+                                    Math.max(prev.temperature, nextRange.min),
+                                    nextRange.max,
+                                  ),
+                                }));
+                              }}
+                              style={[
+                                s.modePill,
+                                selected && s.modePillSelected,
+                              ]}
+                            >
+                              {modeOption.icon}
+                              <Text
+                                style={[
+                                  s.modePillText,
+                                  selected && s.modePillTextSelected,
+                                ]}
+                              >
+                                {modeOption.label}
+                              </Text>
+                            </TouchableOpacity>
+                          );
+                        })}
+                      </View>
                     </Section>
 
                     {/* ── Temperature ── */}
                     <Section>
                       <View style={s.temperatureHeader}>
-                        <View style={s.temperatureTitleGroup}>
-                          <Text style={s.temperatureTitle}>Temperature</Text>
+                        <View style={{ ...s.temperatureTitleGroup, flexDirection: 'column' }}>
+                          <View style={{ display: 'flex', flexDirection: 'row', gap: 4 }}>
+                            <Thermometer color={theme.text} size={18} />
+                            <Text style={s.temperatureTitle}>Temperature</Text>
+                          </View>
                           <Text style={s.temperatureSubtitle}>
                             {draft.temperature}°C target
                           </Text>
@@ -1078,6 +1474,27 @@ function ScheduleEditorSheet({
                         }}
                         onInteractionEnd={() =>
                           setIsAdjustingTemperature(false)
+                        }
+                      />
+                    </Section>
+
+                    {/* ── Fan Speed ── */}
+                    <Section>
+                      <FanSpeedControl
+                        isAuto={(draft.fanSpeed ?? "auto") === "auto"}
+                        isPowered={true}
+                        onChangeAuto={(auto) => {
+                          if (!auto) return;
+                          setDraft((prev) => ({ ...prev, fanSpeed: "auto" }));
+                        }}
+                        onChangeSpeed={(speed) => {
+                          setDraft((prev) => ({ ...prev, fanSpeed: speed }));
+                        }}
+                        speed={
+                          draft.fanSpeed === undefined ||
+                            draft.fanSpeed === "auto"
+                            ? (3 as FanSpeed)
+                            : draft.fanSpeed
                         }
                       />
                     </Section>

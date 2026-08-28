@@ -7,9 +7,11 @@ import {
   PairingScannerModal,
   usePairingScanner,
 } from "../components/PairingScannerModal";
-import { theme } from "../theme/theme";
+import { type Theme, useTheme } from "../theme/theme";
 
 export function ConnectDeviceScreen() {
+  const theme = useTheme();
+  const styles = useMemo(() => createStyles(theme), [theme]);
   const {
     closeScanner,
     isScannerOpen,
@@ -74,7 +76,7 @@ export function ConnectDeviceScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (theme: Theme) => StyleSheet.create({
   safeArea: {
     backgroundColor: theme.root,
     flex: 1,

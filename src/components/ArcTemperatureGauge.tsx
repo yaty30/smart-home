@@ -11,7 +11,7 @@ import {
 } from "react-native";
 import Svg, { Circle, Path } from "react-native-svg";
 
-import { theme } from "../theme/theme";
+import { type Theme, useTheme } from "../theme/theme";
 import {
   GAUGE_START_ANGLE,
   GAUGE_SWEEP_ANGLE,
@@ -49,6 +49,8 @@ export function ArcTemperatureGauge({
   onInteractionEnd,
   onInteractionStart,
 }: ArcTemperatureGaugeProps) {
+  const theme = useTheme();
+  const styles = useMemo(() => createStyles(theme), [theme]);
   const controlsDisabled = !isPowered || isDisabled;
   const roundedTemperature = Math.round(temperature);
   const canDecrease = !controlsDisabled && roundedTemperature > minTemperature;
@@ -282,7 +284,7 @@ export function ArcTemperatureGauge({
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (theme: Theme) => StyleSheet.create({
   container: {
     alignItems: "center",
     gap: theme.spacing.md,

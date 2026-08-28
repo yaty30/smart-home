@@ -2,13 +2,17 @@ import * as Haptics from "expo-haptics";
 import {
   AirVent,
   ClockFading,
+  DropletOff,
   Ellipsis,
+  Flame,
   Moon,
   Power,
   PowerOff,
+  Snowflake,
+  Sparkles,
   Zap,
 } from "lucide-react-native";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Animated,
   type NativeScrollEvent,
@@ -49,7 +53,7 @@ import {
   saveAcSchedule,
 } from "../storage/acScheduleStorage";
 import { AcScheduleSheet } from "../components/AcScheduleSheet";
-import { theme } from "../theme/theme";
+import { type Theme, useTheme } from "../theme/theme";
 import type { AcSchedule, ScheduleAirflow } from "../types/acSchedule";
 import type {
   AirConditionerMode,
@@ -124,11 +128,15 @@ const espPositionToAirflowLevel: Record<
 const DEVICE_COMMAND_TIMEOUT_MS = 1500;
 const TEMPERATURE_COMMAND_DEBOUNCE_MS = 400;
 
-const modePills: { id: AirConditionerMode; label: string }[] = [
-  { id: "auto", label: "Auto" },
-  { id: "cold", label: "Cold" },
-  { id: "dry", label: "Dry" },
-  { id: "heat", label: "Heat" },
+const modeStlyes = {
+  opacity: 0.86
+}
+
+const modePills: { id: AirConditionerMode; label: string, icon: ReactNode }[] = [
+  { id: "auto", label: "Auto", icon: <Sparkles style={modeStlyes} size={18} color="#F6C453" /> },
+  { id: "cold", label: "Cold", icon: <Snowflake style={modeStlyes} size={18} color="#4DA3FF" /> },
+  { id: "dry", label: "Dry", icon: <DropletOff style={modeStlyes} size={18} color="#A67CFF" /> },
+  { id: "heat", label: "Heat", icon: <Flame style={modeStlyes} size={18} color="#FF6B35" /> },
 ];
 
 const formatTimePart = (value: number) => String(value).padStart(2, "0");
@@ -197,6 +205,8 @@ export function AirConditionerScreen({
     reportDeviceUnreachable,
     updateDeviceState,
   } = useDeviceConnection();
+  const theme = useTheme();
+  const styles = useMemo(() => createStyles(theme), [theme]);
   const { width } = useWindowDimensions();
   const [temperature, setTemperature] = useState(24);
   const [mode, setMode] = useState<AirConditionerMode>("auto");
@@ -963,6 +973,8 @@ export function AirConditionerScreen({
         days: nextSchedule.days,
         powerful: nextSchedule.powerful,
         quiet: nextSchedule.quiet,
+        repeatEnabled: nextSchedule.repeatEnabled,
+        repeatFrequency: nextSchedule.repeatFrequency,
       };
 
       setSchedule(scheduleWithDays);
@@ -1065,6 +1077,7 @@ export function AirConditionerScreen({
                   onPress={() => handleModeChange(modeOption.id)}
                   style={[styles.modePill, selected && styles.modePillSelected]}
                 >
+                  {modeOption.icon}
                   <Text
                     style={[
                       styles.modePillText,
@@ -1229,7 +1242,7 @@ export function AirConditionerScreen({
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (theme: Theme) => StyleSheet.create({
   content: {
     flexGrow: 1,
     paddingBottom: SCREEN_BOTTOM_SAFE_PADDING + theme.spacing.xl,
@@ -1262,6 +1275,8 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: "center",
     paddingVertical: 12,
+    flexDirection: 'row',
+    gap: theme.spacing.xs
   },
   modePillSelected: {
     // backgroundColor: theme.accentStrong,
@@ -1490,4 +1505,7 @@ const styles = StyleSheet.create({
     minWidth: 360,
     width: "100%",
   },
+  modeIcon: {
+    opacity: 0.6
+  }
 });

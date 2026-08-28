@@ -1,6 +1,8 @@
-import type { AirConditionerMode, AirflowLevel } from "./airConditioner";
+import type { AirConditionerMode, AirflowLevel, FanSpeed } from "./airConditioner";
 
 export type ScheduleAirflow = "auto" | AirflowLevel;
+export type ScheduleRepeatFrequency = "one-time" | "weekly" | "bi-weekly";
+export type ScheduleFanSpeed = "auto" | FanSpeed;
 
 export type AcSchedule = {
   enabled: boolean;
@@ -10,8 +12,11 @@ export type AcSchedule = {
   days: boolean[];
   mode: Exclude<AirConditionerMode, "fan">;
   temperature: number;
+  fanSpeed?: ScheduleFanSpeed;
   quiet?: boolean;
   powerful?: boolean;
+  repeatEnabled?: boolean;
+  repeatFrequency?: ScheduleRepeatFrequency;
   horizontalAirflow: ScheduleAirflow;
   verticalAirflow: ScheduleAirflow;
 };

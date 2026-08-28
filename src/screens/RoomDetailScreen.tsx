@@ -4,7 +4,7 @@ import { useState, useCallback, useEffect, useMemo } from 'react';
 import { useRooms } from '../store/rooms';
 import { useDevices } from '../store/devices';
 import { useControllers } from '../store/controllers';
-import { theme } from '../theme/theme';
+import { type Theme, useTheme } from '../theme/theme';
 import type { RootStackScreenProps } from '../navigation/types';
 import type { Device, DeviceBrand, DeviceType } from '../domain/device';
 import type { ComponentType } from 'react';
@@ -62,6 +62,8 @@ const readQrVisible = (payload: unknown): boolean | null => {
 };
 
 export function RoomDetailScreen({ navigation, route }: RoomDetailScreenProps) {
+  const theme = useTheme();
+  const styles = useMemo(() => createStyles(theme), [theme]);
   const { roomId } = route.params;
   const { getRoomById, removeRoom, updateRoomName } = useRooms();
   const { getDeviceById, getDevicesByRoom, removeDevice, removeDevicesByRoom, addDevice, updateDeviceName, updateDeviceState } = useDevices();
@@ -632,7 +634,7 @@ export function RoomDetailScreen({ navigation, route }: RoomDetailScreenProps) {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (theme: Theme) => StyleSheet.create({
   screen: {
     backgroundColor: theme.root,
     flex: 1,
