@@ -1,6 +1,7 @@
 import type { Controller } from '../domain/controller';
 import type { Device } from '../domain/device';
 import { isDebugMode } from '../config/debug';
+import { fetchControllerStatus } from './controllerStatusService';
 
 export type DeviceCommand = {
   type: string;
@@ -138,24 +139,11 @@ export class ControllerClient {
       return controller.online;
     }
 
-    const host = controller.ip.replace(/\/+$/, '');
-    const abortController = new AbortController();
-    const timeout = setTimeout(() => abortController.abort(), 3000);
-
     try {
-      const response = await fetch(`${host}/status`, {
-        headers: {
-          Authorization: `Bearer ${controller.token}`,
-        },
-        method: 'GET',
-        signal: abortController.signal,
-      });
-
-      return response.ok;
+      await fetchControllerStatus(controller);
+      return true;
     } catch (error) {
       return false;
-    } finally {
-      clearTimeout(timeout);
     }
   }
 }

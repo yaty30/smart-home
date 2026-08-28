@@ -3,6 +3,10 @@ import { createContext, type PropsWithChildren, useCallback, useContext, useEffe
 import type { Device } from '../domain/device';
 import { isDebugMode } from '../config/debug';
 import { DEBUG_DEVICES } from './debugData';
+import {
+  deviceStateSnapshotToDeviceState,
+  type DeviceStateSnapshot,
+} from '../services/controllerStatusService';
 
 type DevicesContextValue = {
   devices: Device[];
@@ -12,6 +16,12 @@ type DevicesContextValue = {
   removeDevicesByRoom: (roomId: string) => Promise<void>;
   updateDeviceName: (deviceId: string, name: string) => Promise<void>;
   updateDeviceState: (deviceId: string, state: Partial<Device['state']>) => void;
+  applyControllerDeviceStatus: (
+    controllerId: string,
+    snapshot: DeviceStateSnapshot,
+  ) => void;
+  markControllerDevicesSyncing: (controllerId: string) => void;
+  markControllerDevicesOffline: (controllerId: string) => void;
   setFavouriteDevice: (deviceId: string) => Promise<void>;
   clearFavouriteDevice: (deviceId: string) => Promise<void>;
   getDeviceById: (deviceId: string) => Device | undefined;
@@ -41,6 +51,23 @@ const isDeviceArray = (value: unknown): value is Device[] => {
   );
 };
 
+const persistedDeviceState = (device: Device): Device['state'] => ({
+  ...(device.state.favourite === true ? { favourite: true } : {}),
+});
+
+const sanitizeDeviceForRuntime = (device: Device): Device => ({
+  ...device,
+  state: {
+    ...persistedDeviceState(device),
+    syncStatus: 'unknown',
+  },
+});
+
+const sanitizeDeviceForStorage = (device: Device): Device => ({
+  ...device,
+  state: persistedDeviceState(device),
+});
+
 export function DevicesProvider({ children }: PropsWithChildren) {
   const [devices, setDevices] = useState<Device[]>(
     isDebugMode ? DEBUG_DEVICES : []
@@ -60,7 +87,14 @@ export function DevicesProvider({ children }: PropsWithChildren) {
         if (stored && isMounted) {
           const parsed = JSON.parse(stored) as unknown;
           if (isDeviceArray(parsed)) {
-            setDevices(parsed);
+            const sanitized = parsed.map(sanitizeDeviceForRuntime);
+            setDevices(sanitized);
+            void AsyncStorage.setItem(
+              DEVICES_STORAGE_KEY,
+              JSON.stringify(sanitized.map(sanitizeDeviceForStorage)),
+            ).catch((error) => {
+              console.warn('Failed to clean persisted devices:', error);
+            });
           }
         }
       } catch (error) {
@@ -85,7 +119,10 @@ export function DevicesProvider({ children }: PropsWithChildren) {
     }
 
     try {
-      await AsyncStorage.setItem(DEVICES_STORAGE_KEY, JSON.stringify(devicesToSave));
+      await AsyncStorage.setItem(
+        DEVICES_STORAGE_KEY,
+        JSON.stringify(devicesToSave.map(sanitizeDeviceForStorage)),
+      );
     } catch (error) {
       console.warn('Failed to persist devices:', error);
     }
@@ -93,7 +130,7 @@ export function DevicesProvider({ children }: PropsWithChildren) {
 
   const addDevice = useCallback(
     async (device: Device) => {
-      const updated = [...devices, device];
+      const updated = [...devices, sanitizeDeviceForRuntime(device)];
       setDevices(updated);
       await persistDevices(updated);
     },
@@ -141,6 +178,63 @@ export function DevicesProvider({ children }: PropsWithChildren) {
               },
             }
           : d
+      )
+    );
+  }, []);
+
+  const applyControllerDeviceStatus = useCallback((
+    controllerId: string,
+    snapshot: DeviceStateSnapshot,
+  ) => {
+    const nextRuntimeState = deviceStateSnapshotToDeviceState(snapshot);
+
+    setDevices((current) =>
+      current.map((device) =>
+        device.controllerId === controllerId && device.type === 'ac'
+          ? {
+              ...device,
+              state: {
+                ...device.state,
+                ...nextRuntimeState,
+              },
+            }
+          : device
+      )
+    );
+  }, []);
+
+  const markControllerDevicesSyncing = useCallback((controllerId: string) => {
+    setDevices((current) =>
+      current.map((device) =>
+        device.controllerId === controllerId
+          ? {
+              ...device,
+              state: {
+                ...device.state,
+                syncStatus:
+                  device.state.syncStatus === 'synced' ||
+                  device.state.syncStatus === 'offline'
+                    ? 'syncing'
+                    : 'unknown',
+              },
+            }
+          : device
+      )
+    );
+  }, []);
+
+  const markControllerDevicesOffline = useCallback((controllerId: string) => {
+    setDevices((current) =>
+      current.map((device) =>
+        device.controllerId === controllerId
+          ? {
+              ...device,
+              state: {
+                ...device.state,
+                syncStatus: 'offline',
+              },
+            }
+          : device
       )
     );
   }, []);
@@ -203,6 +297,9 @@ export function DevicesProvider({ children }: PropsWithChildren) {
       removeDevicesByRoom,
       updateDeviceName,
       updateDeviceState,
+      applyControllerDeviceStatus,
+      markControllerDevicesSyncing,
+      markControllerDevicesOffline,
       setFavouriteDevice,
       clearFavouriteDevice,
       getDeviceById,
@@ -217,6 +314,9 @@ export function DevicesProvider({ children }: PropsWithChildren) {
       removeDevicesByRoom,
       updateDeviceName,
       updateDeviceState,
+      applyControllerDeviceStatus,
+      markControllerDevicesSyncing,
+      markControllerDevicesOffline,
       setFavouriteDevice,
       clearFavouriteDevice,
       getDeviceById,

@@ -24,6 +24,7 @@ export const DEBUG_CONTROLLERS: Controller[] = [
     ip: 'http://192.0.2.10',
     token: 'debug-token-living',
     online: true,
+    connectionStatus: 'online',
   },
   {
     id: 'debug-controller-bedroom',
@@ -33,6 +34,7 @@ export const DEBUG_CONTROLLERS: Controller[] = [
     ip: 'http://192.0.2.11',
     token: 'debug-token-bedroom',
     online: true,
+    connectionStatus: 'online',
   },
 ];
 
@@ -63,6 +65,7 @@ export const DEBUG_DEVICES: Device[] = [
       swingHorizontal: 'center',
       quiet: false,
       powerful: false,
+      syncStatus: 'synced',
     },
   },
   {
@@ -74,7 +77,7 @@ export const DEBUG_DEVICES: Device[] = [
     brand: 'lg',
     transport: 'ir',
     capabilities: { power: true },
-    state: { power: false },
+    state: { power: false, syncStatus: 'synced' },
   },
   {
     id: 'debug-device-living-lamp',
@@ -85,7 +88,7 @@ export const DEBUG_DEVICES: Device[] = [
     brand: 'lg',
     transport: 'ir',
     capabilities: { power: true },
-    state: { power: true },
+    state: { power: true, syncStatus: 'synced' },
   },
   {
     id: 'debug-device-bedroom-ac',
@@ -105,6 +108,7 @@ export const DEBUG_DEVICES: Device[] = [
       swingHorizontal: 'center',
       quiet: true,
       powerful: false,
+      syncStatus: 'synced',
     },
   },
   {
@@ -116,6 +120,6 @@ export const DEBUG_DEVICES: Device[] = [
     brand: 'lg',
     transport: 'ir',
     capabilities: { power: true },
-    state: { power: false },
+    state: { power: false, syncStatus: 'synced' },
   },
 ];

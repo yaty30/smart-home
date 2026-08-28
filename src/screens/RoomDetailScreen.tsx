@@ -13,7 +13,6 @@ import { AddDeviceSheet } from '../components/AddDeviceSheet';
 import { BottomNav, BOTTOM_NAV_CLEARANCE } from '../components/BottomNav';
 import { createDevice } from '../domain/device';
 import { deviceService, executeDeviceCommand } from '../services/deviceService';
-import { controllerHealthService } from '../services/controllerHealthService';
 import { SwipeableItem } from '../components/SwipeableItem';
 import { useBottomNavAnimation } from '../hooks/useBottomNavAnimation';
 
@@ -47,6 +46,42 @@ const createDeviceColors = (theme: Theme) => ({
   POWERED_GREEN_BORDER: theme.statusColors.onlineBorder,
 });
 
+const controllerStatusText = (
+  status: string | undefined,
+  online: boolean | undefined,
+) => {
+  if (status === 'connecting') {
+    return 'Syncing';
+  }
+
+  if (status === 'unknown' || status === undefined) {
+    return 'Unknown';
+  }
+
+  return online ? 'Online' : 'Offline';
+};
+
+const deviceStatusText = (device: Device) => {
+  const hasKnownPower = typeof device.state.power === 'boolean';
+
+  if (!hasKnownPower) {
+    return 'Syncing';
+  }
+
+  if (device.state.syncStatus === 'offline') {
+    return 'Offline';
+  }
+
+  if (
+    device.state.syncStatus === 'syncing' ||
+    device.state.syncStatus === 'unknown'
+  ) {
+    return 'Syncing';
+  }
+
+  return device.state.power ? 'On' : 'Off';
+};
+
 
 export function RoomDetailScreen({ navigation, route }: RoomDetailScreenProps) {
   const theme = useTheme();
@@ -55,7 +90,7 @@ export function RoomDetailScreen({ navigation, route }: RoomDetailScreenProps) {
   const { roomId } = route.params;
   const { getRoomById, removeRoom, updateRoomName } = useRooms();
   const { getDeviceById, getDevicesByRoom, removeDevice, removeDevicesByRoom, addDevice, updateDeviceName, updateDeviceState } = useDevices();
-  const { controllers, getControllerById, updateControllerOnlineStatus } = useControllers();
+  const { controllers, getControllerById } = useControllers();
   const [showAddDeviceSheet, setShowAddDeviceSheet] = useState(false);
   const [renameTarget, setRenameTarget] = useState<RenameTarget | null>(null);
   const [scrollEnabled, setScrollEnabled] = useState(true);
@@ -72,22 +107,14 @@ export function RoomDetailScreen({ navigation, route }: RoomDetailScreenProps) {
 
   const roomController = controllers.find((c) => c.roomId === roomId);
   const ControllerStatusIcon = roomController?.online ? Wifi : WifiOff;
+  const currentControllerStatusText = controllerStatusText(
+    roomController?.connectionStatus,
+    roomController?.online,
+  );
 
   useEffect(() => {
     deviceService.initialize(getDeviceById, getControllerById);
   }, [getDeviceById, getControllerById]);
-
-  useEffect(() => {
-    if (!roomController) {
-      return undefined;
-    }
-
-    controllerHealthService.start([roomController], updateControllerOnlineStatus, 10000);
-
-    return () => {
-      controllerHealthService.stop();
-    };
-  }, [roomController, updateControllerOnlineStatus]);
 
   const handleTogglePower = useCallback(
     async (deviceId: string, currentPower: boolean) => {
@@ -204,9 +231,16 @@ export function RoomDetailScreen({ navigation, route }: RoomDetailScreenProps) {
       }
 
       if (!roomController.online) {
+        const waitingForStatus =
+          roomController.connectionStatus === 'unknown' ||
+          roomController.connectionStatus === 'connecting' ||
+          roomController.connectionStatus === undefined;
+
         Alert.alert(
-          'Controller Offline',
-          `The controller for ${room.name} is currently offline. Please ensure the ESP32 is powered on and connected to your network.`,
+          waitingForStatus ? 'Controller Syncing' : 'Controller Offline',
+          waitingForStatus
+            ? `The controller for ${room.name} has not finished syncing yet. Please try again after its status updates.`
+            : `The controller for ${room.name} is currently offline. Please ensure the ESP32 is powered on and connected to your network.`,
           [{ text: 'OK' }]
         );
         return;
@@ -232,16 +266,7 @@ export function RoomDetailScreen({ navigation, route }: RoomDetailScreenProps) {
           fanSpeeds: ['auto', '1', '2', '3', '4', '5'],
           swing: true,
         };
-        device.state = {
-          power: false,
-          temperature: 24,
-          mode: 'cool',
-          fanSpeed: 'auto',
-          swingVertical: 'auto',
-          swingHorizontal: 'center',
-          quiet: false,
-          powerful: false,
-        };
+        device.state = { syncStatus: 'unknown' };
       }
 
       await addDevice(device);
@@ -329,7 +354,7 @@ export function RoomDetailScreen({ navigation, route }: RoomDetailScreenProps) {
                   styles.controllerStatus,
                   roomController.online && styles.controllerStatusOnline
                 ]}>
-                  {roomController.online ? 'Online' : 'Offline'}
+                  {currentControllerStatusText}
                 </Text>
               </View>
               <ChevronRight color={theme.textMuted} size={20} strokeWidth={2.2} />
@@ -363,6 +388,11 @@ export function RoomDetailScreen({ navigation, route }: RoomDetailScreenProps) {
             {devices.map((device) => {
               const Icon = iconByDeviceType[device.type];
               const isPowered = device.state.power === true;
+              const hasKnownPower = typeof device.state.power === 'boolean';
+              const isOffline = device.state.syncStatus === 'offline';
+              const isSynced = device.state.syncStatus === 'synced';
+              const canTogglePower =
+                roomController?.online === true && hasKnownPower;
 
               return (
                 <SwipeableItem
@@ -373,7 +403,7 @@ export function RoomDetailScreen({ navigation, route }: RoomDetailScreenProps) {
                   onSwipeStart={() => setScrollEnabled(false)}
                   style={styles.deviceCardWrapper}
                 >
-                  <View style={[styles.deviceCard, isPowered && styles.deviceCardOn]}>
+                  <View style={[styles.deviceCard, isPowered && isSynced && styles.deviceCardOn]}>
                     <TouchableOpacity
                       activeOpacity={0.84}
                       accessibilityRole="button"
@@ -385,9 +415,9 @@ export function RoomDetailScreen({ navigation, route }: RoomDetailScreenProps) {
                       }}
                       style={styles.deviceCardContent}
                     >
-                      <View style={[styles.deviceIcon, isPowered && styles.deviceIconOn]}>
+                      <View style={[styles.deviceIcon, isPowered && isSynced && styles.deviceIconOn]}>
                         <Icon
-                          color={isPowered ? deviceColors.POWERED_GREEN : theme.textMuted}
+                          color={isPowered && !isOffline ? deviceColors.POWERED_GREEN : theme.textMuted}
                           size={20}
                           strokeWidth={2.2}
                         />
@@ -401,7 +431,7 @@ export function RoomDetailScreen({ navigation, route }: RoomDetailScreenProps) {
                             {device.brand.charAt(0).toUpperCase() + device.brand.slice(1)}
                           </Text>
                         )}
-                        {device.type === 'ac' && isPowered && (
+                        {device.type === 'ac' && isPowered && isSynced && (
                           <View style={styles.deviceStatus}>
                             <Text style={styles.deviceStatusText}>
                               {device.state.temperature}°C
@@ -416,8 +446,10 @@ export function RoomDetailScreen({ navigation, route }: RoomDetailScreenProps) {
                             </Text>
                           </View>
                         )}
-                        {device.type === 'ac' && !isPowered && (
-                          <Text style={styles.deviceStatusText}>Off</Text>
+                        {device.type === 'ac' && (!isPowered || !isSynced) && (
+                          <Text style={styles.deviceStatusText}>
+                            {deviceStatusText(device)}
+                          </Text>
                         )}
                       </View>
                     </TouchableOpacity>
@@ -425,11 +457,17 @@ export function RoomDetailScreen({ navigation, route }: RoomDetailScreenProps) {
                       activeOpacity={0.72}
                       accessibilityRole="button"
                       accessibilityLabel={`Toggle ${device.name} power`}
+                      accessibilityState={{ disabled: !canTogglePower }}
+                      disabled={!canTogglePower}
                       onPress={() => void handleTogglePower(device.id, isPowered)}
-                      style={[styles.powerButton, isPowered && styles.powerButtonOn]}
+                      style={[
+                        styles.powerButton,
+                        isPowered && isSynced && styles.powerButtonOn,
+                        !canTogglePower && styles.powerButtonDisabled,
+                      ]}
                     >
                       <Power
-                        color={isPowered ? deviceColors.POWERED_GREEN : theme.textMuted}
+                        color={isPowered && !isOffline ? deviceColors.POWERED_GREEN : theme.textMuted}
                         size={20}
                         strokeWidth={2.4}
                       />
@@ -754,6 +792,9 @@ const createStyles = (theme: Theme) => StyleSheet.create({
   powerButtonOn: {
     backgroundColor: theme.statusColors.onlineMuted,
     borderColor: theme.statusColors.onlineBorder,
+  },
+  powerButtonDisabled: {
+    opacity: 0.52,
   },
   deleteSection: {
     marginTop: 'auto',

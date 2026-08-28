@@ -10,13 +10,13 @@ import {
 } from 'react';
 import { useDevices } from '../store/devices';
 import { useControllers } from '../store/controllers';
-import type {
-  DeviceStateSnapshot,
-  EspAcMode,
-  EspAirflow,
-  EspFanSpeed,
-  PairedDevice,
-} from '../types/device';
+import type { DeviceStateSnapshot, PairedDevice } from '../types/device';
+import {
+  deviceStateSnapshotToDeviceState,
+  deviceStateToDeviceStateSnapshot,
+  fetchControllerStatus,
+  parseDeviceStateSnapshot,
+} from '../services/controllerStatusService';
 
 type DeviceConnectionContextValue = {
   pairedDevice: PairedDevice | null;
@@ -69,58 +69,6 @@ const isRecord = (value: unknown): value is Record<string, unknown> => {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 };
 
-const isEspAcMode = (value: unknown): value is EspAcMode => {
-  return (
-    typeof value === 'string' &&
-    ['auto', 'cool', 'dry', 'fan', 'heat'].includes(value)
-  );
-};
-
-const isEspFanSpeed = (value: unknown): value is EspFanSpeed => {
-  return (
-    typeof value === 'string' &&
-    ['auto', '1', '2', '3', '4', '5'].includes(value)
-  );
-};
-
-const isEspAirflow = (value: unknown): value is EspAirflow => {
-  return (
-    typeof value === 'string' &&
-    ['auto', '1', '2', '3', '4', '5'].includes(value)
-  );
-};
-
-const parseDeviceState = (value: unknown): DeviceStateSnapshot | null => {
-  if (!isRecord(value) || !isRecord(value.ac)) {
-    return null;
-  }
-
-  const ac = value.ac;
-  if (
-    typeof ac.power !== 'boolean' ||
-    typeof ac.temperature !== 'number' ||
-    !isEspAcMode(ac.mode) ||
-    !isEspFanSpeed(ac.fan) ||
-    !isEspAirflow(ac.swingVertical) ||
-    !isEspAirflow(ac.swingHorizontal)
-  ) {
-    return null;
-  }
-
-  return {
-    ac: {
-      fan: ac.fan,
-      mode: ac.mode,
-      power: ac.power,
-      quiet: typeof ac.quiet === 'boolean' ? ac.quiet : false,
-      powerful: typeof ac.powerful === 'boolean' ? ac.powerful : false,
-      swingHorizontal: ac.swingHorizontal,
-      swingVertical: ac.swingVertical,
-      temperature: ac.temperature,
-    },
-  };
-};
-
 const websocketUrlForDevice = (device: PairedDevice) => {
   const url = new URL(device.host);
   url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -136,19 +84,33 @@ export function DeviceConnectionProvider({
   deviceId,
   debugMode = false,
 }: DeviceConnectionProviderProps) {
-  const { getDeviceById } = useDevices();
-  const { getControllerById, updateControllerOnlineStatus } = useControllers();
+  const {
+    applyControllerDeviceStatus,
+    getDeviceById,
+    markControllerDevicesOffline,
+    markControllerDevicesSyncing,
+    updateDeviceState: updateStoredDeviceState,
+  } = useDevices();
+  const {
+    getControllerById,
+    updateControllerConnectionStatus,
+    updateControllerOnlineStatus,
+  } = useControllers();
 
   const device = getDeviceById(deviceId);
   const controller = device ? getControllerById(device.controllerId) : undefined;
 
   const controllerId = controller?.id;
+  const controllerExternalId = controller?.controllerId;
   const controllerIp = controller?.ip;
+  const controllerName = controller?.name;
+  const controllerRoomId = controller?.roomId;
   const controllerToken = controller?.token;
 
   const [deviceConnectionStatus, setDeviceConnectionStatus] =
     useState<DeviceConnectionStatus>('disconnected');
-  const [deviceState, setDeviceState] = useState<DeviceStateSnapshot | null>(null);
+  const [debugState, setDebugState] =
+    useState<DeviceStateSnapshot>(debugDeviceState);
   const reconnectAttempt = useRef(0);
   const activeSocket = useRef<WebSocket | null>(null);
 
@@ -156,15 +118,25 @@ export function DeviceConnectionProvider({
     ? { host: controller.ip, token: controller.token }
     : null;
 
+  const deviceState = useMemo(() => {
+    if (debugMode) {
+      return debugState;
+    }
+
+    if (!device || device.type !== 'ac') {
+      return null;
+    }
+
+    return deviceStateToDeviceStateSnapshot(device.state);
+  }, [debugMode, debugState, device]);
+
   useEffect(() => {
     if (debugMode) {
-      setDeviceState(debugDeviceState);
       setDeviceConnectionStatus('connected');
       return;
     }
 
     if (!controllerIp || !controllerToken) {
-      setDeviceState(null);
       setDeviceConnectionStatus('disconnected');
       return;
     }
@@ -177,27 +149,40 @@ export function DeviceConnectionProvider({
     let active = true;
     let socket: WebSocket | null = null;
     let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
-    const host = pairedDevice.host.replace(/\/+$/, '');
+    let websocketAuthenticated = false;
 
     const applyIncomingState = (payload: unknown) => {
-      const snapshot = parseDeviceState(payload);
-      if (snapshot !== null && active) {
-        setDeviceState(snapshot);
+      const snapshot = parseDeviceStateSnapshot(payload);
+      if (snapshot !== null && active && controllerId) {
+        applyControllerDeviceStatus(controllerId, snapshot);
+        updateControllerConnectionStatus(controllerId, 'online');
       }
     };
 
     const loadRestStatus = async () => {
+      if (!controllerId) {
+        return;
+      }
+
       try {
-        const response = await fetch(`${host}/status`, {
-          headers: {
-            Authorization: `Bearer ${pairedDevice.token}`,
-          },
+        const snapshot = await fetchControllerStatus({
+          id: controllerId,
+          controllerId: controllerExternalId ?? controllerId,
+          ip: controllerIp,
+          name: controllerName ?? 'Controller',
+          online: true,
+          roomId: controllerRoomId,
+          token: controllerToken,
         });
-        if (response.ok) {
-          applyIncomingState((await response.json()) as unknown);
+        if (active && controllerId) {
+          applyControllerDeviceStatus(controllerId, snapshot);
+          updateControllerConnectionStatus(controllerId, 'online');
         }
       } catch {
-        // WebSocket retry will handle recovery
+        if (active && controllerId && !websocketAuthenticated) {
+          markControllerDevicesOffline(controllerId);
+          updateControllerConnectionStatus(controllerId, 'offline');
+        }
       }
     };
 
@@ -208,7 +193,8 @@ export function DeviceConnectionProvider({
 
       setDeviceConnectionStatus('connecting');
       if (controllerId) {
-        updateControllerOnlineStatus(controllerId, false);
+        updateControllerConnectionStatus(controllerId, 'connecting');
+        markControllerDevicesSyncing(controllerId);
       }
 
       try {
@@ -237,12 +223,14 @@ export function DeviceConnectionProvider({
           const payload = JSON.parse(String(event.data)) as unknown;
           if (isRecord(payload) && payload.type === 'auth.result') {
             if (payload.ok === true) {
+              websocketAuthenticated = true;
               reconnectAttempt.current = 0;
               console.log('[Device] Connected to controller');
               setDeviceConnectionStatus('connected');
               if (controllerId) {
                 updateControllerOnlineStatus(controllerId, true);
               }
+              void loadRestStatus();
             }
             return;
           }
@@ -267,9 +255,11 @@ export function DeviceConnectionProvider({
         if (activeSocket.current === currentSocket) {
           activeSocket.current = null;
         }
+        websocketAuthenticated = false;
         setDeviceConnectionStatus('disconnected');
         if (controllerId) {
-          updateControllerOnlineStatus(controllerId, false);
+          updateControllerConnectionStatus(controllerId, 'offline');
+          markControllerDevicesOffline(controllerId);
         }
         reconnectAttempt.current += 1;
         const delay = Math.min(1000 * 2 ** reconnectAttempt.current, 10000);
@@ -294,7 +284,20 @@ export function DeviceConnectionProvider({
         activeSocket.current = null;
       }
     };
-  }, [controllerIp, controllerToken, controllerId, debugMode, updateControllerOnlineStatus]);
+  }, [
+    applyControllerDeviceStatus,
+    controllerId,
+    controllerExternalId,
+    controllerIp,
+    controllerName,
+    controllerRoomId,
+    controllerToken,
+    debugMode,
+    markControllerDevicesOffline,
+    markControllerDevicesSyncing,
+    updateControllerConnectionStatus,
+    updateControllerOnlineStatus,
+  ]);
 
   const pairDevice = useCallback(async () => {
     // Not implemented in v2 - pairing happens at controller level
@@ -308,9 +311,14 @@ export function DeviceConnectionProvider({
     setDeviceConnectionStatus('disconnected');
     activeSocket.current?.close();
     if (controllerId) {
-      updateControllerOnlineStatus(controllerId, false);
+      updateControllerConnectionStatus(controllerId, 'offline');
+      markControllerDevicesOffline(controllerId);
     }
-  }, [controllerId, updateControllerOnlineStatus]);
+  }, [
+    controllerId,
+    markControllerDevicesOffline,
+    updateControllerConnectionStatus,
+  ]);
 
   const updateDeviceState = useCallback(
     (
@@ -318,9 +326,26 @@ export function DeviceConnectionProvider({
         currentState: DeviceStateSnapshot | null,
       ) => DeviceStateSnapshot | null,
     ) => {
-      setDeviceState((currentState) => updater(currentState));
+      if (debugMode) {
+        setDebugState((currentState) => updater(currentState) ?? currentState);
+        return;
+      }
+
+      if (!device) {
+        return;
+      }
+
+      const nextState = updater(deviceStateToDeviceStateSnapshot(device.state));
+      if (nextState === null) {
+        return;
+      }
+
+      updateStoredDeviceState(
+        device.id,
+        deviceStateSnapshotToDeviceState(nextState),
+      );
     },
-    [],
+    [debugMode, device, updateStoredDeviceState],
   );
 
   const value = useMemo<DeviceConnectionContextValue>(

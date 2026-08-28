@@ -46,6 +46,22 @@ function HeroCard({ device, onOpenControl }: HeroCardProps) {
   const theme = useTheme();
   const heroStyles = useMemo(() => createHeroStyles(theme), [theme]);
   const isOn = device.state.power === true;
+  const hasKnownPower = typeof device.state.power === 'boolean';
+  const isOffline = device.state.syncStatus === 'offline';
+  const isSyncing =
+    device.state.syncStatus === 'syncing' ||
+    device.state.syncStatus === 'unknown' ||
+    device.state.syncStatus === undefined;
+  const isLiveOn = isOn && !isOffline && !isSyncing;
+  const powerLabel = !hasKnownPower
+    ? 'SYNC'
+    : isOffline
+      ? 'OFFLINE'
+      : isSyncing
+        ? 'SYNC'
+        : isOn
+          ? 'ON'
+          : 'OFF';
   const { getRoomById } = useRooms();
   const room = getRoomById(device.roomId)?.name ?? '';
 
@@ -59,9 +75,9 @@ function HeroCard({ device, onOpenControl }: HeroCardProps) {
           </View>
           <Text style={{ ...heroStyles.label, fontSize: 22 }} numberOfLines={1}>{device.name}</Text>
         </View>
-        <View style={[heroStyles.powerBadge, isOn ? heroStyles.powerBadgeOn : heroStyles.powerBadgeOff]}>
-          <Text style={[heroStyles.powerBadgeText, isOn ? heroStyles.powerBadgeTextOn : heroStyles.powerBadgeTextOff]}>
-            {isOn ? 'ON' : 'OFF'}
+        <View style={[heroStyles.powerBadge, isLiveOn ? heroStyles.powerBadgeOn : heroStyles.powerBadgeOff]}>
+          <Text style={[heroStyles.powerBadgeText, isLiveOn ? heroStyles.powerBadgeTextOn : heroStyles.powerBadgeTextOff]}>
+            {powerLabel}
           </Text>
         </View>
       </View>
@@ -70,7 +86,7 @@ function HeroCard({ device, onOpenControl }: HeroCardProps) {
         <DeviceTypeIcon type={device.type} size={48} color={isOn ? theme.accent : theme.textMuted} />
       </View>
 
-      {device.type === 'ac' && (
+      {device.type === 'ac' && hasKnownPower && isOn && (
         <AcStatePills state={device.state} />
       )}
     </TouchableOpacity>
@@ -284,14 +300,30 @@ function DeviceCard({ device, onPress }: DeviceCardProps) {
   const theme = useTheme();
   const deviceCardStyles = useMemo(() => createDeviceCardStyles(theme), [theme]);
   const isOn = device.state.power === true;
+  const hasKnownPower = typeof device.state.power === 'boolean';
+  const isOffline = device.state.syncStatus === 'offline';
+  const isSyncing =
+    device.state.syncStatus === 'syncing' ||
+    device.state.syncStatus === 'unknown' ||
+    device.state.syncStatus === undefined;
+  const stateText = !hasKnownPower
+    ? 'Syncing'
+    : isOffline
+      ? 'Offline'
+      : isSyncing
+        ? 'Syncing'
+        : isOn
+          ? 'On'
+          : 'Off';
+
   return (
     <TouchableOpacity style={deviceCardStyles.card} onPress={onPress} activeOpacity={0.78}>
       <View style={deviceCardStyles.iconRow}>
         <DeviceTypeIcon type={device.type} size={26} color={isOn ? theme.accent : theme.textMuted} />
-        <StatusDot online={isOn} style={deviceCardStyles.dot} />
+        <StatusDot online={isOn && !isOffline} style={deviceCardStyles.dot} />
       </View>
       <Text style={deviceCardStyles.name} numberOfLines={2}>{device.name}</Text>
-      <Text style={deviceCardStyles.state}>{isOn ? 'On' : 'Off'}</Text>
+      <Text style={deviceCardStyles.state}>{stateText}</Text>
     </TouchableOpacity>
   );
 }
