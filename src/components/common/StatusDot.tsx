@@ -1,12 +1,13 @@
-import { StyleSheet, View } from 'react-native';
+import { StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
 import { useTheme } from '../../theme/theme';
 
 type StatusDotProps = {
   online: boolean;
   size?: number;
+  style?: StyleProp<ViewStyle>;
 };
 
-export function StatusDot({ online, size = 8 }: StatusDotProps) {
+export function StatusDot({ online, size = 8, style }: StatusDotProps) {
   const theme = useTheme();
   const styles = createStyles(size);
 
@@ -15,6 +16,7 @@ export function StatusDot({ online, size = 8 }: StatusDotProps) {
       style={[
         styles.dot,
         { backgroundColor: online ? theme.statusColors.online : theme.textMuted },
+        style,
       ]}
     />
   );

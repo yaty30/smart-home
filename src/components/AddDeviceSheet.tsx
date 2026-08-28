@@ -4,13 +4,13 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Animated,
   Modal,
-  PanResponder,
   ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
   View,
 } from 'react-native';
+import { useSheetDismiss } from '../hooks/useSheetDismiss';
 import { type Theme, useTheme } from '../theme/theme';
 import { AppButton } from './AppButton';
 
@@ -81,15 +81,6 @@ export function AddDeviceSheet({ visible, onClose, onContinue }: AddDeviceSheetP
   const handleCloseRef = useRef(handleClose);
   useEffect(() => { handleCloseRef.current = handleClose; }, [handleClose]);
 
-  const snapBack = useCallback(() => {
-    if (isDismissing.current) return;
-    Animated.spring(translateY, {
-      toValue: 0,
-      useNativeDriver: false,
-      bounciness: 4,
-    }).start();
-  }, [translateY]);
-
   const dismiss = useCallback(() => {
     if (isDismissing.current) return;
     isDismissing.current = true;
@@ -102,23 +93,10 @@ export function AddDeviceSheet({ visible, onClose, onContinue }: AddDeviceSheetP
     });
   }, [translateY]);
 
-  const panResponder = useRef(
-    PanResponder.create({
-      onStartShouldSetPanResponder: () => true,
-      onPanResponderMove: (_, { dy }) => {
-        // setValue is always synchronous JS — no native driver concern here.
-        translateY.setValue(Math.max(0, dy));
-      },
-      onPanResponderRelease: (_, { dy, vy }) => {
-        if (dy > 120 || vy > 0.8) {
-          dismiss();
-        } else {
-          snapBack();
-        }
-      },
-      onPanResponderTerminate: () => { snapBack(); },
-    }),
-  ).current;
+  const dismissRef = useRef(dismiss);
+  useEffect(() => { dismissRef.current = dismiss; }, [dismiss]);
+
+  const { handlePan } = useSheetDismiss(translateY, dismissRef, isDismissing);
 
   const handleTypeSelect = (type: DeviceType, enabled: boolean) => {
     if (!enabled) return;
@@ -151,7 +129,7 @@ export function AddDeviceSheet({ visible, onClose, onContinue }: AddDeviceSheetP
         <View style={styles.positioner} pointerEvents="box-none">
           <Animated.View style={[styles.sheet, { transform: [{ translateY }] }]}>
             {/* Handle area — sole PanResponder owner. No Pressable in this subtree. */}
-            <View style={styles.handleArea} {...panResponder.panHandlers}>
+            <View style={styles.handleArea} {...handlePan.panHandlers}>
               <View style={styles.handle} />
             </View>
 

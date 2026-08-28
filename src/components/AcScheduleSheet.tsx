@@ -7,19 +7,23 @@ import {
   CalendarFold,
   ChevronDown,
   Clock,
-  DropletOff,
   Fan,
-  Flame,
   Moon,
   Plus,
   Repeat,
-  Sparkles,
   Thermometer,
   X,
   Zap,
-  Snowflake,
   DraftingCompass,
 } from "lucide-react-native";
+import { MODE_ICONS, TEMPERATURE_RANGES } from "../constants/acModes";
+import { useSheetDismiss } from "../hooks/useSheetDismiss";
+import {
+  addMinutesToTimeString,
+  dateFromTimeString,
+  formatTime12h,
+  timeStringFromDate,
+} from "../utils/timeFormat";
 import {
   cloneElement,
   isValidElement,
@@ -35,7 +39,6 @@ import {
   Animated,
   KeyboardAvoidingView,
   Modal,
-  PanResponder,
   Platform,
   SafeAreaView,
   ScrollView,
@@ -76,16 +79,6 @@ const NO_DAYS: boolean[] = [false, false, false, false, false, false, false];
 const DAY_LABELS = ["M", "T", "W", "T", "F", "S", "S"];
 const DAY_FULL = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
-const temperatureRanges: Record<
-  Exclude<AirConditionerMode, "fan">,
-  { min: number; max: number }
-> = {
-  auto: { min: 16, max: 30 },
-  cold: { min: 16, max: 26 },
-  dry: { min: 16, max: 28 },
-  heat: { min: 22, max: 30 },
-};
-
 const defaultSchedule: AcSchedule = {
   enabled: true,
   startTime: "22:30",
@@ -112,32 +105,26 @@ const modeStyles = {
   opacity: 0.86,
 };
 
+const MODE_OPTION_IDS: Exclude<AirConditionerMode, "fan">[] = [
+  "auto",
+  "cold",
+  "dry",
+  "heat",
+];
+
 const modeOptions = (theme: Theme): {
   id: Exclude<AirConditionerMode, "fan">;
   label: string;
   icon: ReactNode;
-}[] => [
-    {
-      id: "auto",
-      label: "Auto",
-      icon: <Sparkles style={modeStyles} size={18} color={theme.modeColors.auto} />,
-    },
-    {
-      id: "cold",
-      label: "Cold",
-      icon: <Snowflake style={modeStyles} size={18} color={theme.modeColors.cool} />,
-    },
-    {
-      id: "dry",
-      label: "Dry",
-      icon: <DropletOff style={modeStyles} size={18} color={theme.modeColors.dry} />,
-    },
-    {
-      id: "heat",
-      label: "Heat",
-      icon: <Flame style={modeStyles} size={18} color={theme.modeColors.heat} />,
-    },
-  ];
+}[] => {
+  const icons = MODE_ICONS(theme);
+
+  return MODE_OPTION_IDS.map((id) => {
+    const { color, icon: Icon, label } = icons[id];
+
+    return { id, label, icon: <Icon style={modeStyles} size={18} color={color} /> };
+  });
+};
 
 const repeatLabels: Record<ScheduleRepeatFrequency, string> = {
   "one-time": "One time",
@@ -145,106 +132,10 @@ const repeatLabels: Record<ScheduleRepeatFrequency, string> = {
   "bi-weekly": "Bi-weekly",
 };
 
-const formatTimePart = (value: number) => String(value).padStart(2, "0");
-
-const formatTime12h = (time: string) => {
-  const [hoursPart = "0", minutesPart = "0"] = time.split(":");
-  const hours = Number(hoursPart);
-  const suffix = hours >= 12 ? "PM" : "AM";
-  const hour12 = hours % 12 === 0 ? 12 : hours % 12;
-  return `${String(hour12).padStart(2, "0")}:${minutesPart.padStart(2, "0")} ${suffix}`;
-};
-
-const timeStringFromDate = (date: Date) =>
-  `${formatTimePart(date.getHours())}:${formatTimePart(date.getMinutes())}`;
-
-const dateFromTimeString = (time: string) => {
-  const [hours = "0", minutes = "0"] = time.split(":");
-  const date = new Date();
-  date.setHours(Number(hours), Number(minutes), 0, 0);
-  return date;
-};
-
-const addMinutesToTimeString = (time: string, minutesToAdd: number) => {
-  const [hours = "0", minutes = "0"] = time.split(":");
-  const totalMinutes =
-    (Number(hours) * 60 + Number(minutes) + minutesToAdd + 24 * 60) % (24 * 60);
-
-  return `${formatTimePart(Math.floor(totalMinutes / 60))}:${formatTimePart(
-    totalMinutes % 60,
-  )}`;
-};
-
 const formatRepeat = (schedule: AcSchedule) =>
   schedule.repeatEnabled
     ? repeatLabels[schedule.repeatFrequency ?? "weekly"]
     : repeatLabels["one-time"];
-
-// ─── useSheetPan ──────────────────────────────────────────────────────────────
-// Reusable gesture logic matching AddRoomSheet: handle area claims every touch,
-// content area only activates on downward drag while at scroll top.
-
-function useSheetPan(
-  translateY: Animated.Value,
-  dismissRef: React.MutableRefObject<() => void>,
-) {
-  const scrollAtTop = useRef(true);
-
-  const snapBack = useCallback(() => {
-    Animated.spring(translateY, {
-      toValue: 0,
-      useNativeDriver: false,
-      bounciness: 4,
-    }).start();
-  }, [translateY]);
-
-  // Stable ref so PanResponder (created once) always calls the latest snapBack.
-  const snapBackRef = useRef(snapBack);
-  useEffect(() => {
-    snapBackRef.current = snapBack;
-  }, [snapBack]);
-
-  const handlePan = useRef(
-    PanResponder.create({
-      onStartShouldSetPanResponder: () => true,
-      onPanResponderMove: (_, { dy }) => {
-        translateY.setValue(Math.max(0, dy));
-      },
-      onPanResponderRelease: (_, { dy, vy }) => {
-        if (dy > 120 || vy > 0.8) {
-          dismissRef.current();
-        } else {
-          snapBackRef.current();
-        }
-      },
-      onPanResponderTerminate: () => {
-        snapBackRef.current();
-      },
-    }),
-  ).current;
-
-  const contentPan = useRef(
-    PanResponder.create({
-      onMoveShouldSetPanResponder: (_, { dy, dx }) =>
-        scrollAtTop.current && dy > 10 && dy > Math.abs(dx),
-      onPanResponderMove: (_, { dy }) => {
-        translateY.setValue(Math.max(0, dy));
-      },
-      onPanResponderRelease: (_, { dy, vy }) => {
-        if (dy > 120 || vy > 0.8) {
-          dismissRef.current();
-        } else {
-          snapBackRef.current();
-        }
-      },
-      onPanResponderTerminate: () => {
-        snapBackRef.current();
-      },
-    }),
-  ).current;
-
-  return { scrollAtTop, handlePan, contentPan };
-}
 
 // ─── ScheduleRow ─────────────────────────────────────────────────────────────
 
@@ -878,7 +769,7 @@ export function AcScheduleSheet({
     dismissRef.current = dismiss;
   }, [dismiss]);
 
-  const { scrollAtTop, handlePan } = useSheetPan(
+  const { scrollAtTop, handlePan } = useSheetDismiss(
     translateY,
     dismissRef,
   );
@@ -1037,7 +928,7 @@ function ScheduleEditorSheet({
     dismissRef.current = dismiss;
   }, [dismiss]);
 
-  const { scrollAtTop, handlePan, contentPan } = useSheetPan(
+  const { scrollAtTop, handlePan, contentPan } = useSheetDismiss(
     translateY,
     dismissRef,
   );
@@ -1120,7 +1011,7 @@ function ScheduleEditorSheet({
   );
 
   const tempRange = useMemo(
-    () => temperatureRanges[draft.mode] ?? temperatureRanges.auto,
+    () => TEMPERATURE_RANGES[draft.mode] ?? TEMPERATURE_RANGES.auto,
     [draft.mode],
   );
 
@@ -1352,7 +1243,7 @@ function ScheduleEditorSheet({
                               accessibilityState={{ selected }}
                               key={modeOption.id}
                               onPress={() => {
-                                const nextRange = temperatureRanges[modeOption.id];
+                                const nextRange = TEMPERATURE_RANGES[modeOption.id];
 
                                 setDraft((prev) => ({
                                   ...prev,

@@ -1,6 +1,6 @@
 import { AirVent, ChevronLeft, FolderPen, Lightbulb, PackagePlus, Plus, Trash2, Tv, Wifi, WifiOff, Power, ChevronRight } from 'lucide-react-native';
 import { Animated, Keyboard, Modal, Pressable, StyleSheet, Text, TextInput, TouchableOpacity, View, ScrollView, Alert } from 'react-native';
-import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
+import { useState, useCallback, useEffect, useMemo } from 'react';
 import { useRooms } from '../store/rooms';
 import { useDevices } from '../store/devices';
 import { useControllers } from '../store/controllers';
@@ -15,6 +15,7 @@ import { createDevice } from '../domain/device';
 import { deviceService, executeDeviceCommand } from '../services/deviceService';
 import { controllerHealthService } from '../services/controllerHealthService';
 import { SwipeableItem } from '../components/SwipeableItem';
+import { useBottomNavAnimation } from '../hooks/useBottomNavAnimation';
 
 type RoomDetailScreenProps = RootStackScreenProps<'RoomDetail'>;
 
@@ -46,8 +47,6 @@ const createDeviceColors = (theme: Theme) => ({
   POWERED_GREEN_BORDER: theme.statusColors.onlineBorder,
 });
 
-const BOTTOM_NAV_ANIMATION_MS = 260;
-const BOTTOM_NAV_HIDDEN_OFFSET = BOTTOM_NAV_CLEARANCE + 48;
 
 export function RoomDetailScreen({ navigation, route }: RoomDetailScreenProps) {
   const theme = useTheme();
@@ -61,9 +60,12 @@ export function RoomDetailScreen({ navigation, route }: RoomDetailScreenProps) {
   const [renameTarget, setRenameTarget] = useState<RenameTarget | null>(null);
   const [scrollEnabled, setScrollEnabled] = useState(true);
   const [renameValue, setRenameValue] = useState('');
-  const bottomNavTranslateY = useRef(new Animated.Value(BOTTOM_NAV_HIDDEN_OFFSET)).current;
-  const bottomNavOpacity = useRef(new Animated.Value(0)).current;
-  const isLeavingScreen = useRef(false);
+  const {
+    animateBottomNavOut,
+    bottomNavOpacity,
+    bottomNavTranslateY,
+    isLeavingScreen,
+  } = useBottomNavAnimation({ navigation });
 
   const room = getRoomById(roomId);
   const devices = getDevicesByRoom(roomId);
@@ -259,75 +261,6 @@ export function RoomDetailScreen({ navigation, route }: RoomDetailScreenProps) {
     },
     [roomController, room, roomId, addDevice, navigation]
   );
-
-  const animateBottomNavIn = useCallback(() => {
-    bottomNavTranslateY.stopAnimation();
-    bottomNavOpacity.stopAnimation();
-
-    Animated.parallel([
-      Animated.timing(bottomNavTranslateY, {
-        duration: BOTTOM_NAV_ANIMATION_MS,
-        toValue: 0,
-        useNativeDriver: true,
-      }),
-      Animated.timing(bottomNavOpacity, {
-        duration: BOTTOM_NAV_ANIMATION_MS,
-        toValue: 1,
-        useNativeDriver: true,
-      }),
-    ]).start();
-  }, [bottomNavOpacity, bottomNavTranslateY]);
-
-  const animateBottomNavOut = useCallback(() => {
-    Animated.parallel([
-      Animated.timing(bottomNavTranslateY, {
-        duration: 220,
-        toValue: BOTTOM_NAV_HIDDEN_OFFSET,
-        useNativeDriver: true,
-      }),
-      Animated.timing(bottomNavOpacity, {
-        duration: 180,
-        toValue: 0,
-        useNativeDriver: true,
-      }),
-    ]).start();
-  }, [bottomNavOpacity, bottomNavTranslateY]);
-
-  useEffect(() => {
-    const frame = requestAnimationFrame(animateBottomNavIn);
-
-    return () => {
-      cancelAnimationFrame(frame);
-      bottomNavTranslateY.stopAnimation();
-      bottomNavOpacity.stopAnimation();
-    };
-  }, [animateBottomNavIn, bottomNavOpacity, bottomNavTranslateY]);
-
-  useEffect(() => {
-    const addNavigationListener = navigation.addListener as unknown as (
-      eventName: 'transitionStart' | 'gestureCancel',
-      listener: (event: { data?: { closing?: boolean } }) => void,
-    ) => () => void;
-
-    const unsubscribeTransitionStart = addNavigationListener('transitionStart', (event) => {
-      if (!event.data?.closing) {
-        return;
-      }
-
-      animateBottomNavOut();
-    });
-
-    const unsubscribeGestureCancel = addNavigationListener('gestureCancel', () => {
-      if (!isLeavingScreen.current) {
-        animateBottomNavIn();
-      }
-    });
-
-    return () => {
-      unsubscribeTransitionStart();
-      unsubscribeGestureCancel();
-    };
-  }, [animateBottomNavIn, animateBottomNavOut, navigation]);
 
   const handleBackPress = useCallback(() => {
     if (isLeavingScreen.current) {
