@@ -116,7 +116,7 @@ export function BottomNav({
       ]}
     >
       <BlurView
-        intensity={72}
+        intensity={20}
         tint={blurTint}
         style={[styles.bar, { backgroundColor: barBackground }]}
       >

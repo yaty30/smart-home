@@ -1,6 +1,6 @@
-import { AirVent, ChevronLeft, Lightbulb, Plus, Tv, Wifi, WifiOff, Power, MoreVertical, ChevronRight } from 'lucide-react-native';
-import { Keyboard, Modal, Pressable, StyleSheet, Text, TextInput, TouchableOpacity, View, ScrollView, Alert } from 'react-native';
-import { useState, useCallback, useEffect, useMemo } from 'react';
+import { AirVent, ChevronLeft, FolderPen, Lightbulb, PackagePlus, Plus, QrCode, Trash2, Tv, Wifi, WifiOff, Power, ChevronRight } from 'lucide-react-native';
+import { Animated, Keyboard, Modal, Pressable, StyleSheet, Text, TextInput, TouchableOpacity, View, ScrollView, Alert } from 'react-native';
+import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import { useRooms } from '../store/rooms';
 import { useDevices } from '../store/devices';
 import { useControllers } from '../store/controllers';
@@ -10,11 +10,11 @@ import type { Device, DeviceBrand, DeviceType } from '../domain/device';
 import type { ComponentType } from 'react';
 import { AppHeader, HeaderIconButton } from '../components/AppHeader';
 import { AddDeviceSheet } from '../components/AddDeviceSheet';
+import { BottomNav, BOTTOM_NAV_CLEARANCE } from '../components/BottomNav';
 import { createDevice } from '../domain/device';
 import { deviceService, executeDeviceCommand } from '../services/deviceService';
 import { controllerHealthService } from '../services/controllerHealthService';
 import { isDebugMode } from '../config/debug';
-import { PopupMenu, type PopupMenuItem } from '../components/PopupMenu';
 import { SwipeableItem } from '../components/SwipeableItem';
 
 type RoomDetailScreenProps = RootStackScreenProps<'RoomDetail'>;
@@ -46,6 +46,8 @@ const POWERED_GREEN_MUTED = 'rgba(74, 222, 128, 0.18)';
 const POWERED_GREEN_BORDER = 'rgba(74, 222, 128, 0.72)';
 const DISPLAY_COMMAND_TIMEOUT_MS = 3000;
 const CONTROLLER_STATUS_POLL_MS = 10000;
+const BOTTOM_NAV_ANIMATION_MS = 260;
+const BOTTOM_NAV_HIDDEN_OFFSET = BOTTOM_NAV_CLEARANCE + 48;
 
 const readQrVisible = (payload: unknown): boolean | null => {
   if (typeof payload !== 'object' || payload === null || !('display' in payload)) {
@@ -69,11 +71,13 @@ export function RoomDetailScreen({ navigation, route }: RoomDetailScreenProps) {
   const { getDeviceById, getDevicesByRoom, removeDevice, removeDevicesByRoom, addDevice, updateDeviceName, updateDeviceState } = useDevices();
   const { controllers, getControllerById, updateControllerOnlineStatus } = useControllers();
   const [showAddDeviceSheet, setShowAddDeviceSheet] = useState(false);
-  const [showMenu, setShowMenu] = useState(false);
   const [renameTarget, setRenameTarget] = useState<RenameTarget | null>(null);
   const [scrollEnabled, setScrollEnabled] = useState(true);
   const [qrVisible, setQrVisible] = useState(false);
   const [renameValue, setRenameValue] = useState('');
+  const bottomNavTranslateY = useRef(new Animated.Value(BOTTOM_NAV_HIDDEN_OFFSET)).current;
+  const bottomNavOpacity = useRef(new Animated.Value(0)).current;
+  const isLeavingScreen = useRef(false);
 
   const room = getRoomById(roomId);
   const devices = getDevicesByRoom(roomId);
@@ -195,7 +199,6 @@ export function RoomDetailScreen({ navigation, route }: RoomDetailScreenProps) {
       return;
     }
 
-    setShowMenu(false);
     const deviceCount = devices.length;
     const message =
       deviceCount > 0
@@ -221,8 +224,6 @@ export function RoomDetailScreen({ navigation, route }: RoomDetailScreenProps) {
   }, [devices.length, navigation, removeDevicesByRoom, removeRoom, room, roomId]);
 
   const handleToggleQrCode = useCallback(async () => {
-    setShowMenu(false);
-
     if (!roomController) {
       Alert.alert('No Controller Found', 'This room does not have a controller assigned yet.');
       return;
@@ -268,7 +269,6 @@ export function RoomDetailScreen({ navigation, route }: RoomDetailScreenProps) {
       return;
     }
 
-    setShowMenu(false);
     setRenameValue(room.name);
     setRenameTarget({ type: 'room' });
   }, [room]);
@@ -368,26 +368,89 @@ export function RoomDetailScreen({ navigation, route }: RoomDetailScreenProps) {
     [roomController, room, roomId, addDevice, navigation]
   );
 
-  const roomMenuItems = useMemo<PopupMenuItem[]>(
-    () => [
-      {
-        label: qrVisible ? 'Hide QR Code' : 'Show QR Code',
-        onPress: () => {
-          void handleToggleQrCode();
-        },
-      },
-      {
-        label: 'Rename Room',
-        onPress: handleOpenRename,
-      },
-      {
-        destructive: true,
-        label: 'Delete Room',
-        onPress: handleDeleteRoom,
-      },
-    ],
-    [handleDeleteRoom, handleOpenRename, handleToggleQrCode, qrVisible],
-  );
+  const animateBottomNavIn = useCallback(() => {
+    bottomNavTranslateY.stopAnimation();
+    bottomNavOpacity.stopAnimation();
+
+    Animated.parallel([
+      Animated.timing(bottomNavTranslateY, {
+        duration: BOTTOM_NAV_ANIMATION_MS,
+        toValue: 0,
+        useNativeDriver: true,
+      }),
+      Animated.timing(bottomNavOpacity, {
+        duration: BOTTOM_NAV_ANIMATION_MS,
+        toValue: 1,
+        useNativeDriver: true,
+      }),
+    ]).start();
+  }, [bottomNavOpacity, bottomNavTranslateY]);
+
+  const animateBottomNavOut = useCallback(() => {
+    Animated.parallel([
+      Animated.timing(bottomNavTranslateY, {
+        duration: 220,
+        toValue: BOTTOM_NAV_HIDDEN_OFFSET,
+        useNativeDriver: true,
+      }),
+      Animated.timing(bottomNavOpacity, {
+        duration: 180,
+        toValue: 0,
+        useNativeDriver: true,
+      }),
+    ]).start();
+  }, [bottomNavOpacity, bottomNavTranslateY]);
+
+  useEffect(() => {
+    const frame = requestAnimationFrame(animateBottomNavIn);
+
+    return () => {
+      cancelAnimationFrame(frame);
+      bottomNavTranslateY.stopAnimation();
+      bottomNavOpacity.stopAnimation();
+    };
+  }, [animateBottomNavIn, bottomNavOpacity, bottomNavTranslateY]);
+
+  useEffect(() => {
+    const addNavigationListener = navigation.addListener as unknown as (
+      eventName: 'transitionStart' | 'gestureCancel',
+      listener: (event: { data?: { closing?: boolean } }) => void,
+    ) => () => void;
+
+    const unsubscribeTransitionStart = addNavigationListener('transitionStart', (event) => {
+      if (!event.data?.closing) {
+        return;
+      }
+
+      animateBottomNavOut();
+    });
+
+    const unsubscribeGestureCancel = addNavigationListener('gestureCancel', () => {
+      if (!isLeavingScreen.current) {
+        animateBottomNavIn();
+      }
+    });
+
+    return () => {
+      unsubscribeTransitionStart();
+      unsubscribeGestureCancel();
+    };
+  }, [animateBottomNavIn, animateBottomNavOut, navigation]);
+
+  const handleBackPress = useCallback(() => {
+    if (isLeavingScreen.current) {
+      return;
+    }
+
+    isLeavingScreen.current = true;
+    animateBottomNavOut();
+
+    if (navigation.canGoBack()) {
+      navigation.goBack();
+    } else {
+      navigation.navigate('Main');
+    }
+  }, [animateBottomNavOut, navigation]);
 
   const renameTitle = renameTarget?.type === 'device' ? 'Rename Device' : 'Rename Room';
   const renameLabel = renameTarget?.type === 'device' ? 'Device Name' : 'Room Name';
@@ -406,34 +469,12 @@ export function RoomDetailScreen({ navigation, route }: RoomDetailScreenProps) {
         leftAction={
           <HeaderIconButton
             accessibilityLabel="Back"
-            onPress={() => {
-              if (navigation.canGoBack()) {
-                navigation.goBack();
-              } else {
-                navigation.navigate('Main');
-              }
-            }}
+            onPress={handleBackPress}
           >
             <ChevronLeft color={theme.accent} size={26} strokeWidth={2.35} />
           </HeaderIconButton>
         }
-        rightAction={
-          <HeaderIconButton
-            accessibilityLabel="Menu"
-            framed
-            onPress={() => setShowMenu(!showMenu)}
-          >
-            <MoreVertical color={theme.textMuted} size={20} strokeWidth={2.2} />
-          </HeaderIconButton>
-        }
         title={room.name}
-      />
-
-      <PopupMenu
-        items={roomMenuItems}
-        onRequestClose={() => setShowMenu(false)}
-        panelStyle={styles.roomMenuPanel}
-        visible={showMenu}
       />
 
       <ScrollView
@@ -630,11 +671,79 @@ export function RoomDetailScreen({ navigation, route }: RoomDetailScreenProps) {
           </Pressable>
         </Pressable>
       </Modal>
+
+      <Animated.View
+        pointerEvents="box-none"
+        style={[
+          styles.bottomNavAnimationLayer,
+          {
+            opacity: bottomNavOpacity,
+            transform: [{ translateY: bottomNavTranslateY }],
+          },
+        ]}
+      >
+        <BottomNav
+          visible
+          items={[
+            {
+              icon: (
+                <PackagePlus
+                  color={theme.accentStrong}
+                  size={22}
+                  strokeWidth={2.2}
+                />
+              ),
+              label: 'Add New Device',
+              onPress: () => setShowAddDeviceSheet(true),
+            },
+            {
+              active: qrVisible,
+              icon: (
+                <QrCode
+                  color={qrVisible ? theme.accent : theme.textMuted}
+                  size={22}
+                  strokeWidth={2.2}
+                />
+              ),
+              label: qrVisible ? 'Hide QR Code' : 'Show QR Code',
+              onPress: () => {
+                void handleToggleQrCode();
+              },
+            },
+            {
+              icon: (
+                <FolderPen
+                  color={theme.accentStrong}
+                  size={22}
+                  strokeWidth={2.2}
+                />
+              ),
+              label: 'Rename Room',
+              onPress: handleOpenRename,
+            },
+            {
+              icon: (
+                <Trash2
+                  color={theme.powerAccent}
+                  size={22}
+                  strokeWidth={2.2}
+                />
+              ),
+              label: 'Delete Room',
+              onPress: handleDeleteRoom,
+            },
+          ]}
+        />
+      </Animated.View>
     </View>
   );
 }
 
 const createStyles = (theme: Theme) => StyleSheet.create({
+  bottomNavAnimationLayer: {
+    ...StyleSheet.absoluteFillObject,
+    zIndex: 30,
+  },
   screen: {
     backgroundColor: theme.root,
     flex: 1,
@@ -642,15 +751,11 @@ const createStyles = (theme: Theme) => StyleSheet.create({
   scrollView: {
     flex: 1,
   },
-  roomMenuPanel: {
-    right: theme.spacing.lg,
-    top: 116,
-  },
   contentContainer: {
     flexGrow: 1,
     paddingHorizontal: theme.spacing.lg,
     paddingTop: theme.spacing.xl,
-    paddingBottom: 120,
+    paddingBottom: theme.spacing.xl + BOTTOM_NAV_CLEARANCE,
   },
   emptyState: {
     alignItems: 'center',

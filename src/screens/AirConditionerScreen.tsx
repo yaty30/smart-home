@@ -12,6 +12,7 @@ import {
   Snowflake,
   Sparkles,
   Star,
+  StarOff,
   Zap,
 } from "lucide-react-native";
 import { ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -216,7 +217,7 @@ export function AirConditionerScreen({
   const theme = useTheme();
   const styles = useMemo(() => createStyles(theme), [theme]);
   const { width } = useWindowDimensions();
-  const { devices, setFavouriteDevice } = useDevices();
+  const { clearFavouriteDevice, devices, setFavouriteDevice } = useDevices();
   const [temperature, setTemperature] = useState(24);
   const [mode, setMode] = useState<AirConditionerMode>("auto");
   const [horizontalAirflow, setHorizontalAirflow] =
@@ -955,7 +956,11 @@ const animateBottomNavOut = useCallback(() => {
   }, [animateBottomNavIn, animateBottomNavOut, navigation]);
 
   const handleSetFavourite = useCallback(() => {
-    if (isFavourite) return;
+    if (isFavourite) {
+      void clearFavouriteDevice(deviceId);
+      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      return;
+    }
 
     const doSet = () => {
       void setFavouriteDevice(deviceId);
@@ -974,7 +979,7 @@ const animateBottomNavOut = useCallback(() => {
     } else {
       doSet();
     }
-  }, [deviceId, existingFavourite, isFavourite, setFavouriteDevice]);
+  }, [clearFavouriteDevice, deviceId, existingFavourite, isFavourite, setFavouriteDevice]);
 
   const handleBackPress = useCallback(() => {
     if (isLeavingScreen.current) {
@@ -1382,7 +1387,7 @@ const animateBottomNavOut = useCallback(() => {
             {
               icon: (
                 <CalendarClock
-                  color={theme.textMuted}
+                  color={theme.accentStrong}
                   size={22}
                   strokeWidth={2.2}
                 />
@@ -1393,14 +1398,22 @@ const animateBottomNavOut = useCallback(() => {
             {
               active: isFavourite,
               icon: (
-                <Star
-                  color={isFavourite ? theme.accent : theme.textMuted}
-                  fill={isFavourite ? theme.accent : "transparent"}
-                  size={22}
-                  strokeWidth={2.2}
-                />
+                isFavourite ? (
+                  <Star
+                    color={theme.accent}
+                    size={22}
+                    strokeWidth={2.2}
+                    fill={theme.accent}
+                  />
+                ) : (
+                  <Star
+                    color={theme.accentMuted}
+                    size={22}
+                    strokeWidth={2.2}
+                  />
+                )
               ),
-              label: isFavourite ? "Favourite" : "Set Favourite",
+              label: isFavourite ? "Remove Favourite" : "Set Favourite",
               onPress: handleSetFavourite,
             },
           ]}

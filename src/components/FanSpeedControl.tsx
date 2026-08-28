@@ -1,4 +1,4 @@
-import MaterialCommunityIcons from "react-native-vector-icons/MaterialCommunityIcons";
+import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useEffect, useMemo, useRef } from "react";
 import {
   Animated,
