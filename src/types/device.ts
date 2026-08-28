@@ -18,9 +18,4 @@ export type DeviceStateSnapshot = {
     swingVertical: EspAirflow;
     swingHorizontal: EspAirflow;
   };
-  display: {
-    pairingMode: boolean;
-    screenOn: boolean;
-    qrVisible: boolean;
-  };
 };

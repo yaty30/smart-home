@@ -38,7 +38,6 @@ import {
 import { ArcTemperatureGauge } from "../components/ArcTemperatureGauge";
 import { CollapsibleView } from "../components/CollapsibleView";
 import { FanSpeedControl } from "../components/FanSpeedControl";
-import { DisplayControls } from "../components/DisplayControls";
 import { ModeSelector } from "../components/ModeSelector";
 import {
   SCREEN_BOTTOM_SAFE_PADDING,
@@ -230,7 +229,6 @@ export function AirConditionerScreen({
   const [power, setPower] = useState(true);
   const [quiet, setQuiet] = useState(false);
   const [powerful, setPowerful] = useState(false);
-  const [qrVisible, setQrVisible] = useState(false);
   const [isAdjustingTemperature, setIsAdjustingTemperature] = useState(false);
   const [isScheduleSheetVisible, setIsScheduleSheetVisible] = useState(false);
   const [isScheduleLoading, setIsScheduleLoading] = useState(false);
@@ -373,7 +371,6 @@ export function AirConditionerScreen({
 
     setQuiet(deviceState.ac.power ? deviceState.ac.quiet : false);
     setPowerful(deviceState.ac.power ? deviceState.ac.powerful : false);
-    setQrVisible(deviceState.display.qrVisible);
   }, [deviceState]);
 
   const triggerSelectionHaptic = useCallback(() => {
@@ -400,23 +397,6 @@ export function AirConditionerScreen({
             ac: {
               ...currentState.ac,
               ...acPatch,
-            },
-          },
-      );
-    },
-    [updateDeviceState],
-  );
-
-  const updateDisplaySnapshot = useCallback(
-    (displayPatch: Partial<DeviceStateSnapshot["display"]>) => {
-      updateDeviceState((currentState) =>
-        currentState === null
-          ? currentState
-          : {
-            ...currentState,
-            display: {
-              ...currentState.display,
-              ...displayPatch,
             },
           },
       );
@@ -518,65 +498,6 @@ export function AirConditionerScreen({
   useEffect(() => {
     return clearTemperatureCommandTimer;
   }, [clearTemperatureCommandTimer]);
-
-  const sendDisplayCommand = useCallback(
-    async (params: Record<string, string>) => {
-      const description = Object.entries(params)
-        .map(([key, value]) => `${key}=${String(value)}`)
-        .join(",");
-
-      if (!canControlDevice || pairedDevice === null) {
-        logDroppedCommand(description);
-        return false;
-      }
-
-      if (debugMode) {
-        console.log(`[Device] Debug display command accepted: ${description}`);
-        return true;
-      }
-
-      const host = pairedDevice.host.replace(/\/+$/, "");
-      const searchParams = new URLSearchParams(params);
-      const controller = new AbortController();
-      const timeout = setTimeout(
-        () => controller.abort(),
-        DEVICE_COMMAND_TIMEOUT_MS,
-      );
-
-      try {
-        console.log(`[Device] Command sent immediately: ${description}`);
-        const response = await fetch(
-          `${host}/display?${searchParams.toString()}`,
-          {
-            headers: {
-              Authorization: `Bearer ${pairedDevice.token}`,
-            },
-            method: "GET",
-            signal: controller.signal,
-          },
-        );
-
-        if (!response.ok) {
-          console.warn("ESP32 display request failed", response.status);
-          return false;
-        }
-        return true;
-      } catch (error) {
-        console.warn("ESP32 display request failed without retry.", error);
-        reportDeviceUnreachable();
-        return false;
-      } finally {
-        clearTimeout(timeout);
-      }
-    },
-    [
-      canControlDevice,
-      debugMode,
-      logDroppedCommand,
-      pairedDevice,
-      reportDeviceUnreachable,
-    ],
-  );
 
   const handleTemperatureChange = useCallback(
     (nextTemperature: number) => {
@@ -1007,27 +928,6 @@ const animateBottomNavOut = useCallback(() => {
       logDroppedCommand(`temp=${latestTemperature.current}`);
     }
   }, [canControlDevice, logDroppedCommand]);
-
-  const handleQrVisibilityChange = useCallback(
-    (nextQrVisible: boolean) => {
-      if (!canControlDevice) {
-        logDroppedCommand(`qr=${nextQrVisible ? "show" : "hide"}`);
-        return;
-      }
-
-      triggerPressHaptic();
-      setQrVisible(nextQrVisible);
-      updateDisplaySnapshot({ qrVisible: nextQrVisible });
-      void sendDisplayCommand({ qr: nextQrVisible ? "show" : "hide" });
-    },
-    [
-      canControlDevice,
-      logDroppedCommand,
-      sendDisplayCommand,
-      triggerPressHaptic,
-      updateDisplaySnapshot,
-    ],
-  );
 
   const handleQuietChange = useCallback(
     (nextQuiet: boolean) => {

@@ -1,4 +1,4 @@
-import { AirVent, ChevronLeft, FolderPen, Lightbulb, PackagePlus, Plus, QrCode, Trash2, Tv, Wifi, WifiOff, Power, ChevronRight } from 'lucide-react-native';
+import { AirVent, ChevronLeft, FolderPen, Lightbulb, PackagePlus, Plus, Trash2, Tv, Wifi, WifiOff, Power, ChevronRight } from 'lucide-react-native';
 import { Animated, Keyboard, Modal, Pressable, StyleSheet, Text, TextInput, TouchableOpacity, View, ScrollView, Alert } from 'react-native';
 import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import { useRooms } from '../store/rooms';
@@ -44,24 +44,9 @@ const iconByDeviceType: Record<DeviceType, IconComponent> = {
 const POWERED_GREEN = '#4ADE80';
 const POWERED_GREEN_MUTED = 'rgba(74, 222, 128, 0.18)';
 const POWERED_GREEN_BORDER = 'rgba(74, 222, 128, 0.72)';
-const DISPLAY_COMMAND_TIMEOUT_MS = 3000;
 const CONTROLLER_STATUS_POLL_MS = 10000;
 const BOTTOM_NAV_ANIMATION_MS = 260;
 const BOTTOM_NAV_HIDDEN_OFFSET = BOTTOM_NAV_CLEARANCE + 48;
-
-const readQrVisible = (payload: unknown): boolean | null => {
-  if (typeof payload !== 'object' || payload === null || !('display' in payload)) {
-    return null;
-  }
-
-  const display = (payload as { display?: unknown }).display;
-  if (typeof display !== 'object' || display === null || !('qrVisible' in display)) {
-    return null;
-  }
-
-  const qrVisible = (display as { qrVisible?: unknown }).qrVisible;
-  return typeof qrVisible === 'boolean' ? qrVisible : null;
-};
 
 export function RoomDetailScreen({ navigation, route }: RoomDetailScreenProps) {
   const theme = useTheme();
@@ -73,7 +58,6 @@ export function RoomDetailScreen({ navigation, route }: RoomDetailScreenProps) {
   const [showAddDeviceSheet, setShowAddDeviceSheet] = useState(false);
   const [renameTarget, setRenameTarget] = useState<RenameTarget | null>(null);
   const [scrollEnabled, setScrollEnabled] = useState(true);
-  const [qrVisible, setQrVisible] = useState(false);
   const [renameValue, setRenameValue] = useState('');
   const bottomNavTranslateY = useRef(new Animated.Value(BOTTOM_NAV_HIDDEN_OFFSET)).current;
   const bottomNavOpacity = useRef(new Animated.Value(0)).current;
@@ -91,7 +75,6 @@ export function RoomDetailScreen({ navigation, route }: RoomDetailScreenProps) {
 
   useEffect(() => {
     if (!roomController) {
-      setQrVisible(false);
       return undefined;
     }
 
@@ -101,58 +84,6 @@ export function RoomDetailScreen({ navigation, route }: RoomDetailScreenProps) {
       controllerHealthService.stop();
     };
   }, [roomController, updateControllerOnlineStatus]);
-
-  useEffect(() => {
-    if (!roomController) {
-      setQrVisible(false);
-      return undefined;
-    }
-
-    if (isDebugMode) {
-      return undefined;
-    }
-
-    let isMounted = true;
-    const host = roomController.ip.replace(/\/+$/, '');
-
-    const refreshDisplayStatus = async () => {
-      const abortController = new AbortController();
-      const timeout = setTimeout(() => abortController.abort(), DISPLAY_COMMAND_TIMEOUT_MS);
-
-      try {
-        const response = await fetch(`${host}/status`, {
-          headers: {
-            Authorization: `Bearer ${roomController.token}`,
-          },
-          method: 'GET',
-          signal: abortController.signal,
-        });
-
-        if (!response.ok) {
-          throw new Error(`Status request failed with status ${response.status}`);
-        }
-
-        const nextQrVisible = readQrVisible((await response.json()) as unknown);
-        if (isMounted && nextQrVisible !== null) {
-          setQrVisible(nextQrVisible);
-        }
-      } catch {
-        // The controller health poll owns online/offline state; this poll only mirrors display state.
-      } finally {
-        clearTimeout(timeout);
-      }
-    };
-
-    void refreshDisplayStatus();
-    const interval = setInterval(() => {
-      void refreshDisplayStatus();
-    }, CONTROLLER_STATUS_POLL_MS);
-
-    return () => {
-      isMounted = false;
-      clearInterval(interval);
-    };
-  }, [roomController]);
 
   const handleTogglePower = useCallback(
     async (deviceId: string, currentPower: boolean) => {
@@ -222,47 +153,6 @@ export function RoomDetailScreen({ navigation, route }: RoomDetailScreenProps) {
       },
     ]);
   }, [devices.length, navigation, removeDevicesByRoom, removeRoom, room, roomId]);
-
-  const handleToggleQrCode = useCallback(async () => {
-    if (!roomController) {
-      Alert.alert('No Controller Found', 'This room does not have a controller assigned yet.');
-      return;
-    }
-
-    if (isDebugMode) {
-      setQrVisible((current) => !current);
-      return;
-    }
-
-    const host = roomController.ip.replace(/\/+$/, '');
-    const nextQrVisible = !qrVisible;
-    const abortController = new AbortController();
-    const timeout = setTimeout(() => abortController.abort(), DISPLAY_COMMAND_TIMEOUT_MS);
-
-    try {
-      const response = await fetch(`${host}/display?screen=on&qr=${nextQrVisible ? 'show' : 'hide'}`, {
-        headers: {
-          Authorization: `Bearer ${roomController.token}`,
-        },
-        method: 'GET',
-        signal: abortController.signal,
-      });
-
-      if (!response.ok) {
-        throw new Error(`Display command failed with status ${response.status}`);
-      }
-
-      const payload = (await response.json()) as unknown;
-      setQrVisible(readQrVisible(payload) ?? nextQrVisible);
-    } catch (error) {
-      Alert.alert(
-        'Controller Unreachable',
-        `Could not ${nextQrVisible ? 'show' : 'hide'} the QR code. Check that the ESP32 is online.`
-      );
-    } finally {
-      clearTimeout(timeout);
-    }
-  }, [qrVisible, roomController]);
 
   const handleOpenRename = useCallback(() => {
     if (!room) {
@@ -695,20 +585,6 @@ export function RoomDetailScreen({ navigation, route }: RoomDetailScreenProps) {
               ),
               label: 'Add New Device',
               onPress: () => setShowAddDeviceSheet(true),
-            },
-            {
-              active: qrVisible,
-              icon: (
-                <QrCode
-                  color={qrVisible ? theme.accent : theme.textMuted}
-                  size={22}
-                  strokeWidth={2.2}
-                />
-              ),
-              label: qrVisible ? 'Hide QR Code' : 'Show QR Code',
-              onPress: () => {
-                void handleToggleQrCode();
-              },
             },
             {
               icon: (
