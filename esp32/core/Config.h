@@ -9,18 +9,6 @@
 #define BOOT_BUTTON_PIN 0
 static const unsigned long PAIRING_BUTTON_HOLD_MS = 3000;
 
-#define TFT_SCLK 18
-#define TFT_MOSI 19
-#define TFT_RST 17
-#define TFT_DC 16
-#define TFT_CS 5
-// Set this to the GPIO connected to TFT BL for full backlight power control.
-// A value of -1 still turns the ST7735 panel itself on and off.
-#define TFT_BL -1
-
-#define SCREEN_WIDTH 128
-#define SCREEN_HEIGHT 128
-
 #define WEBSOCKET_PORT 81
 #define WEBSOCKET_PATH "/ws"
 

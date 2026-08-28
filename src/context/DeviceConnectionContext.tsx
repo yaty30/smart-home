@@ -63,11 +63,6 @@ const debugDeviceState: DeviceStateSnapshot = {
     swingVertical: 'auto',
     temperature: 24,
   },
-  display: {
-    pairingMode: false,
-    qrVisible: false,
-    screenOn: true,
-  },
 };
 
 const isRecord = (value: unknown): value is Record<string, unknown> => {
@@ -96,22 +91,18 @@ const isEspAirflow = (value: unknown): value is EspAirflow => {
 };
 
 const parseDeviceState = (value: unknown): DeviceStateSnapshot | null => {
-  if (!isRecord(value) || !isRecord(value.ac) || !isRecord(value.display)) {
+  if (!isRecord(value) || !isRecord(value.ac)) {
     return null;
   }
 
   const ac = value.ac;
-  const display = value.display;
   if (
     typeof ac.power !== 'boolean' ||
     typeof ac.temperature !== 'number' ||
     !isEspAcMode(ac.mode) ||
     !isEspFanSpeed(ac.fan) ||
     !isEspAirflow(ac.swingVertical) ||
-    !isEspAirflow(ac.swingHorizontal) ||
-    typeof display.pairingMode !== 'boolean' ||
-    typeof display.screenOn !== 'boolean' ||
-    typeof display.qrVisible !== 'boolean'
+    !isEspAirflow(ac.swingHorizontal)
   ) {
     return null;
   }
@@ -126,11 +117,6 @@ const parseDeviceState = (value: unknown): DeviceStateSnapshot | null => {
       swingHorizontal: ac.swingHorizontal,
       swingVertical: ac.swingVertical,
       temperature: ac.temperature,
-    },
-    display: {
-      pairingMode: display.pairingMode,
-      qrVisible: display.qrVisible,
-      screenOn: display.screenOn,
     },
   };
 };

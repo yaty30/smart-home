@@ -11,11 +11,6 @@ AcState acState = {
   false
 };
 
-DisplayState displayState = {
-  true,
-  false
-};
-
 bool pendingIR = false;
 AcState pendingState = acState;
 unsigned long pendingIRQueuedAt = 0;
@@ -188,15 +183,6 @@ String acStateJson() {
   body += "\"swingHorizontal\":\"" + swingHorizontalString(acState.swingHorizontal) + "\",";
   body += "\"quiet\":" + boolString(acState.quiet) + ",";
   body += "\"powerful\":" + boolString(acState.powerful);
-  body += "}";
-  return body;
-}
-
-String displayStateJson() {
-  String body = "{";
-  body += "\"screenOn\":" + boolString(displayState.screenOn) + ",";
-  body += "\"qrVisible\":" + boolString(displayState.qrVisible) + ",";
-  body += "\"pairingMode\":" + boolString(pairingMode);
   body += "}";
   return body;
 }

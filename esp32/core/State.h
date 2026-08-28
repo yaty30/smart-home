@@ -14,11 +14,6 @@ struct AcState {
   bool powerful;
 };
 
-struct DisplayState {
-  bool screenOn;
-  bool qrVisible;
-};
-
 struct AcSchedule {
   bool valid;
   bool enabled;
@@ -33,7 +28,6 @@ struct AcSchedule {
 };
 
 extern AcState acState;
-extern DisplayState displayState;
 extern AcSchedule acSchedule;
 extern bool pendingIR;
 extern AcState pendingState;
@@ -52,7 +46,6 @@ String fanDisplayLabel(uint8_t fan);
 String swingVerticalString(uint8_t swingVertical);
 String swingHorizontalString(uint8_t swingHorizontal);
 String acStateJson();
-String displayStateJson();
 
 bool parsePower(const String& value, bool& power);
 bool parseToggle(const String& value, bool& enabled);

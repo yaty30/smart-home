@@ -1,36 +1,12 @@
-import { AlertCircle, QrCode, Wifi } from "lucide-react-native";
+import { Wifi } from "lucide-react-native";
 import { useMemo } from "react";
 import { SafeAreaView, StyleSheet, Text, View } from "react-native";
 
-import { AppButton } from "../components/AppButton";
-import {
-  PairingScannerModal,
-  usePairingScanner,
-} from "../components/PairingScannerModal";
 import { type Theme, useTheme } from "../theme/theme";
 
 export function ConnectDeviceScreen() {
   const theme = useTheme();
   const styles = useMemo(() => createStyles(theme), [theme]);
-  const {
-    closeScanner,
-    isScannerOpen,
-    openScanner,
-    permission,
-    permissionError,
-  } = usePairingScanner();
-
-  const permissionMessage = useMemo(() => {
-    if (permissionError !== null) {
-      return permissionError;
-    }
-
-    if (permission === null || permission.granted) {
-      return null;
-    }
-
-    return "Camera access is required to scan the ESP32 pairing QR code.";
-  }, [permission, permissionError]);
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -44,34 +20,11 @@ export function ConnectDeviceScreen() {
             <Text style={styles.eyebrow}>Device pairing</Text>
             <Text style={styles.title}>Connect your air conditioner</Text>
             <Text style={styles.body}>
-              Scan the QR code shown by your ESP32 controller to pair this app
-              with the device.
+              To add a controller, navigate to a room and use the room settings to pair a new device.
             </Text>
           </View>
-
-          {permissionMessage !== null ? (
-            <View style={styles.inlineNotice}>
-              <AlertCircle
-                color={theme.accentBright}
-                size={18}
-                strokeWidth={2.4}
-              />
-              <Text style={styles.inlineNoticeText}>{permissionMessage}</Text>
-            </View>
-          ) : null}
-
-          <AppButton
-            label="Scan QR Code"
-            leftIcon={<QrCode size={22} strokeWidth={2.6} color={theme.accentStrong} />}
-            onPress={() => {
-              void openScanner();
-            }}
-            vibe="strong"
-          />
         </View>
       </View>
-
-      <PairingScannerModal onClose={closeScanner} visible={isScannerOpen} />
     </SafeAreaView>
   );
 }

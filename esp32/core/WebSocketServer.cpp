@@ -33,7 +33,6 @@ String deviceStateJson() {
   String body = "{";
   body += "\"type\":\"state\",";
   body += "\"ac\":" + acStateJson() + ",";
-  body += "\"display\":" + displayStateJson() + ",";
   body += "\"connection\":{";
   body += "\"wifi\":" + boolString(isWiFiConnected());
   body += "}";
@@ -224,34 +223,6 @@ void handleCommandMessage(uint8_t clientId, const String& message) {
   }
 
   AcState nextState = acState;
-
-  if (command == "display.screenPower" || command == "display.setScreen") {
-    bool screenOn;
-    if (!getJsonBool(message, "value", screenOn)) {
-      sendText(clientId, commandAckJson(requestId, false, "invalid_screen_power"));
-      return;
-    }
-
-    DisplayState nextDisplayState = displayState;
-    nextDisplayState.screenOn = screenOn;
-    applyDisplayState(nextDisplayState);
-    sendText(clientId, commandAckJson(requestId, true));
-    return;
-  }
-
-  if (command == "display.qrVisibility" || command == "display.setQrVisible") {
-    bool qrVisible;
-    if (!getJsonBool(message, "value", qrVisible)) {
-      sendText(clientId, commandAckJson(requestId, false, "invalid_qr_visibility"));
-      return;
-    }
-
-    DisplayState nextDisplayState = displayState;
-    nextDisplayState.qrVisible = qrVisible;
-    applyDisplayState(nextDisplayState);
-    sendText(clientId, commandAckJson(requestId, true));
-    return;
-  }
 
   if (command == "ac.power") {
     bool power;
