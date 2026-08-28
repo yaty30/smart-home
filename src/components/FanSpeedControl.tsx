@@ -55,11 +55,11 @@ function FanSpeedOptionButton({
   const animatedButtonStyle = {
     backgroundColor: activeProgress.interpolate({
       inputRange: [0, 1],
-      outputRange: ["rgba(240, 169, 66, 0)", theme.surfaceWarmPressed],
+      outputRange: [theme.transparent, theme.surfaceWarmPressed],
     }),
     borderColor: activeProgress.interpolate({
       inputRange: [0, 1],
-      outputRange: ["rgba(240, 169, 66, 0)", theme.borderActive],
+      outputRange: [theme.transparent, theme.borderActive],
     }),
     shadowOpacity: activeProgress.interpolate({
       inputRange: [0, 1],
@@ -208,14 +208,14 @@ const createStyles = (theme: Theme) => StyleSheet.create({
   },
   button: {
     alignItems: "center",
-    borderColor: "transparent",
+    borderColor: theme.transparent,
     borderRadius: 14,
     borderWidth: 1,
     height: 44,
     width: 'auto',
     justifyContent: "center",
     minWidth: 0,
-    shadowColor: "#000000",
+    shadowColor: theme.shadows.color,
     shadowOffset: {
       height: 4,
       width: 0,

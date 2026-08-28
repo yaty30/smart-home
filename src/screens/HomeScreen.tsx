@@ -37,14 +37,16 @@ function DeviceTypeIcon({ type, size, color }: { type: Device['type']; size: num
 
 // ─── AC detail pills (mirrors ScheduleRow rowDetails) ────────────────────────
 
-const modeIconMap: Record<string, React.ReactElement> = {
-  auto: <Sparkles size={14} color="#F6C453" />,
-  cold: <Snowflake size={14} color="#4DA3FF" />,
-  cool: <Snowflake size={14} color="#4DA3FF" />,
-  dry: <DropletOff size={14} color="#A67CFF" />,
-  heat: <Flame size={14} color="#FF6B35" />,
-  fan: <Fan size={14} color="#8899AA" />,
-};
+function createModeIconMap(theme: Theme): Record<string, React.ReactElement> {
+  return {
+    auto: <Sparkles size={14} color={theme.modeColors.auto} />,
+    cold: <Snowflake size={14} color={theme.modeColors.cool} />,
+    cool: <Snowflake size={14} color={theme.modeColors.cool} />,
+    dry: <DropletOff size={14} color={theme.modeColors.dry} />,
+    heat: <Flame size={14} color={theme.modeColors.heat} />,
+    fan: <Fan size={14} color={theme.modeColors.fan} />,
+  };
+}
 
 type AcDetailPillsProps = {
   state: Device['state'];
@@ -54,6 +56,7 @@ type AcDetailPillsProps = {
 };
 
 function AcDetailPills({ state, theme, pillStyle, pillTextStyle }: AcDetailPillsProps) {
+  const modeIconMap = createModeIconMap(theme);
   const modeIcon = state.mode ? modeIconMap[state.mode] ?? null : null;
 
   const verticalOption = verticalAirflowOptions.find((o) => o.id === state.swingVertical);
@@ -278,7 +281,7 @@ function SummaryCard({ onlineCount, allOnline, temps, humidities }: SummaryCardP
   return (
     <View style={summaryStyles.card}>
       <View style={summaryStyles.topRow}>
-        <View style={[summaryStyles.statusDot, { backgroundColor: allOnline ? '#4ADE80' : theme.textMuted }]} />
+        <View style={[summaryStyles.statusDot, { backgroundColor: allOnline ? theme.statusColors.online : theme.textMuted }]} />
         <Text style={summaryStyles.deviceCount}>{onlineCount} Device{onlineCount !== 1 ? 's' : ''} Online</Text>
       </View>
       <View style={summaryStyles.statusLine}>
@@ -323,7 +326,6 @@ const createSummaryStyles = (theme: Theme) => StyleSheet.create({
     alignItems: 'center',
     gap: theme.spacing.sm,
   },
-  // StyleSheet doesn't support dynamic values directly; use a function and inline
   statusDot: {
     width: 8,
     height: 8,
@@ -420,7 +422,7 @@ const createDeviceCardStyles = (theme: Theme) => StyleSheet.create({
     borderRadius: 4,
     marginTop: 4,
   },
-  dotOn: { backgroundColor: '#4ADE80' },
+  dotOn: { backgroundColor: theme.statusColors.online },
   dotOff: { backgroundColor: theme.textMuted },
   name: {
     fontSize: 14,

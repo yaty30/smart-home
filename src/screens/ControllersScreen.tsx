@@ -245,11 +245,11 @@ const createStyles = (theme: Theme) =>
       letterSpacing: 0,
     },
     controllerStatusOnline: {
-      color: "#4ADE80",
+      color: theme.statusColors.online,
     },
     controllerDetails: {
       backgroundColor: theme.controlBackground,
-      borderColor: "rgba(255, 255, 255, 0.06)",
+      borderColor: theme.borders.subtle,
       borderRadius: theme.radiusSmall,
       borderWidth: 1,
       gap: theme.spacing.sm,

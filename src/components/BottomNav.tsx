@@ -217,7 +217,7 @@ const createStyles = (theme: Theme) => StyleSheet.create({
   },
   bar: {
     alignItems: "center",
-    borderColor: "rgba(255, 255, 255, 0.07)",
+    borderColor: theme.borders.verySubtle,
     borderRadius: theme.radiusRound,
     borderWidth: 1,
     elevation: 14,
@@ -227,7 +227,7 @@ const createStyles = (theme: Theme) => StyleSheet.create({
     paddingHorizontal: theme.spacing.md,
     paddingVertical: theme.spacing.sm,
     position: "relative",
-    shadowColor: "#000000",
+    shadowColor: theme.shadows.color,
     shadowOffset: {
       height: 10,
       width: 0,

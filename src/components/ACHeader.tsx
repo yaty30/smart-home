@@ -86,7 +86,7 @@ const createStyles = (theme: Theme) => StyleSheet.create({
   },
   headerWrapScrolled: {
     elevation: 10,
-    shadowColor: "#000000",
+    shadowColor: theme.shadows.color,
     shadowOffset: {
       height: 8,
       width: 0,
@@ -112,7 +112,7 @@ const createStyles = (theme: Theme) => StyleSheet.create({
   },
   glassTint: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: "rgba(33, 22, 15, 0.12)",
+    backgroundColor: theme.overlays.glassTint,
   },
   topSeal: {
     backgroundColor: theme.accentSubtle,
@@ -161,7 +161,7 @@ const createStyles = (theme: Theme) => StyleSheet.create({
     fontSize: 20,
     fontWeight: "800",
     letterSpacing: 0,
-    textShadowColor: "rgba(0, 0, 0, 0.32)",
+    textShadowColor: theme.overlays.timePickerBackdrop,
     textShadowOffset: {
       height: 1,
       width: 0,

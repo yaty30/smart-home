@@ -40,15 +40,19 @@ const iconByDeviceType: Record<DeviceType, IconComponent> = {
   fan: AirVent,
 };
 
-const POWERED_GREEN = '#4ADE80';
-const POWERED_GREEN_MUTED = 'rgba(74, 222, 128, 0.18)';
-const POWERED_GREEN_BORDER = 'rgba(74, 222, 128, 0.72)';
+const createDeviceColors = (theme: Theme) => ({
+  POWERED_GREEN: theme.statusColors.online,
+  POWERED_GREEN_MUTED: theme.statusColors.onlineMuted,
+  POWERED_GREEN_BORDER: theme.statusColors.onlineBorder,
+});
+
 const BOTTOM_NAV_ANIMATION_MS = 260;
 const BOTTOM_NAV_HIDDEN_OFFSET = BOTTOM_NAV_CLEARANCE + 48;
 
 export function RoomDetailScreen({ navigation, route }: RoomDetailScreenProps) {
   const theme = useTheme();
   const styles = useMemo(() => createStyles(theme), [theme]);
+  const deviceColors = useMemo(() => createDeviceColors(theme), [theme]);
   const { roomId } = route.params;
   const { getRoomById, removeRoom, updateRoomName } = useRooms();
   const { getDeviceById, getDevicesByRoom, removeDevice, removeDevicesByRoom, addDevice, updateDeviceName, updateDeviceState } = useDevices();
@@ -450,7 +454,7 @@ export function RoomDetailScreen({ navigation, route }: RoomDetailScreenProps) {
                     >
                       <View style={[styles.deviceIcon, isPowered && styles.deviceIconOn]}>
                         <Icon
-                          color={isPowered ? POWERED_GREEN : theme.textMuted}
+                          color={isPowered ? deviceColors.POWERED_GREEN : theme.textMuted}
                           size={20}
                           strokeWidth={2.2}
                         />
@@ -492,7 +496,7 @@ export function RoomDetailScreen({ navigation, route }: RoomDetailScreenProps) {
                       style={[styles.powerButton, isPowered && styles.powerButtonOn]}
                     >
                       <Power
-                        color={isPowered ? POWERED_GREEN : theme.textMuted}
+                        color={isPowered ? deviceColors.POWERED_GREEN : theme.textMuted}
                         size={20}
                         strokeWidth={2.4}
                       />
@@ -698,7 +702,7 @@ const createStyles = (theme: Theme) => StyleSheet.create({
     letterSpacing: 0,
   },
   controllerStatusOnline: {
-    color: '#4ADE80',
+    color: theme.statusColors.online,
   },
   controllerDetails: {
     paddingLeft: 52,
@@ -749,8 +753,8 @@ const createStyles = (theme: Theme) => StyleSheet.create({
     padding: theme.spacing.md,
   },
   deviceCardOn: {
-    backgroundColor: POWERED_GREEN_MUTED,
-    borderColor: POWERED_GREEN_BORDER,
+    backgroundColor: theme.statusColors.onlineMuted,
+    borderColor: theme.statusColors.onlineBorder,
   },
   deviceCardContent: {
     alignItems: 'center',
@@ -769,8 +773,8 @@ const createStyles = (theme: Theme) => StyleSheet.create({
     width: 40,
   },
   deviceIconOn: {
-    backgroundColor: POWERED_GREEN_MUTED,
-    borderColor: POWERED_GREEN_BORDER,
+    backgroundColor: theme.statusColors.onlineMuted,
+    borderColor: theme.statusColors.onlineBorder,
   },
   deviceInfo: {
     flex: 1,
@@ -815,8 +819,8 @@ const createStyles = (theme: Theme) => StyleSheet.create({
     width: 44,
   },
   powerButtonOn: {
-    backgroundColor: POWERED_GREEN_MUTED,
-    borderColor: POWERED_GREEN_BORDER,
+    backgroundColor: theme.statusColors.onlineMuted,
+    borderColor: theme.statusColors.onlineBorder,
   },
   deleteSection: {
     marginTop: 'auto',
