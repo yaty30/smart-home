@@ -1,7 +1,6 @@
 #include "Pairing.h"
 
 #include "Config.h"
-#include "Display.h"
 #include "State.h"
 #include "StateManager.h"
 #include "WebSocketServer.h"
@@ -43,7 +42,6 @@ void enterPairingMode() {
 
   pairingMode = true;
   Serial.println("Pairing mode enabled");
-  renderDisplayState();
   broadcastState();
 }
 
@@ -72,18 +70,11 @@ void handlePairingButton() {
 void completePairing() {
   applyPairingState(true);
   pairingMode = false;
-  DisplayState nextDisplayState = displayState;
-  nextDisplayState.qrVisible = false;
-  applyDisplayState(nextDisplayState);
   Serial.println("Pairing complete");
 }
 
 void resetPairing() {
   applyPairingState(false);
   pairingMode = true;
-  DisplayState nextDisplayState = displayState;
-  nextDisplayState.screenOn = true;
-  nextDisplayState.qrVisible = true;
-  applyDisplayState(nextDisplayState);
   Serial.println("Pairing reset");
 }

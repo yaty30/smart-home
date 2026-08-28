@@ -27,7 +27,7 @@ void initStorageManager() {
   }
 }
 
-bool loadStoredState(AcState& storedAcState, DisplayState& storedDisplayState, bool& storedPaired) {
+bool loadStoredState(AcState& storedAcState, bool& storedPaired) {
   if (!storageReady || preferences.getUChar("version", 0) != STORAGE_VERSION) {
     return false;
   }
@@ -49,8 +49,6 @@ bool loadStoredState(AcState& storedAcState, DisplayState& storedDisplayState, b
   }
 
   storedAcState = candidate;
-  storedDisplayState.screenOn = preferences.getBool("screen_on", storedDisplayState.screenOn);
-  storedDisplayState.qrVisible = preferences.getBool("qr_visible", storedDisplayState.qrVisible);
   storedPaired = preferences.getBool("paired", storedPaired);
   return true;
 }
@@ -69,16 +67,6 @@ void saveACState(const AcState& state) {
   preferences.putUChar("ac_swing_h", state.swingHorizontal);
   preferences.putBool("ac_quiet", state.quiet);
   preferences.putBool("ac_powerful", state.powerful);
-}
-
-void saveDisplayState(const DisplayState& state) {
-  if (!storageReady) {
-    return;
-  }
-
-  preferences.putUChar("version", STORAGE_VERSION);
-  preferences.putBool("screen_on", state.screenOn);
-  preferences.putBool("qr_visible", state.qrVisible);
 }
 
 void savePairingState(bool paired) {

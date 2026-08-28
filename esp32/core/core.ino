@@ -1,5 +1,4 @@
 #include "ACController.h"
-#include "Display.h"
 #include "HttpServer.h"
 #include "Pairing.h"
 #include "ScheduleManager.h"
@@ -15,8 +14,6 @@ void setup() {
   initStateManager();
   initPairing();
   initACController();
-  initDisplay();
-  showDisplayMessage("Starting...");
 
   connectWiFi();
 
@@ -29,7 +26,6 @@ void loop() {
   handleHttpClient();
   handleWebSocketServer();
   handlePairingButton();
-  updateDisplayForWiFi();
   processQueuedIR();
   handleScheduleExecution();
   delay(1);

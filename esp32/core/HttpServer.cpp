@@ -4,7 +4,6 @@
 
 #include "ACController.h"
 #include "Config.h"
-#include "Display.h"
 #include "Pairing.h"
 #include "ScheduleManager.h"
 #include "State.h"
@@ -94,20 +93,9 @@ void applyACStateAndRespond(const AcState& nextState) {
   sendJson(200, body);
 }
 
-void applyDisplayStateAndRespond(const DisplayState& nextState) {
-  applyDisplayState(nextState);
-
-  String body = "{";
-  body += "\"success\":true,";
-  body += "\"display\":" + displayStateJson();
-  body += "}";
-  sendJson(200, body);
-}
-
 String statusJson() {
   String body = "{";
   body += "\"ac\":" + acStateJson() + ",";
-  body += "\"display\":" + displayStateJson() + ",";
   body += "\"wifi\":{";
   body += "\"connected\":" + boolString(isWiFiConnected()) + ",";
   body += "\"rssi\":" + String(isWiFiConnected() ? WiFi.RSSI() : 0) + ",";
@@ -150,11 +138,7 @@ void handleRoot() {
   body += "\"GET /temp/16..30\",";
   body += "\"GET /mode/auto|cool|dry|fan|heat\",";
   body += "\"GET /wifi\",";
-  body += "\"POST /pair/complete\",";
-  body += "\"GET /display/qr\",";
-  body += "\"GET /display/status\",";
-  body += "\"GET /display/clear\",";
-  body += "\"GET /display?screen=on|off&qr=show|hide\"";
+  body += "\"POST /pair/complete\"";
   body += "]";
   body += "}";
 
@@ -275,8 +259,7 @@ void handlePairComplete() {
 
   String body = "{";
   body += "\"success\":true,";
-  body += "\"paired\":true,";
-  body += "\"display\":\"status\"";
+  body += "\"paired\":true";
   body += "}";
 
   sendJson(200, body);
@@ -342,66 +325,6 @@ void handleMode() {
   AcState nextState = acState;
   nextState.mode = nextMode;
   applyACStateAndRespond(nextState);
-}
-
-void handleDisplayQR() {
-  logRequestContent("handleDisplayQR");
-
-  DisplayState nextState = displayState;
-  nextState.qrVisible = true;
-  applyDisplayStateAndRespond(nextState);
-}
-
-void handleDisplayStatus() {
-  logRequestContent("handleDisplayStatus");
-
-  DisplayState nextState = displayState;
-  nextState.qrVisible = false;
-  applyDisplayStateAndRespond(nextState);
-}
-
-void handleDisplayClear() {
-  logRequestContent("handleDisplayClear");
-
-  DisplayState nextState = displayState;
-  nextState.screenOn = false;
-  applyDisplayStateAndRespond(nextState);
-}
-
-void handleDisplay() {
-  logRequestContent("handleDisplay");
-
-  if (!server.hasArg("screen") && !server.hasArg("qr")) {
-    sendJson(400, "{\"success\":false,\"error\":\"Provide screen=on|off and/or qr=show|hide\"}");
-    return;
-  }
-
-  DisplayState nextState = displayState;
-  if (server.hasArg("screen")) {
-    String value = server.arg("screen");
-    if (value == "on") {
-      nextState.screenOn = true;
-    } else if (value == "off") {
-      nextState.screenOn = false;
-    } else {
-      sendJson(400, "{\"success\":false,\"error\":\"Invalid screen value. Use on or off\"}");
-      return;
-    }
-  }
-
-  if (server.hasArg("qr")) {
-    String value = server.arg("qr");
-    if (value == "show" || value == "on") {
-      nextState.qrVisible = true;
-    } else if (value == "hide" || value == "off") {
-      nextState.qrVisible = false;
-    } else {
-      sendJson(400, "{\"success\":false,\"error\":\"Invalid qr value. Use show or hide\"}");
-      return;
-    }
-  }
-
-  applyDisplayStateAndRespond(nextState);
 }
 
 void handleDynamicRoute() {
@@ -612,10 +535,6 @@ void setupRoutes() {
   server.on("/power/on", HTTP_GET, handlePowerOn);
   server.on("/power/off", HTTP_GET, handlePowerOff);
   server.on("/wifi", HTTP_GET, handleWifi);
-  server.on("/display/qr", HTTP_GET, handleDisplayQR);
-  server.on("/display/status", HTTP_GET, handleDisplayStatus);
-  server.on("/display/clear", HTTP_GET, handleDisplayClear);
-  server.on("/display", HTTP_GET, handleDisplay);
   server.onNotFound(handleDynamicRoute);
 }
 
