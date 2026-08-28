@@ -136,11 +136,11 @@ const modeStlyes = {
   opacity: 0.86
 }
 
-const modePills: { id: AirConditionerMode; label: string, icon: ReactNode }[] = [
-  { id: "auto", label: "Auto", icon: <Sparkles style={modeStlyes} size={18} color="#F6C453" /> },
-  { id: "cold", label: "Cold", icon: <Snowflake style={modeStlyes} size={18} color="#4DA3FF" /> },
-  { id: "dry", label: "Dry", icon: <DropletOff style={modeStlyes} size={18} color="#A67CFF" /> },
-  { id: "heat", label: "Heat", icon: <Flame style={modeStlyes} size={18} color="#FF6B35" /> },
+const modePills = (theme: Theme): { id: AirConditionerMode; label: string, icon: ReactNode }[] => [
+  { id: "auto", label: "Auto", icon: <Sparkles style={modeStlyes} size={18} color={theme.modeColors.auto} /> },
+  { id: "cold", label: "Cold", icon: <Snowflake style={modeStlyes} size={18} color={theme.modeColors.cool} /> },
+  { id: "dry", label: "Dry", icon: <DropletOff style={modeStlyes} size={18} color={theme.modeColors.dry} /> },
+  { id: "heat", label: "Heat", icon: <Flame style={modeStlyes} size={18} color={theme.modeColors.heat} /> },
 ];
 
 type AirConditionerScreenProps = {
@@ -164,6 +164,7 @@ export function AirConditionerScreen({
   const navigation = useNavigation<any>();
   const theme = useTheme();
   const styles = useMemo(() => createStyles(theme), [theme]);
+  const modePillsData = useMemo(() => modePills(theme), [theme]);
   const { width } = useWindowDimensions();
   const { clearFavouriteDevice, devices, setFavouriteDevice } = useDevices();
   const [temperature, setTemperature] = useState(24);
@@ -1041,7 +1042,7 @@ const animateBottomNavOut = useCallback(() => {
           ) : null}
 
           <Animated.View style={[styles.modePillRow, liveLabelDimStyle]}>
-            {modePills.map((modeOption) => {
+            {modePillsData.map((modeOption) => {
               const selected = mode === modeOption.id;
 
               return (
@@ -1376,7 +1377,7 @@ const createStyles = (theme: Theme) => StyleSheet.create({
   },
   powerCornerButtonOn: {
     backgroundColor: theme.powerAccentMuted,
-    borderColor: "rgba(255, 106, 88, 0.58)",
+    borderColor: theme.powerButton.borderOn,
   },
   powerCornerButtonOff: {
     backgroundColor: theme.surfaceWarm,
@@ -1400,7 +1401,7 @@ const createStyles = (theme: Theme) => StyleSheet.create({
   },
   summaryTimeField: {
     backgroundColor: theme.controlBackground,
-    borderColor: "rgba(255, 255, 255, 0.08)",
+    borderColor: theme.borders.soft,
     borderRadius: 16,
     borderWidth: 1,
     flex: 1,
@@ -1519,7 +1520,7 @@ const createStyles = (theme: Theme) => StyleSheet.create({
   },
   timePickerBackdrop: {
     alignItems: "center",
-    backgroundColor: "rgba(0, 0, 0, 0.4)",
+    backgroundColor: theme.overlays.timePickerBackdrop,
     flex: 1,
     justifyContent: "flex-end",
     paddingBottom: theme.spacing.xl,

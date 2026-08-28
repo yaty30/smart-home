@@ -93,6 +93,45 @@ export const darkTheme = {
     temperature: 60,
     status: 24,
   },
+
+  modeColors: {
+    auto: "#F6C453",
+    cool: "#4DA3FF",
+    dry: "#A67CFF",
+    heat: "#FF6B35",
+    fan: "#8899AA",
+  },
+
+  statusColors: {
+    online: "#4ADE80",
+    onlineMuted: "rgba(74, 222, 128, 0.18)",
+    onlineBorder: "rgba(74, 222, 128, 0.72)",
+  },
+
+  overlays: {
+    modalBackdrop: "rgba(0, 0, 0, 0.55)",
+    timePickerBackdrop: "rgba(0, 0, 0, 0.4)",
+    glassTint: "rgba(33, 22, 15, 0.12)",
+  },
+
+  borders: {
+    subtle: "rgba(255, 255, 255, 0.06)",
+    verySubtle: "rgba(255, 255, 255, 0.07)",
+    soft: "rgba(255, 255, 255, 0.08)",
+  },
+
+  powerButton: {
+    borderOn: "rgba(255, 106, 88, 0.58)",
+    borderDanger: "rgba(255, 106, 88, 0.34)",
+  },
+
+  shadows: {
+    color: "#000000",
+  },
+
+  textHighlight: "#FFFFFF",
+
+  transparent: "transparent",
 } as const;
 
 export const lightTheme = {
@@ -148,6 +187,45 @@ export const lightTheme = {
       "rgba(242, 211, 205, 0.98)",
     ],
   },
+
+  modeColors: {
+    auto: "#F6C453",
+    cool: "#4DA3FF",
+    dry: "#A67CFF",
+    heat: "#FF6B35",
+    fan: "#8899AA",
+  },
+
+  statusColors: {
+    online: "#4ADE80",
+    onlineMuted: "rgba(74, 222, 128, 0.18)",
+    onlineBorder: "rgba(74, 222, 128, 0.72)",
+  },
+
+  overlays: {
+    modalBackdrop: "rgba(0, 0, 0, 0.55)",
+    timePickerBackdrop: "rgba(0, 0, 0, 0.4)",
+    glassTint: "rgba(255, 252, 247, 0.12)",
+  },
+
+  borders: {
+    subtle: "rgba(142, 71, 7, 0.06)",
+    verySubtle: "rgba(142, 71, 7, 0.07)",
+    soft: "rgba(142, 71, 7, 0.08)",
+  },
+
+  powerButton: {
+    borderOn: "rgba(217, 66, 50, 0.58)",
+    borderDanger: "rgba(217, 66, 50, 0.34)",
+  },
+
+  shadows: {
+    color: "#000000",
+  },
+
+  textHighlight: "#000000",
+
+  transparent: "transparent",
 } as const;
 
 export type Theme = typeof darkTheme | typeof lightTheme;

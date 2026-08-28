@@ -146,7 +146,7 @@ const createStyles = (theme: Theme) => StyleSheet.create({
     backgroundColor: theme.textMuted,
   },
   statusDotOnline: {
-    backgroundColor: '#4ADE80',
+    backgroundColor: theme.statusColors.online,
   },
   roomCardHeaderSpacer: {
     width: 20,

@@ -112,30 +112,30 @@ const modeStyles = {
   opacity: 0.86,
 };
 
-const modeOptions: {
+const modeOptions = (theme: Theme): {
   id: Exclude<AirConditionerMode, "fan">;
   label: string;
   icon: ReactNode;
-}[] = [
+}[] => [
     {
       id: "auto",
       label: "Auto",
-      icon: <Sparkles style={modeStyles} size={18} color="#F6C453" />,
+      icon: <Sparkles style={modeStyles} size={18} color={theme.modeColors.auto} />,
     },
     {
       id: "cold",
       label: "Cold",
-      icon: <Snowflake style={modeStyles} size={18} color="#4DA3FF" />,
+      icon: <Snowflake style={modeStyles} size={18} color={theme.modeColors.cool} />,
     },
     {
       id: "dry",
       label: "Dry",
-      icon: <DropletOff style={modeStyles} size={18} color="#A67CFF" />,
+      icon: <DropletOff style={modeStyles} size={18} color={theme.modeColors.dry} />,
     },
     {
       id: "heat",
       label: "Heat",
-      icon: <Flame style={modeStyles} size={18} color="#FF6B35" />,
+      icon: <Flame style={modeStyles} size={18} color={theme.modeColors.heat} />,
     },
   ];
 
@@ -256,6 +256,7 @@ type ScheduleRowProps = {
 function ScheduleRow({ schedule, onToggleEnabled }: ScheduleRowProps) {
   const theme = useTheme();
   const s = useMemo(() => createStyles(theme), [theme]);
+  const modeOpts = useMemo(() => modeOptions(theme), [theme]);
   const verticalAirflowOption = verticalAirflowOptions.find(
     (option) => option.id === schedule.verticalAirflow,
   );
@@ -265,7 +266,7 @@ function ScheduleRow({ schedule, onToggleEnabled }: ScheduleRowProps) {
   const VerticalAirflowIcon = verticalAirflowOption?.icon;
   const HorizontalAirflowIcon = horizontalAirflowOption?.icon;
 
-  const modeIcon = modeOptions?.find(m => m.id === schedule.mode)?.icon ?? null
+  const modeIcon = modeOpts?.find(m => m.id === schedule.mode)?.icon ?? null
 
   return (
     <View style={{ ...s.row, borderColor: schedule.enabled ? theme.accent : theme.accentMuted }}>
@@ -431,7 +432,7 @@ const createStyles = (theme: Theme) => StyleSheet.create({
     flex: 1,
   },
   backdrop: {
-    backgroundColor: "rgba(0,0,0,0.55)",
+    backgroundColor: theme.overlays.modalBackdrop,
   },
   kavFill: {
     flex: 1,
@@ -443,7 +444,7 @@ const createStyles = (theme: Theme) => StyleSheet.create({
     borderTopRightRadius: 20,
     height: "90%",
     maxHeight: "92%",
-    shadowColor: "#000",
+    shadowColor: theme.shadows.color,
     shadowOffset: { width: 0, height: -2 },
     shadowOpacity: 0.12,
     shadowRadius: 12,
@@ -564,7 +565,7 @@ const createStyles = (theme: Theme) => StyleSheet.create({
     fontWeight: "500",
   },
   dayPillTextActive: {
-    color: "#fff",
+    color: theme.textHighlight,
   },
   rowDetails: {
     flexDirection: "row",
@@ -1005,6 +1006,7 @@ function ScheduleEditorSheet({
 }: ScheduleEditorSheetProps) {
   const theme = useTheme();
   const s = useMemo(() => createStyles(theme), [theme]);
+  const modeOpts = useMemo(() => modeOptions(theme), [theme]);
   const translateY = useRef(new Animated.Value(800)).current;
   const handleCloseRef = useRef(onClose);
   useEffect(() => {
@@ -1340,7 +1342,7 @@ function ScheduleEditorSheet({
                         <Text style={s.temperatureTitle}>Mode</Text>
                       </View>
                       <View style={s.modePillRow}>
-                        {modeOptions.map((modeOption) => {
+                        {modeOpts.map((modeOption) => {
                           const selected = draft.mode === modeOption.id;
 
                           return (

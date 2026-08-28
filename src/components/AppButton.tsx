@@ -130,15 +130,15 @@ const createStyles = (theme: Theme) => StyleSheet.create({
   },
   dangerFrame: {
     backgroundColor: theme.powerAccentMuted,
-    borderColor: "rgba(255, 106, 88, 0.34)",
+    borderColor: theme.powerButton.borderDanger,
   },
   destructiveFrame: {
     backgroundColor: theme.powerAccentMuted,
-    borderColor: "rgba(255, 106, 88, 0.58)",
+    borderColor: theme.powerButton.borderOn,
   },
   primaryShadow: {
     elevation: 5,
-    shadowColor: "#000000",
+    shadowColor: theme.shadows.color,
     shadowOffset: {
       height: 10,
       width: 0,
