@@ -43,6 +43,7 @@ import { isDebugMode } from "./src/config/debug";
 const NAV_HIDE_ANIMATION_MS = 220;
 const SCREEN_SLIDE_ANIMATION_MS = 100;
 const STATUS_REFRESH_DEDUP_MS = 1000;
+const STATUS_POLL_INTERVAL_MS = 3000;
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
@@ -234,6 +235,7 @@ function DeviceStatusSynchronizer() {
   const controllersRef = useRef(controllers);
   const loadingRef = useRef(controllersLoading || devicesLoading);
   const lastRefreshStartedAt = useRef(0);
+  const refreshInFlight = useRef(false);
   const refreshGeneration = useRef(0);
 
   useEffect(() => {
@@ -245,7 +247,7 @@ function DeviceStatusSynchronizer() {
   }, [controllersLoading, devicesLoading]);
 
   const refreshAllControllerStatus = useCallback(() => {
-    if (isDebugMode || loadingRef.current) {
+    if (isDebugMode || loadingRef.current || refreshInFlight.current) {
       return;
     }
 
@@ -263,12 +265,18 @@ function DeviceStatusSynchronizer() {
     }
 
     lastRefreshStartedAt.current = now;
+    refreshInFlight.current = true;
     refreshGeneration.current += 1;
     const currentGeneration = refreshGeneration.current;
 
     const refreshes = refreshableControllers.map(async (controller) => {
-      updateControllerConnectionStatus(controller.id, "connecting");
-      markControllerDevicesSyncing(controller.id);
+      if (
+        controller.connectionStatus === undefined ||
+        controller.connectionStatus === "unknown"
+      ) {
+        updateControllerConnectionStatus(controller.id, "connecting");
+        markControllerDevicesSyncing(controller.id);
+      }
 
       try {
         const snapshot = await fetchControllerStatus(controller);
@@ -287,7 +295,11 @@ function DeviceStatusSynchronizer() {
       }
     });
 
-    void Promise.allSettled(refreshes);
+    void Promise.allSettled(refreshes).finally(() => {
+      if (currentGeneration === refreshGeneration.current) {
+        refreshInFlight.current = false;
+      }
+    });
   }, [
     applyControllerDeviceStatus,
     markControllerDevicesOffline,
@@ -328,6 +340,21 @@ function DeviceStatusSynchronizer() {
       subscription.remove();
     };
   }, [refreshAllControllerStatus]);
+
+  useEffect(() => {
+    if (isDebugMode || controllersLoading || devicesLoading) {
+      return undefined;
+    }
+
+    const interval = setInterval(
+      refreshAllControllerStatus,
+      STATUS_POLL_INTERVAL_MS,
+    );
+
+    return () => {
+      clearInterval(interval);
+    };
+  }, [controllersLoading, devicesLoading, refreshAllControllerStatus]);
 
   return null;
 }

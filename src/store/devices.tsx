@@ -68,6 +68,23 @@ const sanitizeDeviceForStorage = (device: Device): Device => ({
   state: persistedDeviceState(device),
 });
 
+const hasSameRuntimeState = (
+  current: Device['state'],
+  next: Device['state'],
+) => {
+  return (
+    current.power === next.power &&
+    current.temperature === next.temperature &&
+    current.mode === next.mode &&
+    current.fanSpeed === next.fanSpeed &&
+    current.swingVertical === next.swingVertical &&
+    current.swingHorizontal === next.swingHorizontal &&
+    current.quiet === next.quiet &&
+    current.powerful === next.powerful &&
+    current.syncStatus === 'synced'
+  );
+};
+
 export function DevicesProvider({ children }: PropsWithChildren) {
   const [devices, setDevices] = useState<Device[]>(
     isDebugMode ? DEBUG_DEVICES : []
@@ -191,13 +208,15 @@ export function DevicesProvider({ children }: PropsWithChildren) {
     setDevices((current) =>
       current.map((device) =>
         device.controllerId === controllerId && device.type === 'ac'
-          ? {
-              ...device,
-              state: {
-                ...device.state,
-                ...nextRuntimeState,
-              },
-            }
+          ? hasSameRuntimeState(device.state, nextRuntimeState)
+            ? device
+            : {
+                ...device,
+                state: {
+                  ...device.state,
+                  ...nextRuntimeState,
+                },
+              }
           : device
       )
     );
@@ -206,16 +225,14 @@ export function DevicesProvider({ children }: PropsWithChildren) {
   const markControllerDevicesSyncing = useCallback((controllerId: string) => {
     setDevices((current) =>
       current.map((device) =>
-        device.controllerId === controllerId
+        device.controllerId === controllerId &&
+        (device.state.syncStatus === 'unknown' ||
+          device.state.syncStatus === undefined)
           ? {
               ...device,
               state: {
                 ...device.state,
-                syncStatus:
-                  device.state.syncStatus === 'synced' ||
-                  device.state.syncStatus === 'offline'
-                    ? 'syncing'
-                    : 'unknown',
+                syncStatus: 'syncing',
               },
             }
           : device
@@ -227,13 +244,15 @@ export function DevicesProvider({ children }: PropsWithChildren) {
     setDevices((current) =>
       current.map((device) =>
         device.controllerId === controllerId
-          ? {
-              ...device,
-              state: {
-                ...device.state,
-                syncStatus: 'offline',
-              },
-            }
+          ? device.state.syncStatus === 'offline'
+            ? device
+            : {
+                ...device,
+                state: {
+                  ...device.state,
+                  syncStatus: 'offline',
+                },
+              }
           : device
       )
     );

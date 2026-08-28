@@ -133,11 +133,18 @@ export function ControllersProvider({ children }: PropsWithChildren) {
 
   const updateControllerOnlineStatus = useCallback((controllerId: string, online: boolean) => {
     setControllers((current) =>
-      current.map((c) =>
-        c.id === controllerId
-          ? { ...c, online, connectionStatus: online ? 'online' : 'offline' }
-          : c
-      )
+      current.map((c) => {
+        if (c.id !== controllerId) {
+          return c;
+        }
+
+        const connectionStatus = online ? 'online' : 'offline';
+        if (c.online === online && c.connectionStatus === connectionStatus) {
+          return c;
+        }
+
+        return { ...c, online, connectionStatus };
+      })
     );
   }, []);
 
@@ -146,11 +153,18 @@ export function ControllersProvider({ children }: PropsWithChildren) {
     status: ControllerConnectionStatus,
   ) => {
     setControllers((current) =>
-      current.map((c) =>
-        c.id === controllerId
-          ? { ...c, online: status === 'online', connectionStatus: status }
-          : c
-      )
+      current.map((c) => {
+        if (c.id !== controllerId) {
+          return c;
+        }
+
+        const online = status === 'online';
+        if (c.online === online && c.connectionStatus === status) {
+          return c;
+        }
+
+        return { ...c, online, connectionStatus: status };
+      })
     );
   }, []);
 
