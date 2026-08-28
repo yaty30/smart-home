@@ -96,6 +96,7 @@ function FanSpeedOptionButton({
             {label}
           </Text>
         ) : (
+        <View style={styles.iconContainer}>
           <MaterialCommunityIcons
             color={
               active
@@ -107,6 +108,7 @@ function FanSpeedOptionButton({
             name={`numeric-${option}`}
             size={24}
           />
+        </View>
         )}
       </Animated.View>
     </TouchableOpacity>
@@ -210,6 +212,7 @@ const createStyles = (theme: Theme) => StyleSheet.create({
     borderRadius: 14,
     borderWidth: 1,
     height: 44,
+    width: 'auto',
     justifyContent: "center",
     minWidth: 0,
     shadowColor: "#000000",
@@ -230,5 +233,11 @@ const createStyles = (theme: Theme) => StyleSheet.create({
   },
   buttonTextDisabled: {
     color: theme.textMuted,
+  },
+  iconContainer: {
+    width: 28,
+    height: 28,
+    alignItems: "center",
+    justifyContent: "center",
   },
 });

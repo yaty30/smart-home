@@ -70,7 +70,7 @@ import type {
   FanSpeed,
 } from "../types/airConditioner";
 import { normalizeTemperature } from "../utils/temperatureGauge";
-import MaterialCommunityIcons from "react-native-vector-icons/MaterialCommunityIcons";
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 
 type TimeField = "start" | "end";
 
@@ -331,7 +331,13 @@ function ScheduleRow({ schedule, onToggleEnabled }: ScheduleRowProps) {
               </Text>
             </View>
           ))}
+
+          <View style={s.rowDetailPill}>
+            <Repeat size={16} color={theme.accentGlow} />
+            <Text style={s.rowDetailText}>{formatRepeat(schedule)}</Text>
+          </View>
         </View>
+
         <View style={s.rowDetails}>
           <View style={s.rowDetailPill}>
             {/* <Text style={s.rowDetailText}></Text> */}
@@ -340,6 +346,7 @@ function ScheduleRow({ schedule, onToggleEnabled }: ScheduleRowProps) {
                 size: 14,
               })
               : null}
+              <Text style={{color: theme.text, fontWeight: '600', fontSize: 13}}>{schedule.temperature} °C</Text>
           </View>
           <View style={s.rowDetailPill}>
             <View style={s.rowDetailInline}>
@@ -349,7 +356,7 @@ function ScheduleRow({ schedule, onToggleEnabled }: ScheduleRowProps) {
 
               {schedule.fanSpeed === undefined ||
                 schedule.fanSpeed === "auto" ? (
-                <Text style={s.rowDetailText}>Auto</Text>
+                <Text style={{ ...s.rowDetailText, marginLeft: theme.spacing.xs }}>Auto</Text>
               ) : (
                 <View style={s.rowDetailIconFrame}>
                   <MaterialCommunityIcons
@@ -363,7 +370,12 @@ function ScheduleRow({ schedule, onToggleEnabled }: ScheduleRowProps) {
             </View>
           </View>
           <View style={s.rowDetailPill}>
-            <View style={{ transform: [{ rotate: "-90deg" }] }}>
+            <View style={{
+              transform: [
+                { rotate: "-63.5deg" },
+                { translateX: 1 }
+              ]
+            }}>
               <DraftingCompass color={theme.accentGlow} size={16} />
             </View>
             {VerticalAirflowIcon ? (
@@ -386,7 +398,9 @@ function ScheduleRow({ schedule, onToggleEnabled }: ScheduleRowProps) {
           </View>
 
           <View style={s.rowDetailPill}>
-            <DraftingCompass size={16} color={theme.accentGlow} />
+            <View style={{ transform: [{ rotate: "0deg" }] }}>
+              <DraftingCompass size={16} color={theme.accentGlow} />
+            </View>
             {HorizontalAirflowIcon ? (
               <View
                 style={{
@@ -408,16 +422,17 @@ function ScheduleRow({ schedule, onToggleEnabled }: ScheduleRowProps) {
             )}
           </View>
 
-          {schedule.powerful || schedule.quiet &&
-            <View style={s.rowDetailPill}>
-              <View>{schedule.powerful ? <Zap size={16} color={theme.powerfulAccent} /> : schedule.quiet ? <Moon size={16} color={theme.quietAccent} /> : null}</View>
-            </View>
-          }
 
-          <View style={s.rowDetailPill}>
-            <Repeat size={16} color={theme.accentGlow} />
-            <Text style={s.rowDetailText}>{formatRepeat(schedule)}</Text>
-          </View>
+          {schedule.powerful ?
+            <View style={s.rowDetailPill}>
+              <Zap size={16} color={theme.powerfulAccent} />
+            </View> :
+            schedule.quiet ?
+              <View style={s.rowDetailPill}>
+                <Moon size={16} color={theme.quietAccent} />
+              </View> :
+              null
+          }
 
         </View>
       </View>
@@ -554,6 +569,7 @@ const createStyles = (theme: Theme) => StyleSheet.create({
   dayPills: {
     flexDirection: "row",
     gap: 4,
+    alignItems: 'center'
   },
   dayPill: {
     alignItems: "center",

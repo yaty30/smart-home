@@ -1,4 +1,5 @@
-import { AirVent, ChevronRight, Lightbulb, ShelvingUnit, Star, Tv, Wifi, WifiOff } from 'lucide-react-native';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { AirVent, ChevronRight, DraftingCompass, DropletOff, Fan, Flame, Lightbulb, Moon, ShelvingUnit, Snowflake, Sparkles, Star, Tv, Wifi, WifiOff, Zap } from 'lucide-react-native';
 import { useMemo, useState } from 'react';
 import {
   SafeAreaView,
@@ -8,12 +9,15 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import { horizontalAirflowOptions, verticalAirflowOptions } from '../components/AirflowSelectors';
 import type { Device } from '../domain/device';
 import type { MainTabScreenProps } from '../navigation/types';
 import { useControllers } from '../store/controllers';
 import { useDevices } from '../store/devices';
 import { useRooms } from '../store/rooms';
 import { type Theme, useTheme } from '../theme/theme';
+
+import React from 'react';
 
 function timeGreeting(): string {
   const h = new Date().getHours();
@@ -24,24 +28,101 @@ function timeGreeting(): string {
   return 'Good Night';
 }
 
-function acStateSummary(device: Device): string {
-  const { mode, temperature, fanSpeed } = device.state;
-  const parts: string[] = [];
-  if (mode === 'cool') parts.push('Cooling');
-  else if (mode === 'heat') parts.push('Heating');
-  else if (mode === 'dry') parts.push('Dry');
-  else if (mode === 'fan') parts.push('Fan Only');
-  else if (mode) parts.push('Auto');
-  if (typeof temperature === 'number') parts.push(`${temperature}°C`);
-  if (fanSpeed === 'auto') parts.push('Fan Auto');
-  else if (fanSpeed) parts.push(`Fan ${fanSpeed}`);
-  return parts.join('  ·  ');
-}
 
 function DeviceTypeIcon({ type, size, color }: { type: Device['type']; size: number; color: string }) {
   if (type === 'ac') return <AirVent size={size} color={color} />;
   if (type === 'tv') return <Tv size={size} color={color} />;
   return <Lightbulb size={size} color={color} />;
+}
+
+// ─── AC detail pills (mirrors ScheduleRow rowDetails) ────────────────────────
+
+const modeIconMap: Record<string, React.ReactElement> = {
+  auto: <Sparkles size={14} color="#F6C453" />,
+  cold: <Snowflake size={14} color="#4DA3FF" />,
+  cool: <Snowflake size={14} color="#4DA3FF" />,
+  dry: <DropletOff size={14} color="#A67CFF" />,
+  heat: <Flame size={14} color="#FF6B35" />,
+  fan: <Fan size={14} color="#8899AA" />,
+};
+
+type AcDetailPillsProps = {
+  state: Device['state'];
+  theme: Theme;
+  pillStyle: object;
+  pillTextStyle: object;
+};
+
+function AcDetailPills({ state, theme, pillStyle, pillTextStyle }: AcDetailPillsProps) {
+  const modeIcon = state.mode ? modeIconMap[state.mode] ?? null : null;
+
+  const verticalOption = verticalAirflowOptions.find((o) => o.id === state.swingVertical);
+  const horizontalOption = horizontalAirflowOptions.find((o) => o.id === state.swingHorizontal);
+  const VerticalIcon = verticalOption?.icon;
+  const HorizontalIcon = horizontalOption?.icon;
+
+  return (
+    <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
+      {/* Mode */}
+      {modeIcon && (
+        <View style={pillStyle}>{modeIcon}
+          <Text style={{ color: theme.text, fontWeight: '600', fontSize: 13 }}>{state.temperature} °C</Text>
+        </View>
+      )}
+
+      {/* Fan speed */}
+      <View style={[pillStyle, { flexDirection: 'row', gap: 4, alignItems: 'center' }]}>
+        <Fan size={14} color={theme.accentGlow} />
+        {state.fanSpeed === undefined || state.fanSpeed === 'auto' ? (
+          <Text style={pillTextStyle}>Auto</Text>
+        ) : (
+          <MaterialCommunityIcons
+            color={theme.accent}
+            name={`numeric-${state.fanSpeed}` as any}
+            size={18}
+            style={{ marginTop: -1 }}
+          />
+        )}
+      </View>
+
+      {/* Vertical airflow */}
+      <View style={[pillStyle, { flexDirection: 'row', gap: 4, alignItems: 'center' }]}>
+        <View style={{ transform: [{ rotate: '-63.5deg' }, { translateX: 1 }] }}>
+          <DraftingCompass color={theme.accentGlow} size={14} />
+        </View>
+        {VerticalIcon ? (
+          <View style={{ transform: [{ rotate: `${verticalOption?.iconRotation ?? 0}deg` }] }}>
+            <VerticalIcon color={theme.accent} size={14} strokeWidth={2.2} />
+          </View>
+        ) : (
+          <Text style={pillTextStyle}>Auto</Text>
+        )}
+      </View>
+
+      {/* Horizontal airflow */}
+      <View style={[pillStyle, { flexDirection: 'row', gap: 4, alignItems: 'center' }]}>
+        <DraftingCompass color={theme.accentGlow} size={14} />
+        {HorizontalIcon ? (
+          <View style={{ transform: [{ rotate: `${horizontalOption?.iconRotation ?? 0}deg` }] }}>
+            <HorizontalIcon color={theme.accent} size={14} strokeWidth={2.2} />
+          </View>
+        ) : (
+          <Text style={pillTextStyle}>Auto</Text>
+        )}
+      </View>
+
+      {/* Quiet / Powerful */}
+      {state.powerful ? (
+        <View style={pillStyle}>
+          <Zap size={14} color={theme.powerfulAccent} />
+        </View>
+      ) : state.quiet ? (
+        <View style={pillStyle}>
+          <Moon size={14} color={theme.quietAccent} />
+        </View>
+      ) : null}
+    </View>
+  );
 }
 
 // ─── Hero card ───────────────────────────────────────────────────────────────
@@ -55,15 +136,14 @@ function HeroCard({ device, onOpenControl }: HeroCardProps) {
   const theme = useTheme();
   const heroStyles = useMemo(() => createHeroStyles(theme), [theme]);
   const isOn = device.state.power === true;
-  const summary = device.type === 'ac' ? acStateSummary(device) : '';
   const { getRoomById } = useRooms();
+  const room = getRoomById(device.roomId)?.name ?? '';
 
-  const room = getRoomById(device.roomId)?.name ?? ""
   return (
     <TouchableOpacity style={heroStyles.card} onPress={onOpenControl} activeOpacity={0.78}>
       <View style={heroStyles.header}>
         <View style={heroStyles.nameLine}>
-          <View style={{ display: 'flex', flexDirection: 'row', gap: 6 }}>
+          <View style={{ flexDirection: 'row', gap: 6 }}>
             <Star size={14} color={theme.accent} fill={theme.accent} style={heroStyles.starIcon} />
             <Text style={{ ...heroStyles.label, color: theme.accentGlow }} numberOfLines={1}>{room}</Text>
           </View>
@@ -78,8 +158,16 @@ function HeroCard({ device, onOpenControl }: HeroCardProps) {
 
       <View style={heroStyles.body}>
         <DeviceTypeIcon type={device.type} size={48} color={isOn ? theme.accent : theme.textMuted} />
-        {!!summary && <Text style={heroStyles.summary} numberOfLines={2}>{summary}</Text>}
       </View>
+
+      {device.type === 'ac' && (
+        <AcDetailPills
+          state={device.state}
+          theme={theme}
+          pillStyle={heroStyles.detailPill}
+          pillTextStyle={heroStyles.detailPillText}
+        />
+      )}
     </TouchableOpacity>
   );
 }
@@ -564,18 +652,22 @@ const createHeroStyles = (theme: Theme) => StyleSheet.create({
     color: theme.textSecondary,
     lineHeight: 22,
   },
-  controlBtn: {
-    backgroundColor: theme.accent,
-    borderRadius: theme.radiusSmall,
-    flexDirection: 'row',
+  detailPill: {
     alignItems: 'center',
+    backgroundColor: theme.paperBackground,
+    borderColor: theme.border,
+    borderRadius: 8,
+    borderWidth: StyleSheet.hairlineWidth,
+    flexDirection: 'row',
+    gap: 4,
     justifyContent: 'center',
-    paddingVertical: 12,
-    gap: theme.spacing.xs,
+    minHeight: 28,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
   },
-  controlBtnText: {
-    fontSize: 15,
-    fontWeight: '700',
-    color: theme.textOnAccent,
+  detailPillText: {
+    color: theme.textSecondary,
+    fontSize: 12,
+    fontWeight: '500',
   },
 });

@@ -1,7 +1,8 @@
 import * as Haptics from "expo-haptics";
+import { useNavigation } from "@react-navigation/native";
 import {
   AirVent,
-  ClockFading,
+  CalendarClock,
   DropletOff,
   Ellipsis,
   Flame,
@@ -10,10 +11,12 @@ import {
   PowerOff,
   Snowflake,
   Sparkles,
+  Star,
   Zap,
 } from "lucide-react-native";
 import { ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
+  Alert,
   Animated,
   type NativeScrollEvent,
   type NativeSyntheticEvent,
@@ -41,6 +44,7 @@ import {
   ScreenView,
 } from "../components/ScreenView";
 import { Section } from "../components/Section";
+import { BottomNav, BOTTOM_NAV_CLEARANCE } from "../components/BottomNav";
 import { useDeviceConnection } from "../context/DeviceConnectionContext";
 import {
   deleteAcScheduleFromDevice,
@@ -67,6 +71,7 @@ import type {
 } from "../types/device";
 import { normalizeTemperature } from "../utils/temperatureGauge";
 import { HeaderIconButton } from "../components/AppHeader";
+import { useDevices } from "../store/devices";
 
 const temperatureRanges: Record<
   Exclude<AirConditionerMode, "fan">,
@@ -127,6 +132,8 @@ const espPositionToAirflowLevel: Record<
 
 const DEVICE_COMMAND_TIMEOUT_MS = 1500;
 const TEMPERATURE_COMMAND_DEBOUNCE_MS = 400;
+const BOTTOM_NAV_ANIMATION_MS = 260;
+const BOTTOM_NAV_HIDDEN_OFFSET = BOTTOM_NAV_CLEARANCE + 48;
 
 const modeStlyes = {
   opacity: 0.86
@@ -205,9 +212,11 @@ export function AirConditionerScreen({
     reportDeviceUnreachable,
     updateDeviceState,
   } = useDeviceConnection();
+  const navigation = useNavigation<any>();
   const theme = useTheme();
   const styles = useMemo(() => createStyles(theme), [theme]);
   const { width } = useWindowDimensions();
+  const { devices, setFavouriteDevice } = useDevices();
   const [temperature, setTemperature] = useState(24);
   const [mode, setMode] = useState<AirConditionerMode>("auto");
   const [horizontalAirflow, setHorizontalAirflow] =
@@ -234,6 +243,11 @@ export function AirConditionerScreen({
     null,
   );
   const controlEnabledProgress = useRef(new Animated.Value(1)).current;
+  const bottomNavTranslateY = useRef(
+    new Animated.Value(BOTTOM_NAV_HIDDEN_OFFSET),
+  ).current;
+  const bottomNavOpacity = useRef(new Animated.Value(0)).current;
+  const isLeavingScreen = useRef(false);
   const modeTemperatures = useRef<Partial<Record<AirConditionerMode, number>>>({
     auto: 24,
   });
@@ -855,10 +869,131 @@ export function AirConditionerScreen({
     updateAcSnapshot,
   ]);
 
+  const isFavourite = useMemo(
+    () => devices.find((d) => d.id === deviceId)?.state.favourite === true,
+    [devices, deviceId],
+  );
+  const existingFavourite = useMemo(
+    () => devices.find((d) => d.state.favourite === true && d.id !== deviceId) ?? null,
+    [devices, deviceId],
+  );
+
+  const animateBottomNavIn = useCallback(() => {
+    bottomNavTranslateY.stopAnimation();
+    bottomNavOpacity.stopAnimation();
+
+    Animated.parallel([
+      Animated.timing(bottomNavTranslateY, {
+        duration: BOTTOM_NAV_ANIMATION_MS,
+        toValue: 0,
+        useNativeDriver: true,
+      }),
+      Animated.timing(bottomNavOpacity, {
+        duration: BOTTOM_NAV_ANIMATION_MS,
+        toValue: 1,
+        useNativeDriver: true,
+      }),
+    ]).start();
+  }, [bottomNavOpacity, bottomNavTranslateY]);
+
+const animateBottomNavOut = useCallback(() => {
+  Animated.parallel([
+    Animated.timing(bottomNavTranslateY, {
+      toValue: BOTTOM_NAV_HIDDEN_OFFSET,
+      duration: 220,
+      useNativeDriver: true,
+    }),
+    Animated.timing(bottomNavOpacity, {
+      toValue: 0,
+      duration: 180,
+      useNativeDriver: true,
+    }),
+  ]).start();
+}, [bottomNavOpacity, bottomNavTranslateY]);
+
+  // Paint the screen with the nav below the viewport first, then slide it in.
+  useEffect(() => {
+    const frame = requestAnimationFrame(animateBottomNavIn);
+
+    return () => {
+      cancelAnimationFrame(frame);
+      bottomNavTranslateY.stopAnimation();
+      bottomNavOpacity.stopAnimation();
+    };
+  }, [animateBottomNavIn, bottomNavOpacity, bottomNavTranslateY]);
+
+  // React Navigation owns swipe-back gestures, so the normal header back handler
+  // is not called when the user swipes. Listen to the navigator transition and
+  // animate this screen's custom bottom nav independently.
+  useEffect(() => {
+    const unsubscribeTransitionStart = navigation.addListener(
+      "transitionStart",
+      (event: { data?: { closing?: boolean } }) => {
+        if (!event.data?.closing) {
+          return;
+        }
+
+        animateBottomNavOut();
+      },
+    );
+
+    // Native-stack emits this on iOS when the interactive back gesture is
+    // abandoned. Restore the nav because the screen remains visible.
+    const unsubscribeGestureCancel = navigation.addListener(
+      "gestureCancel",
+      () => {
+        if (!isLeavingScreen.current) {
+          animateBottomNavIn();
+        }
+      },
+    );
+
+    return () => {
+      unsubscribeTransitionStart();
+      unsubscribeGestureCancel();
+    };
+  }, [animateBottomNavIn, animateBottomNavOut, navigation]);
+
+  const handleSetFavourite = useCallback(() => {
+    if (isFavourite) return;
+
+    const doSet = () => {
+      void setFavouriteDevice(deviceId);
+      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    };
+
+    if (existingFavourite !== null) {
+      Alert.alert(
+        'Replace Favourite?',
+        `"${existingFavourite.name}" is currently your home hero. Replace it with this device?`,
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Replace', style: 'destructive', onPress: doSet },
+        ],
+      );
+    } else {
+      doSet();
+    }
+  }, [deviceId, existingFavourite, isFavourite, setFavouriteDevice]);
+
   const handleBackPress = useCallback(() => {
+    if (isLeavingScreen.current) {
+      return;
+    }
+
+    isLeavingScreen.current = true;
     triggerPressHaptic();
+
+    // Start bottom nav exit animation
+    animateBottomNavOut();
+
+    // Start screen navigation immediately
     onBackPress();
-  }, [onBackPress, triggerPressHaptic]);
+  }, [
+    animateBottomNavOut,
+    onBackPress,
+    triggerPressHaptic,
+  ]);
 
   const handleTemperatureInteractionEnd = useCallback(() => {
     setIsAdjustingTemperature(false);
@@ -978,7 +1113,7 @@ export function AirConditionerScreen({
       };
 
       setSchedule(scheduleWithDays);
-      void saveAcSchedule(pairedDevice, scheduleWithDays).catch(() => {});
+      void saveAcSchedule(pairedDevice, scheduleWithDays).catch(() => { });
     },
     [debugMode, pairedDevice],
   );
@@ -1013,7 +1148,7 @@ export function AirConditionerScreen({
 
       await deleteAcScheduleFromDevice(pairedDevice);
       setSchedule(null);
-      void removeAcSchedule(pairedDevice).catch(() => {});
+      void removeAcSchedule(pairedDevice).catch(() => { });
     } catch (error) {
       console.warn("[Schedule] DELETE failed:", error);
     }
@@ -1036,22 +1171,13 @@ export function AirConditionerScreen({
           onBackPress={handleBackPress}
           title="Air Conditioner"
           rightAccessory={
-            <View style={{ display: 'flex', flexDirection: 'row', gap: theme.spacing.md }}>
-              <HeaderIconButton
-                accessibilityLabel="Schedule"
-                framed
-                onPress={() => setIsScheduleSheetVisible(true)}
-              >
-                <ClockFading color={theme.accent} size={24} strokeWidth={2.6} />
-              </HeaderIconButton>
-              <HeaderIconButton
-                accessibilityLabel="More options"
-                framed
-                onPress={() => {} }
-              >
-                <Ellipsis color={theme.accent} size={24} strokeWidth={2.6} />
-              </HeaderIconButton>
-            </View>
+            <HeaderIconButton
+              accessibilityLabel="More options"
+              framed
+              onPress={() => { }}
+            >
+              <Ellipsis color={theme.accent} size={24} strokeWidth={2.6} />
+            </HeaderIconButton>
           }
         />
 
@@ -1238,14 +1364,60 @@ export function AirConditionerScreen({
         schedule={schedule}
         visible={isScheduleSheetVisible}
       />
+
+      {/* Bottom nav enters with this screen and also exits during swipe-back. */}
+      <Animated.View
+        pointerEvents="box-none"
+        style={[
+          styles.bottomNavAnimationLayer,
+          {
+            opacity: bottomNavOpacity,
+            transform: [{ translateY: bottomNavTranslateY }],
+          },
+        ]}
+      >
+        <BottomNav
+          visible
+          items={[
+            {
+              icon: (
+                <CalendarClock
+                  color={theme.textMuted}
+                  size={22}
+                  strokeWidth={2.2}
+                />
+              ),
+              label: "Schedule",
+              onPress: () => setIsScheduleSheetVisible(true),
+            },
+            {
+              active: isFavourite,
+              icon: (
+                <Star
+                  color={isFavourite ? theme.accent : theme.textMuted}
+                  fill={isFavourite ? theme.accent : "transparent"}
+                  size={22}
+                  strokeWidth={2.2}
+                />
+              ),
+              label: isFavourite ? "Favourite" : "Set Favourite",
+              onPress: handleSetFavourite,
+            },
+          ]}
+        />
+      </Animated.View>
     </ScreenView>
   );
 }
 
 const createStyles = (theme: Theme) => StyleSheet.create({
+  bottomNavAnimationLayer: {
+    ...StyleSheet.absoluteFillObject,
+    zIndex: 30,
+  },
   content: {
     flexGrow: 1,
-    paddingBottom: SCREEN_BOTTOM_SAFE_PADDING + theme.spacing.xl,
+    paddingBottom: SCREEN_BOTTOM_SAFE_PADDING + theme.spacing.xl + BOTTOM_NAV_CLEARANCE,
   },
   body: {
     gap: theme.spacing.md,

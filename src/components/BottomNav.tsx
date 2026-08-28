@@ -1,12 +1,13 @@
 import * as Haptics from "expo-haptics";
+import { BlurView } from "expo-blur";
 import { House, Settings as SettingsIcon, ShelvingUnit } from "lucide-react-native";
-import { useEffect, useMemo, useRef } from "react";
+import { type ReactNode, useEffect, useMemo, useRef } from "react";
 import {
   Animated,
   Platform,
   StyleSheet,
   TouchableOpacity,
-  View,
+  useColorScheme,
 } from "react-native";
 
 import { type Theme, theme, useTheme } from "../theme/theme";
@@ -17,6 +18,13 @@ const NAV_ITEM_GAP = theme.spacing.sm;
 
 export type BottomNavTab = "home" | "rooms" | "settings";
 
+export type BottomNavItem = {
+  active?: boolean;
+  icon: ReactNode;
+  label: string;
+  onPress: () => void;
+};
+
 const activeIndexByTab: Record<BottomNavTab, number> = {
   home: 0,
   rooms: 1,
@@ -26,6 +34,7 @@ const activeIndexByTab: Record<BottomNavTab, number> = {
 type BottomNavProps = {
   active?: BottomNavTab;
   compact?: boolean;
+  items?: BottomNavItem[];
   onHomePress?: () => void;
   onRoomsPress?: () => void;
   onSettingsPress?: () => void;
@@ -35,13 +44,19 @@ type BottomNavProps = {
 export function BottomNav({
   active = "home",
   compact = false,
+  items,
   onHomePress,
   onRoomsPress,
   onSettingsPress,
   visible = true,
 }: BottomNavProps) {
   const activeTheme = useTheme();
+  const colorScheme = useColorScheme();
   const styles = useMemo(() => createStyles(activeTheme), [activeTheme]);
+  const blurTint = colorScheme === "dark" ? "dark" : "light";
+  const barBackground = colorScheme === "dark"
+    ? "rgba(22, 18, 16, 0.5)"
+    : "rgba(255, 253, 248, 0.5)";
   const visibleProgress = useRef(new Animated.Value(visible ? 1 : 0)).current;
   const activeProgress = useRef(
     new Animated.Value(activeIndexByTab[active]),
@@ -100,68 +115,93 @@ export function BottomNav({
         },
       ]}
     >
-      <View style={styles.bar}>
-        <Animated.View
-          pointerEvents="none"
-          style={[
-            styles.activeIndicator,
-            { transform: [{ translateX: activeTranslateX }] },
-          ]}
-        />
-        <TouchableOpacity
-          activeOpacity={0.8}
-          accessibilityLabel="Home"
-          accessibilityRole="button"
-          accessibilityState={{ selected: active === "home" }}
-          onPress={() => {
-            triggerPress();
-            onHomePress?.();
-          }}
-          style={styles.item}
-        >
-          <House
-            color={active === "home" ? activeTheme.textOnAccent : activeTheme.textMuted}
-            size={22}
-            strokeWidth={2.4}
-          />
-        </TouchableOpacity>
+      <BlurView
+        intensity={72}
+        tint={blurTint}
+        style={[styles.bar, { backgroundColor: barBackground }]}
+      >
+        {items ? (
+          items.map((item, index) => (
+            <TouchableOpacity
+              key={index}
+              activeOpacity={0.8}
+              accessibilityLabel={item.label}
+              accessibilityRole="button"
+              accessibilityState={{ selected: item.active }}
+              onPress={() => {
+                triggerPress();
+                item.onPress();
+              }}
+              style={styles.item}
+            >
+              {item.icon}
+            </TouchableOpacity>
+          ))
+        ) : (
+          <>
+            <Animated.View
+              pointerEvents="none"
+              style={[
+                styles.activeIndicator,
+                { transform: [{ translateX: activeTranslateX }] },
+              ]}
+            />
+            <TouchableOpacity
+              activeOpacity={0.8}
+              accessibilityLabel="Home"
+              accessibilityRole="button"
+              accessibilityState={{ selected: active === "home" }}
+              onPress={() => {
+                triggerPress();
+                onHomePress?.();
+              }}
+              style={styles.item}
+            >
+              <House
+                color={active === "home" ? activeTheme.textOnAccent : activeTheme.textMuted}
+                size={22}
+                strokeWidth={2.4}
+              />
+            </TouchableOpacity>
 
-        <TouchableOpacity
-          activeOpacity={0.8}
-          accessibilityLabel="Rooms"
-          accessibilityRole="button"
-          accessibilityState={{ selected: active === "rooms" }}
-          onPress={() => {
-            triggerPress();
-            onRoomsPress?.();
-          }}
-          style={styles.item}
-        >
-          <ShelvingUnit
-            color={active === "rooms" ? activeTheme.textOnAccent : activeTheme.textMuted}
-            size={22}
-            strokeWidth={2.4}
-          />
-        </TouchableOpacity>
+            <TouchableOpacity
+              activeOpacity={0.8}
+              accessibilityLabel="Rooms"
+              accessibilityRole="button"
+              accessibilityState={{ selected: active === "rooms" }}
+              onPress={() => {
+                triggerPress();
+                onRoomsPress?.();
+              }}
+              style={styles.item}
+            >
+              <ShelvingUnit
+                color={active === "rooms" ? activeTheme.textOnAccent : activeTheme.textMuted}
+                size={22}
+                strokeWidth={2.4}
+              />
+            </TouchableOpacity>
 
-        <TouchableOpacity
-          activeOpacity={0.8}
-          accessibilityLabel="Settings"
-          accessibilityRole="button"
-          accessibilityState={{ selected: active === "settings" }}
-          onPress={() => {
-            triggerPress();
-            onSettingsPress?.();
-          }}
-          style={styles.item}
-        >
-          <SettingsIcon
-            color={active === "settings" ? activeTheme.textOnAccent : activeTheme.textMuted}
-            size={22}
-            strokeWidth={2.1}
-          />
-        </TouchableOpacity>
-      </View>
+            <TouchableOpacity
+              activeOpacity={0.8}
+              accessibilityLabel="Settings"
+              accessibilityRole="button"
+              accessibilityState={{ selected: active === "settings" }}
+              onPress={() => {
+                triggerPress();
+                onSettingsPress?.();
+              }}
+              style={styles.item}
+            >
+              <SettingsIcon
+                color={active === "settings" ? activeTheme.textOnAccent : activeTheme.textMuted}
+                size={22}
+                strokeWidth={2.1}
+              />
+            </TouchableOpacity>
+          </>
+        )}
+      </BlurView>
     </Animated.View>
   );
 }
@@ -177,13 +217,13 @@ const createStyles = (theme: Theme) => StyleSheet.create({
   },
   bar: {
     alignItems: "center",
-    backgroundColor: theme.navBar,
     borderColor: "rgba(255, 255, 255, 0.07)",
     borderRadius: theme.radiusRound,
     borderWidth: 1,
     elevation: 14,
     flexDirection: "row",
     gap: theme.spacing.sm,
+    overflow: "hidden",
     paddingHorizontal: theme.spacing.md,
     paddingVertical: theme.spacing.sm,
     position: "relative",
