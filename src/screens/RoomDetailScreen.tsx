@@ -14,7 +14,6 @@ import { BottomNav, BOTTOM_NAV_CLEARANCE } from '../components/BottomNav';
 import { createDevice } from '../domain/device';
 import { deviceService, executeDeviceCommand } from '../services/deviceService';
 import { controllerHealthService } from '../services/controllerHealthService';
-import { isDebugMode } from '../config/debug';
 import { SwipeableItem } from '../components/SwipeableItem';
 
 type RoomDetailScreenProps = RootStackScreenProps<'RoomDetail'>;
@@ -44,7 +43,6 @@ const iconByDeviceType: Record<DeviceType, IconComponent> = {
 const POWERED_GREEN = '#4ADE80';
 const POWERED_GREEN_MUTED = 'rgba(74, 222, 128, 0.18)';
 const POWERED_GREEN_BORDER = 'rgba(74, 222, 128, 0.72)';
-const CONTROLLER_STATUS_POLL_MS = 10000;
 const BOTTOM_NAV_ANIMATION_MS = 260;
 const BOTTOM_NAV_HIDDEN_OFFSET = BOTTOM_NAV_CLEARANCE + 48;
 

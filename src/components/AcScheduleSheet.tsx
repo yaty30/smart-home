@@ -60,8 +60,6 @@ import { SwipeableItem } from "./SwipeableItem";
 import { type Theme, useTheme } from "../theme/theme";
 import type {
   AcSchedule,
-  ScheduleAirflow,
-  ScheduleFanSpeed,
   ScheduleRepeatFrequency,
 } from "../types/acSchedule";
 import type {
@@ -141,22 +139,6 @@ const modeOptions: {
     },
   ];
 
-const modeLabels: Record<Exclude<AirConditionerMode, "fan">, string> = {
-  auto: "Auto",
-  cold: "Cold",
-  dry: "Dry",
-  heat: "Heat",
-};
-
-const airflowLabels: Record<ScheduleAirflow, string> = {
-  auto: "Auto",
-  one: "1",
-  two: "2",
-  three: "3",
-  four: "4",
-  five: "5",
-};
-
 const repeatLabels: Record<ScheduleRepeatFrequency, string> = {
   "one-time": "One time",
   weekly: "Weekly",
@@ -193,15 +175,10 @@ const addMinutesToTimeString = (time: string, minutesToAdd: number) => {
   )}`;
 };
 
-const formatFanSpeed = (fanSpeed?: ScheduleFanSpeed) =>
-  fanSpeed === undefined || fanSpeed === "auto" ? "Auto" : `Level ${fanSpeed}`;
-
 const formatRepeat = (schedule: AcSchedule) =>
   schedule.repeatEnabled
     ? repeatLabels[schedule.repeatFrequency ?? "weekly"]
     : repeatLabels["one-time"];
-
-const formatAirflow = (airflow: ScheduleAirflow) => airflowLabels[airflow];
 
 // ─── useSheetPan ──────────────────────────────────────────────────────────────
 // Reusable gesture logic matching AddRoomSheet: handle area claims every touch,
@@ -900,7 +877,7 @@ export function AcScheduleSheet({
     dismissRef.current = dismiss;
   }, [dismiss]);
 
-  const { scrollAtTop, handlePan, contentPan } = useSheetPan(
+  const { scrollAtTop, handlePan } = useSheetPan(
     translateY,
     dismissRef,
   );

@@ -2,8 +2,6 @@ import {
   ArrowDown,
   ArrowRight,
   DraftingCompass,
-  MoveHorizontal,
-  MoveVertical,
   Smartphone,
   Wind,
 } from "lucide-react-native";

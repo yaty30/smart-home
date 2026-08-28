@@ -12,7 +12,6 @@ import {
   Snowflake,
   Sparkles,
   Star,
-  StarOff,
   Zap,
 } from "lucide-react-native";
 import { ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -30,7 +29,6 @@ import {
 } from "react-native";
 
 import { ACHeader } from "../components/ACHeader";
-import { AppButton } from "../components/AppButton";
 import {
   HorizontalAirflowSelector,
   VerticalAirflowSelector,
@@ -38,7 +36,6 @@ import {
 import { ArcTemperatureGauge } from "../components/ArcTemperatureGauge";
 import { CollapsibleView } from "../components/CollapsibleView";
 import { FanSpeedControl } from "../components/FanSpeedControl";
-import { ModeSelector } from "../components/ModeSelector";
 import {
   SCREEN_BOTTOM_SAFE_PADDING,
   ScreenView,
@@ -58,7 +55,7 @@ import {
 } from "../storage/acScheduleStorage";
 import { AcScheduleSheet } from "../components/AcScheduleSheet";
 import { type Theme, useTheme } from "../theme/theme";
-import type { AcSchedule, ScheduleAirflow } from "../types/acSchedule";
+import type { AcSchedule } from "../types/acSchedule";
 import type {
   AirConditionerMode,
   AirflowLevel,
@@ -145,54 +142,6 @@ const modePills: { id: AirConditionerMode; label: string, icon: ReactNode }[] = 
   { id: "dry", label: "Dry", icon: <DropletOff style={modeStlyes} size={18} color="#A67CFF" /> },
   { id: "heat", label: "Heat", icon: <Flame style={modeStlyes} size={18} color="#FF6B35" /> },
 ];
-
-const formatTimePart = (value: number) => String(value).padStart(2, "0");
-
-const formatTime12h = (time: string) => {
-  const [hoursPart = "0", minutesPart = "0"] = time.split(":");
-  const hours = Number(hoursPart);
-  const suffix = hours >= 12 ? "PM" : "AM";
-  const hour12 = hours % 12 === 0 ? 12 : hours % 12;
-
-  return `${String(hour12).padStart(2, "0")}:${minutesPart.padStart(
-    2,
-    "0",
-  )} ${suffix}`;
-};
-
-const timeStringFromDate = (date: Date) => {
-  return `${formatTimePart(date.getHours())}:${formatTimePart(
-    date.getMinutes(),
-  )}`;
-};
-
-const dateFromTimeString = (time: string) => {
-  const [hours = "0", minutes = "0"] = time.split(":");
-  const date = new Date();
-  date.setHours(Number(hours), Number(minutes), 0, 0);
-  return date;
-};
-
-const displayMode = (mode: AcSchedule["mode"]) => {
-  switch (mode) {
-    case "auto":
-      return "Auto";
-    case "cold":
-      return "Cold";
-    case "dry":
-      return "Dry";
-    case "heat":
-      return "Heat";
-  }
-};
-
-const displayAirflow = (airflow: ScheduleAirflow) => {
-  if (airflow === "auto") {
-    return "Auto";
-  }
-
-  return airflowLevelToEspPosition[airflow];
-};
 
 type AirConditionerScreenProps = {
   deviceId: string;

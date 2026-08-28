@@ -78,13 +78,11 @@ export function SwipeableItem({
           translateX.setValue(gestureState.dx);
         }
       },
-      onPanResponderRelease: (evt, gestureState) => {
+      onPanResponderRelease: (_evt, gestureState) => {
         translateX.flattenOffset();
 
         const gestureDuration = Date.now() - gestureStartTime.current;
         const totalMovement = Math.sqrt(gestureState.dx ** 2 + gestureState.dy ** 2);
-        const isHorizontal = Math.abs(gestureState.dx) > Math.abs(gestureState.dy);
-
         // Detect tap: short duration, minimal movement
         if (gestureDuration < 200 && totalMovement < 10 && lastOffset.current === 0) {
           onPress?.();

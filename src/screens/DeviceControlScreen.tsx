@@ -16,7 +16,7 @@ export function DeviceControlScreen({ navigation, route }: DeviceControlScreenPr
   const theme = useTheme();
   const styles = useMemo(() => createStyles(theme), [theme]);
   const { deviceId } = route.params;
-  const { getDeviceById, updateDeviceState } = useDevices();
+  const { getDeviceById } = useDevices();
   const { getControllerById } = useControllers();
 
   const device = getDeviceById(deviceId);
