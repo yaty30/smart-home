@@ -1,3 +1,9 @@
+export type ControllerConnectionStatus =
+  | "unknown"
+  | "connecting"
+  | "online"
+  | "offline";
+
 export type Controller = {
   id: string;
   controllerId: string;
@@ -8,6 +14,7 @@ export type Controller = {
   token: string;
 
   online: boolean;
+  connectionStatus?: ControllerConnectionStatus;
 };
 
 export const createController = (
@@ -24,4 +31,5 @@ export const createController = (
   ip,
   token,
   online: false,
+  connectionStatus: "unknown",
 });

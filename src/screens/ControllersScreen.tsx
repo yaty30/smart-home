@@ -1,6 +1,6 @@
 import { ChevronLeft, Wifi, WifiOff } from "lucide-react-native";
 import { StyleSheet, Text, View, ScrollView, Alert } from "react-native";
-import { useEffect, useMemo } from "react";
+import { useMemo } from "react";
 import { useControllers } from "../store/controllers";
 import { useDevices } from "../store/devices";
 import { useRooms } from "../store/rooms";
@@ -8,25 +8,30 @@ import { type Theme, useTheme } from "../theme/theme";
 import type { RootStackScreenProps } from "../navigation/types";
 import { AppHeader, HeaderIconButton } from "../components/AppHeader";
 import { SwipeableItem } from "../components/SwipeableItem";
-import { controllerHealthService } from "../services/controllerHealthService";
 
 type ControllersScreenProps = RootStackScreenProps<"Controllers">;
+
+const controllerStatusText = (
+  status: string | undefined,
+  online: boolean,
+) => {
+  if (status === "connecting") {
+    return "Syncing";
+  }
+
+  if (status === "unknown" || status === undefined) {
+    return "Unknown";
+  }
+
+  return online ? "Online" : "Offline";
+};
 
 export function ControllersScreen({ navigation }: ControllersScreenProps) {
   const theme = useTheme();
   const styles = useMemo(() => createStyles(theme), [theme]);
-  const { controllers, removeController, updateControllerOnlineStatus } =
-    useControllers();
+  const { controllers, removeController } = useControllers();
   const { getDevicesByController } = useDevices();
   const { getRoomById } = useRooms();
-
-  useEffect(() => {
-    controllerHealthService.start(controllers, updateControllerOnlineStatus);
-
-    return () => {
-      controllerHealthService.stop();
-    };
-  }, [controllers, updateControllerOnlineStatus]);
 
   const handleDeleteController = (
     controllerId: string,
@@ -88,6 +93,10 @@ export function ControllersScreen({ navigation }: ControllersScreenProps) {
             {controllers.map((controller) => {
               const deviceCount = getDevicesByController(controller.id).length;
               const StatusIcon = controller.online ? Wifi : WifiOff;
+              const statusText = controllerStatusText(
+                controller.connectionStatus,
+                controller.online,
+              );
               const room = controller.roomId
                 ? getRoomById(controller.roomId)
                 : null;
@@ -122,7 +131,7 @@ export function ControllersScreen({ navigation }: ControllersScreenProps) {
                             controller.online && styles.controllerStatusOnline,
                           ]}
                         >
-                          {controller.online ? "Online" : "Offline"}
+                          {statusText}
                         </Text>
                       </View>
                     </View>

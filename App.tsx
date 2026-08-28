@@ -8,6 +8,8 @@ import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Animated,
+  AppState,
+  type AppStateStatus,
   type LayoutChangeEvent,
   StatusBar,
   StyleSheet,
@@ -33,11 +35,14 @@ import {
   useThemeMode,
 } from "./src/theme/theme";
 import { RoomsProvider } from "./src/store/rooms";
-import { DevicesProvider } from "./src/store/devices";
-import { ControllersProvider } from "./src/store/controllers";
+import { DevicesProvider, useDevices } from "./src/store/devices";
+import { ControllersProvider, useControllers } from "./src/store/controllers";
+import { fetchControllerStatus } from "./src/services/controllerStatusService";
+import { isDebugMode } from "./src/config/debug";
 
 const NAV_HIDE_ANIMATION_MS = 220;
 const SCREEN_SLIDE_ANIMATION_MS = 100;
+const STATUS_REFRESH_DEDUP_MS = 1000;
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
@@ -213,6 +218,120 @@ function AppContent() {
   );
 }
 
+function DeviceStatusSynchronizer() {
+  const {
+    controllers,
+    isLoading: controllersLoading,
+    updateControllerConnectionStatus,
+  } = useControllers();
+  const {
+    applyControllerDeviceStatus,
+    isLoading: devicesLoading,
+    markControllerDevicesOffline,
+    markControllerDevicesSyncing,
+  } = useDevices();
+  const appState = useRef<AppStateStatus>(AppState.currentState);
+  const controllersRef = useRef(controllers);
+  const loadingRef = useRef(controllersLoading || devicesLoading);
+  const lastRefreshStartedAt = useRef(0);
+  const refreshGeneration = useRef(0);
+
+  useEffect(() => {
+    controllersRef.current = controllers;
+  }, [controllers]);
+
+  useEffect(() => {
+    loadingRef.current = controllersLoading || devicesLoading;
+  }, [controllersLoading, devicesLoading]);
+
+  const refreshAllControllerStatus = useCallback(() => {
+    if (isDebugMode || loadingRef.current) {
+      return;
+    }
+
+    const now = Date.now();
+    if (now - lastRefreshStartedAt.current < STATUS_REFRESH_DEDUP_MS) {
+      return;
+    }
+
+    const refreshableControllers = controllersRef.current.filter(
+      (controller) => controller.ip.length > 0 && controller.token.length > 0,
+    );
+
+    if (refreshableControllers.length === 0) {
+      return;
+    }
+
+    lastRefreshStartedAt.current = now;
+    refreshGeneration.current += 1;
+    const currentGeneration = refreshGeneration.current;
+
+    const refreshes = refreshableControllers.map(async (controller) => {
+      updateControllerConnectionStatus(controller.id, "connecting");
+      markControllerDevicesSyncing(controller.id);
+
+      try {
+        const snapshot = await fetchControllerStatus(controller);
+        if (currentGeneration !== refreshGeneration.current) {
+          return;
+        }
+        applyControllerDeviceStatus(controller.id, snapshot);
+        updateControllerConnectionStatus(controller.id, "online");
+      } catch (error) {
+        if (currentGeneration !== refreshGeneration.current) {
+          throw error;
+        }
+        markControllerDevicesOffline(controller.id);
+        updateControllerConnectionStatus(controller.id, "offline");
+        throw error;
+      }
+    });
+
+    void Promise.allSettled(refreshes);
+  }, [
+    applyControllerDeviceStatus,
+    markControllerDevicesOffline,
+    markControllerDevicesSyncing,
+    updateControllerConnectionStatus,
+  ]);
+
+  const controllerConfigKey = useMemo(
+    () =>
+      controllers
+        .map((controller) => `${controller.id}|${controller.ip}|${controller.token}`)
+        .join(";"),
+    [controllers],
+  );
+
+  useEffect(() => {
+    if (!isDebugMode && !controllersLoading && !devicesLoading) {
+      refreshAllControllerStatus();
+    }
+  }, [
+    controllerConfigKey,
+    controllersLoading,
+    devicesLoading,
+    refreshAllControllerStatus,
+  ]);
+
+  useEffect(() => {
+    const subscription = AppState.addEventListener("change", (nextState) => {
+      const previousState = appState.current;
+      appState.current = nextState;
+
+      if (nextState === "active" && previousState !== "active") {
+        refreshAllControllerStatus();
+      }
+    });
+
+    return () => {
+      subscription.remove();
+    };
+  }, [refreshAllControllerStatus]);
+
+  return null;
+}
+
 function AppRoot() {
   const theme = useTheme();
   const { mode } = useThemeMode();
@@ -228,6 +347,7 @@ function AppRoot() {
       <RoomsProvider>
         <ControllersProvider>
           <DevicesProvider>
+            <DeviceStatusSynchronizer />
             <AppContent />
           </DevicesProvider>
         </ControllersProvider>

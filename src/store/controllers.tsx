@@ -1,6 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { createContext, type PropsWithChildren, useCallback, useContext, useEffect, useMemo, useState } from 'react';
-import type { Controller } from '../domain/controller';
+import type { Controller, ControllerConnectionStatus } from '../domain/controller';
 import { isDebugMode } from '../config/debug';
 import { DEBUG_CONTROLLERS } from './debugData';
 
@@ -10,6 +10,10 @@ type ControllersContextValue = {
   addController: (controller: Controller) => Promise<void>;
   removeController: (controllerId: string) => Promise<void>;
   updateControllerOnlineStatus: (controllerId: string, online: boolean) => void;
+  updateControllerConnectionStatus: (
+    controllerId: string,
+    status: ControllerConnectionStatus,
+  ) => void;
   getControllerById: (controllerId: string) => Controller | undefined;
   getControllerByControllerId: (controllerId: string) => Controller | undefined;
 };
@@ -35,6 +39,20 @@ const isControllerArray = (value: unknown): value is Controller[] => {
   );
 };
 
+const sanitizeControllerForRuntime = (controller: Controller): Controller => ({
+  ...controller,
+  online: false,
+  connectionStatus: 'unknown',
+});
+
+const sanitizeControllerForStorage = (controller: Controller): Controller => {
+  const { connectionStatus: _connectionStatus, ...storedController } = controller;
+  return {
+    ...storedController,
+    online: false,
+  };
+};
+
 export function ControllersProvider({ children }: PropsWithChildren) {
   const [controllers, setControllers] = useState<Controller[]>(
     isDebugMode ? DEBUG_CONTROLLERS : []
@@ -54,7 +72,14 @@ export function ControllersProvider({ children }: PropsWithChildren) {
         if (stored && isMounted) {
           const parsed = JSON.parse(stored) as unknown;
           if (isControllerArray(parsed)) {
-            setControllers(parsed);
+            const sanitized = parsed.map(sanitizeControllerForRuntime);
+            setControllers(sanitized);
+            void AsyncStorage.setItem(
+              CONTROLLERS_STORAGE_KEY,
+              JSON.stringify(sanitized.map(sanitizeControllerForStorage)),
+            ).catch((error) => {
+              console.warn('Failed to clean persisted controllers:', error);
+            });
           }
         }
       } catch (error) {
@@ -79,7 +104,10 @@ export function ControllersProvider({ children }: PropsWithChildren) {
     }
 
     try {
-      await AsyncStorage.setItem(CONTROLLERS_STORAGE_KEY, JSON.stringify(controllersToSave));
+      await AsyncStorage.setItem(
+        CONTROLLERS_STORAGE_KEY,
+        JSON.stringify(controllersToSave.map(sanitizeControllerForStorage)),
+      );
     } catch (error) {
       console.warn('Failed to persist controllers:', error);
     }
@@ -87,7 +115,7 @@ export function ControllersProvider({ children }: PropsWithChildren) {
 
   const addController = useCallback(
     async (controller: Controller) => {
-      const updated = [...controllers, controller];
+      const updated = [...controllers, sanitizeControllerForRuntime(controller)];
       setControllers(updated);
       await persistControllers(updated);
     },
@@ -105,7 +133,24 @@ export function ControllersProvider({ children }: PropsWithChildren) {
 
   const updateControllerOnlineStatus = useCallback((controllerId: string, online: boolean) => {
     setControllers((current) =>
-      current.map((c) => (c.id === controllerId ? { ...c, online } : c))
+      current.map((c) =>
+        c.id === controllerId
+          ? { ...c, online, connectionStatus: online ? 'online' : 'offline' }
+          : c
+      )
+    );
+  }, []);
+
+  const updateControllerConnectionStatus = useCallback((
+    controllerId: string,
+    status: ControllerConnectionStatus,
+  ) => {
+    setControllers((current) =>
+      current.map((c) =>
+        c.id === controllerId
+          ? { ...c, online: status === 'online', connectionStatus: status }
+          : c
+      )
     );
   }, []);
 
@@ -130,10 +175,20 @@ export function ControllersProvider({ children }: PropsWithChildren) {
       addController,
       removeController,
       updateControllerOnlineStatus,
+      updateControllerConnectionStatus,
       getControllerById,
       getControllerByControllerId,
     }),
-    [controllers, isLoading, addController, removeController, updateControllerOnlineStatus, getControllerById, getControllerByControllerId]
+    [
+      controllers,
+      isLoading,
+      addController,
+      removeController,
+      updateControllerOnlineStatus,
+      updateControllerConnectionStatus,
+      getControllerById,
+      getControllerByControllerId,
+    ]
   );
 
   return (

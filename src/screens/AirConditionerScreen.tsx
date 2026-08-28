@@ -215,6 +215,11 @@ export function AirConditionerScreen({
 
   const scheduleDeviceKey =
     pairedDevice === null ? null : `${pairedDevice.host}|${pairedDevice.token}`;
+  const powerStatusText = canControlDevice
+    ? power
+      ? "On"
+      : "Off"
+    : unavailableStatusText;
 
   useEffect(() => {
     if (pairedDevice === null) {
@@ -992,7 +997,7 @@ export function AirConditionerScreen({
                   <Text style={styles.cardTitle}>Air Conditioner</Text>
                 </View>
                 <Text style={styles.cardSubtitle}>
-                  Living Room · {power ? "On" : "Off"}
+                  Living Room · {powerStatusText}
                 </Text>
               </View>
               <View style={styles.temperatureActions}>

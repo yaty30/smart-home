@@ -23,6 +23,9 @@ export type DeviceState = {
   swingHorizontal?: string;
   quiet?: boolean;
   powerful?: boolean;
+  favourite?: boolean;
+  syncStatus?: "unknown" | "syncing" | "synced" | "offline";
+  lastSyncedAt?: number;
   [key: string]: unknown;
 };
 
