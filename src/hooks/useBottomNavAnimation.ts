@@ -1,22 +1,24 @@
 import { useCallback, useEffect, useRef } from 'react';
 import { Animated } from 'react-native';
-import type { NavigationProp } from '@react-navigation/native';
+import { BOTTOM_NAV_CLEARANCE } from '../components/BottomNav';
+import type {
+  RootStackNavigationProp,
+  RootStackParamList,
+} from '../navigation/types';
 
 const BOTTOM_NAV_ANIMATION_MS = 260;
-const BOTTOM_NAV_HIDDEN_OFFSET_BASE = 108; // BOTTOM_NAV_CLEARANCE + 48
+const BOTTOM_NAV_HIDDEN_OFFSET = BOTTOM_NAV_CLEARANCE + 48;
 
-type UseBottomNavAnimationOptions = {
-  navigation: NavigationProp<any>;
+type UseBottomNavAnimationOptions<T extends keyof RootStackParamList> = {
+  navigation: RootStackNavigationProp<T>;
   hiddenOffset?: number;
 };
 
-export function useBottomNavAnimation({
+export function useBottomNavAnimation<T extends keyof RootStackParamList>({
   navigation,
-  hiddenOffset = BOTTOM_NAV_HIDDEN_OFFSET_BASE,
-}: UseBottomNavAnimationOptions) {
-  const bottomNavTranslateY = useRef(
-    new Animated.Value(hiddenOffset),
-  ).current;
+  hiddenOffset = BOTTOM_NAV_HIDDEN_OFFSET,
+}: UseBottomNavAnimationOptions<T>) {
+  const bottomNavTranslateY = useRef(new Animated.Value(hiddenOffset)).current;
   const bottomNavOpacity = useRef(new Animated.Value(0)).current;
   const isLeavingScreen = useRef(false);
 
@@ -53,6 +55,7 @@ export function useBottomNavAnimation({
     ]).start();
   }, [bottomNavOpacity, bottomNavTranslateY, hiddenOffset]);
 
+  // Paint the screen with the nav below the viewport first, then slide it in.
   useEffect(() => {
     const frame = requestAnimationFrame(animateBottomNavIn);
 
@@ -63,16 +66,14 @@ export function useBottomNavAnimation({
     };
   }, [animateBottomNavIn, bottomNavOpacity, bottomNavTranslateY]);
 
+  // React Navigation owns swipe-back gestures, so the normal header back handler
+  // is not called when the user swipes. Listen to the navigator transition and
+  // animate the custom bottom nav independently.
   useEffect(() => {
-    const addNavigationListener = navigation.addListener as unknown as (
-      eventName: 'transitionStart' | 'gestureCancel',
-      listener: (event: { data?: { closing?: boolean } }) => void,
-    ) => () => void;
-
-    const unsubscribeTransitionStart = addNavigationListener(
+    const unsubscribeTransitionStart = navigation.addListener(
       'transitionStart',
       (event) => {
-        if (!event.data?.closing) {
+        if (!event.data.closing) {
           return;
         }
 
@@ -80,7 +81,9 @@ export function useBottomNavAnimation({
       },
     );
 
-    const unsubscribeGestureCancel = addNavigationListener(
+    // Native-stack emits this on iOS when the interactive back gesture is
+    // abandoned. Restore the nav because the screen remains visible.
+    const unsubscribeGestureCancel = navigation.addListener(
       'gestureCancel',
       () => {
         if (!isLeavingScreen.current) {
@@ -95,21 +98,11 @@ export function useBottomNavAnimation({
     };
   }, [animateBottomNavIn, animateBottomNavOut, navigation]);
 
-  const handleBackPress = useCallback(() => {
-    if (isLeavingScreen.current) {
-      return;
-    }
-
-    isLeavingScreen.current = true;
-    animateBottomNavOut();
-  }, [animateBottomNavOut]);
-
   return {
     bottomNavTranslateY,
     bottomNavOpacity,
     animateBottomNavIn,
     animateBottomNavOut,
-    handleBackPress,
     isLeavingScreen,
   };
 }

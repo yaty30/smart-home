@@ -5,7 +5,6 @@ import {
   Keyboard,
   KeyboardAvoidingView,
   Modal,
-  PanResponder,
   Platform,
   SafeAreaView,
   ScrollView,
@@ -15,6 +14,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import { useSheetDismiss } from '../hooks/useSheetDismiss';
 import { ROOM_ICONS, DEFAULT_ROOM_ICON, type RoomIcon } from '../domain/roomIcon';
 import { type Theme, useTheme } from '../theme/theme';
 import { AppButton } from './AppButton';
@@ -33,7 +33,6 @@ export function AddRoomSheet({ visible, onClose, onScanController }: AddRoomShee
   // Always starts at 0 — entrance is handled by Modal's animationType="slide".
   // useNativeDriver: false throughout so JS-side hit testing stays accurate.
   const translateY = useRef(new Animated.Value(800)).current;
-  const scrollAtTop = useRef(true);
   const isDismissing = useRef(false);
 
   const canAddRoom = roomName.trim().length > 0;
@@ -71,15 +70,6 @@ export function AddRoomSheet({ visible, onClose, onScanController }: AddRoomShee
   const handleCloseRef = useRef(handleClose);
   useEffect(() => { handleCloseRef.current = handleClose; }, [handleClose]);
 
-  const snapBack = useCallback(() => {
-    if (isDismissing.current) return;
-    Animated.spring(translateY, {
-      toValue: 0,
-      useNativeDriver: false,
-      bounciness: 4,
-    }).start();
-  }, [translateY]);
-
   const dismiss = useCallback(() => {
     if (isDismissing.current) return;
     isDismissing.current = true;
@@ -92,34 +82,14 @@ export function AddRoomSheet({ visible, onClose, onScanController }: AddRoomShee
     });
   }, [translateY]);
 
-  // Handle-area PanResponder — claims every touch unconditionally.
-  const handlePan = useRef(
-    PanResponder.create({
-      onStartShouldSetPanResponder: () => true,
-      onPanResponderMove: (_, { dy }) => {
-        translateY.setValue(Math.max(0, dy));
-      },
-      onPanResponderRelease: (_, { dy, vy }) => {
-        if (dy > 120 || vy > 0.8) { dismiss(); } else { snapBack(); }
-      },
-      onPanResponderTerminate: () => { snapBack(); },
-    }),
-  ).current;
+  const dismissRef = useRef(dismiss);
+  useEffect(() => { dismissRef.current = dismiss; }, [dismiss]);
 
-  // Content-area PanResponder — only activates on a downward drag when at scroll top.
-  const contentPan = useRef(
-    PanResponder.create({
-      onMoveShouldSetPanResponder: (_, { dy, dx }) =>
-        scrollAtTop.current && dy > 10 && dy > Math.abs(dx),
-      onPanResponderMove: (_, { dy }) => {
-        translateY.setValue(Math.max(0, dy));
-      },
-      onPanResponderRelease: (_, { dy, vy }) => {
-        if (dy > 120 || vy > 0.8) { dismiss(); } else { snapBack(); }
-      },
-      onPanResponderTerminate: () => { snapBack(); },
-    }),
-  ).current;
+  const { scrollAtTop, handlePan, contentPan } = useSheetDismiss(
+    translateY,
+    dismissRef,
+    isDismissing,
+  );
 
   const iconOptions = useMemo(() => ROOM_ICONS, []);
 

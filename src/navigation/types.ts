@@ -20,6 +20,9 @@ export type RootStackParamList = {
 export type RootStackScreenProps<T extends keyof RootStackParamList> =
   NativeStackScreenProps<RootStackParamList, T>;
 
+export type RootStackNavigationProp<T extends keyof RootStackParamList> =
+  NativeStackNavigationProp<RootStackParamList, T>;
+
 export type MainScrollDirection = "down" | "up";
 
 export type MainTabScreenProps = {

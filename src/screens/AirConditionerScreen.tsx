@@ -3,14 +3,10 @@ import { useNavigation } from "@react-navigation/native";
 import {
   AirVent,
   CalendarClock,
-  DropletOff,
   Ellipsis,
-  Flame,
   Moon,
   Power,
   PowerOff,
-  Snowflake,
-  Sparkles,
   Star,
   Zap,
 } from "lucide-react-native";
@@ -29,6 +25,8 @@ import {
 } from "react-native";
 
 import { ACHeader } from "../components/ACHeader";
+import { useBottomNavAnimation } from "../hooks/useBottomNavAnimation";
+import type { RootStackNavigationProp } from "../navigation/types";
 import {
   HorizontalAirflowSelector,
   VerticalAirflowSelector,
@@ -66,27 +64,13 @@ import type {
   EspAirflow,
   EspFanSpeed,
 } from "../types/device";
+import {
+  MODE_ICONS,
+  temperatureRangeForMode,
+} from "../constants/acModes";
 import { normalizeTemperature } from "../utils/temperatureGauge";
 import { HeaderIconButton } from "../components/AppHeader";
 import { useDevices } from "../store/devices";
-
-const temperatureRanges: Record<
-  Exclude<AirConditionerMode, "fan">,
-  { min: number; max: number }
-> = {
-  auto: { min: 16, max: 30 },
-  cold: { min: 16, max: 26 },
-  dry: { min: 16, max: 28 },
-  heat: { min: 22, max: 30 },
-};
-
-const temperatureRangeForMode = (mode: AirConditionerMode) => {
-  if (mode === "fan") {
-    return temperatureRanges.auto;
-  }
-
-  return temperatureRanges[mode];
-};
 
 const modeToEspMode = (mode: AirConditionerMode) => {
   switch (mode) {
@@ -129,19 +113,22 @@ const espPositionToAirflowLevel: Record<
 
 const DEVICE_COMMAND_TIMEOUT_MS = 1500;
 const TEMPERATURE_COMMAND_DEBOUNCE_MS = 400;
-const BOTTOM_NAV_ANIMATION_MS = 260;
-const BOTTOM_NAV_HIDDEN_OFFSET = BOTTOM_NAV_CLEARANCE + 48;
 
 const modeStlyes = {
   opacity: 0.86
 }
 
-const modePills = (theme: Theme): { id: AirConditionerMode; label: string, icon: ReactNode }[] => [
-  { id: "auto", label: "Auto", icon: <Sparkles style={modeStlyes} size={18} color={theme.modeColors.auto} /> },
-  { id: "cold", label: "Cold", icon: <Snowflake style={modeStlyes} size={18} color={theme.modeColors.cool} /> },
-  { id: "dry", label: "Dry", icon: <DropletOff style={modeStlyes} size={18} color={theme.modeColors.dry} /> },
-  { id: "heat", label: "Heat", icon: <Flame style={modeStlyes} size={18} color={theme.modeColors.heat} /> },
-];
+const MODE_PILL_IDS: AirConditionerMode[] = ["auto", "cold", "dry", "heat"];
+
+const modePills = (theme: Theme): { id: AirConditionerMode; label: string, icon: ReactNode }[] => {
+  const icons = MODE_ICONS(theme);
+
+  return MODE_PILL_IDS.map((id) => {
+    const { color, icon: Icon, label } = icons[id];
+
+    return { id, label, icon: <Icon style={modeStlyes} size={18} color={color} /> };
+  });
+};
 
 type AirConditionerScreenProps = {
   deviceId: string;
@@ -161,11 +148,17 @@ export function AirConditionerScreen({
     reportDeviceUnreachable,
     updateDeviceState,
   } = useDeviceConnection();
-  const navigation = useNavigation<any>();
+  const navigation = useNavigation<RootStackNavigationProp<"DeviceControl">>();
   const theme = useTheme();
   const styles = useMemo(() => createStyles(theme), [theme]);
   const modePillsData = useMemo(() => modePills(theme), [theme]);
   const { width } = useWindowDimensions();
+  const {
+    animateBottomNavOut,
+    bottomNavOpacity,
+    bottomNavTranslateY,
+    isLeavingScreen,
+  } = useBottomNavAnimation({ navigation });
   const { clearFavouriteDevice, devices, setFavouriteDevice } = useDevices();
   const [temperature, setTemperature] = useState(24);
   const [mode, setMode] = useState<AirConditionerMode>("auto");
@@ -192,11 +185,6 @@ export function AirConditionerScreen({
     null,
   );
   const controlEnabledProgress = useRef(new Animated.Value(1)).current;
-  const bottomNavTranslateY = useRef(
-    new Animated.Value(BOTTOM_NAV_HIDDEN_OFFSET),
-  ).current;
-  const bottomNavOpacity = useRef(new Animated.Value(0)).current;
-  const isLeavingScreen = useRef(false);
   const modeTemperatures = useRef<Partial<Record<AirConditionerMode, number>>>({
     auto: 24,
   });
@@ -749,82 +737,6 @@ export function AirConditionerScreen({
     () => devices.find((d) => d.state.favourite === true && d.id !== deviceId) ?? null,
     [devices, deviceId],
   );
-
-  const animateBottomNavIn = useCallback(() => {
-    bottomNavTranslateY.stopAnimation();
-    bottomNavOpacity.stopAnimation();
-
-    Animated.parallel([
-      Animated.timing(bottomNavTranslateY, {
-        duration: BOTTOM_NAV_ANIMATION_MS,
-        toValue: 0,
-        useNativeDriver: true,
-      }),
-      Animated.timing(bottomNavOpacity, {
-        duration: BOTTOM_NAV_ANIMATION_MS,
-        toValue: 1,
-        useNativeDriver: true,
-      }),
-    ]).start();
-  }, [bottomNavOpacity, bottomNavTranslateY]);
-
-const animateBottomNavOut = useCallback(() => {
-  Animated.parallel([
-    Animated.timing(bottomNavTranslateY, {
-      toValue: BOTTOM_NAV_HIDDEN_OFFSET,
-      duration: 220,
-      useNativeDriver: true,
-    }),
-    Animated.timing(bottomNavOpacity, {
-      toValue: 0,
-      duration: 180,
-      useNativeDriver: true,
-    }),
-  ]).start();
-}, [bottomNavOpacity, bottomNavTranslateY]);
-
-  // Paint the screen with the nav below the viewport first, then slide it in.
-  useEffect(() => {
-    const frame = requestAnimationFrame(animateBottomNavIn);
-
-    return () => {
-      cancelAnimationFrame(frame);
-      bottomNavTranslateY.stopAnimation();
-      bottomNavOpacity.stopAnimation();
-    };
-  }, [animateBottomNavIn, bottomNavOpacity, bottomNavTranslateY]);
-
-  // React Navigation owns swipe-back gestures, so the normal header back handler
-  // is not called when the user swipes. Listen to the navigator transition and
-  // animate this screen's custom bottom nav independently.
-  useEffect(() => {
-    const unsubscribeTransitionStart = navigation.addListener(
-      "transitionStart",
-      (event: { data?: { closing?: boolean } }) => {
-        if (!event.data?.closing) {
-          return;
-        }
-
-        animateBottomNavOut();
-      },
-    );
-
-    // Native-stack emits this on iOS when the interactive back gesture is
-    // abandoned. Restore the nav because the screen remains visible.
-    const unsubscribeGestureCancel = navigation.addListener(
-      "gestureCancel",
-      () => {
-        if (!isLeavingScreen.current) {
-          animateBottomNavIn();
-        }
-      },
-    );
-
-    return () => {
-      unsubscribeTransitionStart();
-      unsubscribeGestureCancel();
-    };
-  }, [animateBottomNavIn, animateBottomNavOut, navigation]);
 
   const handleSetFavourite = useCallback(() => {
     if (isFavourite) {

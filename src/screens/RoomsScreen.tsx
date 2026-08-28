@@ -9,6 +9,7 @@ import {
 } from "react-native";
 import { AddRoomSheet } from "../components/AddRoomSheet";
 import { AppHeader, HeaderIconButton } from "../components/AppHeader";
+import { StatusDot } from "../components/common/StatusDot";
 import { getRoomIcon, type RoomIcon } from "../domain/roomIcon";
 import { useRooms } from "../store/rooms";
 import { useDevices } from "../store/devices";
@@ -76,7 +77,7 @@ export function RoomsScreen({ navigation }: RoomsScreenProps) {
                 style={styles.roomCard}
               >
                 <View style={styles.roomCardHeader}>
-                  <View style={[styles.statusDot, isOnline && styles.statusDotOnline]} />
+                  <StatusDot online={isOnline} />
                   <View style={styles.roomCardHeaderSpacer} />
                 </View>
                 <View style={styles.roomIcon}>
@@ -138,15 +139,6 @@ const createStyles = (theme: Theme) => StyleSheet.create({
     justifyContent: "space-between",
     alignItems: "center",
     marginBottom: theme.spacing.xs,
-  },
-  statusDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: theme.textMuted,
-  },
-  statusDotOnline: {
-    backgroundColor: theme.statusColors.online,
   },
   roomCardHeaderSpacer: {
     width: 20,
