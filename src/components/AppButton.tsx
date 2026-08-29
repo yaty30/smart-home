@@ -2,7 +2,7 @@ import {
   LinearGradient as ExpoLinearGradient,
   type LinearGradientProps,
 } from "expo-linear-gradient";
-import type { ComponentType, ReactNode } from "react";
+import { useMemo, type ComponentType, type ReactNode } from "react";
 import {
   StyleSheet,
   Text,
@@ -11,7 +11,7 @@ import {
   type ViewStyle,
 } from "react-native";
 
-import { theme } from "../theme/theme";
+import { type Theme, useTheme } from "../theme/theme";
 
 type AppButtonVariant = "primary" | "secondary" | "danger" | "destructive";
 type AppButtonVibe = "normal" | "strong";
@@ -30,13 +30,6 @@ type AppButtonProps = {
 const GradientView =
   ExpoLinearGradient as unknown as ComponentType<LinearGradientProps>;
 
-const buttonGradients: Record<AppButtonVariant, LinearGradientProps["colors"]> = {
-  primary: theme.gradients.button,
-  secondary: theme.gradients.panel,
-  danger: theme.gradients.danger,
-  destructive: theme.gradients.danger,
-};
-
 export function AppButton({
   accessibilityLabel,
   disabled = false,
@@ -47,6 +40,17 @@ export function AppButton({
   vibe = "normal",
   variant = "primary",
 }: AppButtonProps) {
+  const theme = useTheme();
+  const styles = useMemo(() => createStyles(theme), [theme]);
+  const buttonGradients = useMemo<Record<AppButtonVariant, LinearGradientProps["colors"]>>(
+    () => ({
+      primary: theme.gradients.button,
+      secondary: theme.gradients.panel,
+      danger: theme.gradients.danger,
+      destructive: theme.gradients.danger,
+    }),
+    [theme],
+  );
   const isPrimary = variant === "primary";
   const isStrong = vibe === "strong";
 
@@ -90,7 +94,7 @@ export function AppButton({
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (theme: Theme) => StyleSheet.create({
   buttonFrame: {
     alignItems: "center",
     alignSelf: "stretch",
@@ -126,15 +130,15 @@ const styles = StyleSheet.create({
   },
   dangerFrame: {
     backgroundColor: theme.powerAccentMuted,
-    borderColor: "rgba(255, 106, 88, 0.34)",
+    borderColor: theme.powerButton.borderDanger,
   },
   destructiveFrame: {
     backgroundColor: theme.powerAccentMuted,
-    borderColor: "rgba(255, 106, 88, 0.58)",
+    borderColor: theme.powerButton.borderOn,
   },
   primaryShadow: {
     elevation: 5,
-    shadowColor: "#000000",
+    shadowColor: theme.shadows.color,
     shadowOffset: {
       height: 10,
       width: 0,

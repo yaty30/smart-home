@@ -3,7 +3,6 @@
 #include <WiFi.h>
 
 #include "Config.h"
-#include "Display.h"
 
 bool isWiFiConnected() {
   return WiFi.status() == WL_CONNECTED;
@@ -26,7 +25,6 @@ void connectWiFi() {
   WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
 
   Serial.print("Connecting to WiFi");
-  showDisplayMessage("Connecting", "WiFi...");
 
   while (WiFi.status() != WL_CONNECTED) {
     delay(500);
@@ -36,7 +34,4 @@ void connectWiFi() {
   Serial.println();
   Serial.print("WiFi connected. IP: ");
   Serial.println(WiFi.localIP());
-
-  noteWiFiConnectedForDisplay();
-  renderDisplayState();
 }

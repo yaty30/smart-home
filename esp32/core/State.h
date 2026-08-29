@@ -11,15 +11,24 @@ struct AcState {
   uint8_t swingVertical;
   uint8_t swingHorizontal;
   bool quiet;
+  bool powerful;
 };
 
-struct DisplayState {
-  bool screenOn;
-  bool qrVisible;
+struct AcSchedule {
+  bool valid;
+  bool enabled;
+  char startTime[6];    // "HH:MM"
+  char endTime[6];      // "HH:MM", or empty for no automatic off
+  uint8_t mode;
+  int temperature;
+  bool quiet;
+  bool powerful;
+  uint8_t swingVertical;
+  uint8_t swingHorizontal;
 };
 
 extern AcState acState;
-extern DisplayState displayState;
+extern AcSchedule acSchedule;
 extern bool pendingIR;
 extern AcState pendingState;
 extern unsigned long pendingIRQueuedAt;
@@ -37,10 +46,9 @@ String fanDisplayLabel(uint8_t fan);
 String swingVerticalString(uint8_t swingVertical);
 String swingHorizontalString(uint8_t swingHorizontal);
 String acStateJson();
-String displayStateJson();
 
 bool parsePower(const String& value, bool& power);
-bool parseQuiet(const String& value, bool& quiet);
+bool parseToggle(const String& value, bool& enabled);
 bool parseTemperature(const String& value, int& temp);
 bool parseTemperatureValue(int value, int& temp);
 bool parseMode(const String& value, uint8_t& mode);

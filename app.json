@@ -5,9 +5,7 @@
     "version": "1.0.0",
     "orientation": "portrait",
     "userInterfaceStyle": "dark",
-    "assetBundlePatterns": [
-      "**/*"
-    ],
+    "assetBundlePatterns": ["**/*"],
     "ios": {
       "supportsTablet": true
     },
@@ -15,14 +13,6 @@
       "adaptiveIcon": {
         "backgroundColor": "#0B0B0D"
       }
-    },
-    "plugins": [
-      [
-        "expo-camera",
-        {
-          "cameraPermission": "Allow Smart Home AC to scan pairing QR codes."
-        }
-      ]
-    ]
+    }
   }
 }

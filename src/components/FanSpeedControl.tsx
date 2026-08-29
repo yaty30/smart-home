@@ -1,4 +1,5 @@
-import { useEffect, useRef } from "react";
+import { MaterialCommunityIcons } from "@expo/vector-icons";
+import { useEffect, useMemo, useRef } from "react";
 import {
   Animated,
   StyleSheet,
@@ -7,7 +8,7 @@ import {
   View,
 } from "react-native";
 
-import { theme } from "../theme/theme";
+import { type Theme, useTheme } from "../theme/theme";
 import type { FanSpeed } from "../types/airConditioner";
 import { Fan } from "lucide-react-native";
 
@@ -39,6 +40,8 @@ function FanSpeedOptionButton({
   onSelect,
   option,
 }: FanSpeedOptionButtonProps) {
+  const theme = useTheme();
+  const styles = useMemo(() => createStyles(theme), [theme]);
   const activeProgress = useRef(new Animated.Value(active ? 1 : 0)).current;
 
   useEffect(() => {
@@ -52,11 +55,11 @@ function FanSpeedOptionButton({
   const animatedButtonStyle = {
     backgroundColor: activeProgress.interpolate({
       inputRange: [0, 1],
-      outputRange: ["rgba(240, 169, 66, 0)", "#2C2117"],
+      outputRange: [theme.transparent, theme.surfaceWarmPressed],
     }),
     borderColor: activeProgress.interpolate({
       inputRange: [0, 1],
-      outputRange: ["rgba(240, 169, 66, 0)", theme.borderActive],
+      outputRange: [theme.transparent, theme.borderActive],
     }),
     shadowOpacity: activeProgress.interpolate({
       inputRange: [0, 1],
@@ -79,18 +82,34 @@ function FanSpeedOptionButton({
       style={styles.buttonShell}
     >
       <Animated.View style={[styles.button, animatedButtonStyle]}>
-        <Text
-          adjustsFontSizeToFit
-          minimumFontScale={0.72}
-          numberOfLines={1}
-          style={[
-            styles.buttonText,
-            active && styles.buttonTextActive,
-            disabled && styles.buttonTextDisabled,
-          ]}
-        >
-          {label}
-        </Text>
+        {option === "auto" ? (
+          <Text
+            adjustsFontSizeToFit
+            minimumFontScale={0.72}
+            numberOfLines={1}
+            style={[
+              styles.buttonText,
+              active && styles.buttonTextActive,
+              disabled && styles.buttonTextDisabled,
+            ]}
+          >
+            {label}
+          </Text>
+        ) : (
+        <View style={styles.iconContainer}>
+          <MaterialCommunityIcons
+            color={
+              active
+                ? theme.accent
+                : disabled
+                  ? theme.textMuted
+                  : theme.textSecondary
+            }
+            name={`numeric-${option}`}
+            size={24}
+          />
+        </View>
+        )}
       </Animated.View>
     </TouchableOpacity>
   );
@@ -104,6 +123,8 @@ export function FanSpeedControl({
   onChangeSpeed,
   onChangeAuto,
 }: FanSpeedControlProps) {
+  const theme = useTheme();
+  const styles = useMemo(() => createStyles(theme), [theme]);
   const disabled = !isPowered || isDisabled;
   const selectedValue: FanSpeedOption = isAuto ? "auto" : speed;
   const enabledProgress = useRef(new Animated.Value(disabled ? 0 : 1)).current;
@@ -159,7 +180,7 @@ export function FanSpeedControl({
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (theme: Theme) => StyleSheet.create({
   container: {
     gap: theme.spacing.sm,
   },
@@ -187,13 +208,14 @@ const styles = StyleSheet.create({
   },
   button: {
     alignItems: "center",
-    borderColor: "transparent",
+    borderColor: theme.transparent,
     borderRadius: 14,
     borderWidth: 1,
     height: 44,
+    width: 'auto',
     justifyContent: "center",
     minWidth: 0,
-    shadowColor: "#000000",
+    shadowColor: theme.shadows.color,
     shadowOffset: {
       height: 4,
       width: 0,
@@ -211,5 +233,11 @@ const styles = StyleSheet.create({
   },
   buttonTextDisabled: {
     color: theme.textMuted,
+  },
+  iconContainer: {
+    width: 28,
+    height: 28,
+    alignItems: "center",
+    justifyContent: "center",
   },
 });

@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { useEffect, useRef } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import {
   Animated,
   StyleSheet,
@@ -8,7 +8,7 @@ import {
   View,
 } from "react-native";
 
-import { theme } from "../theme/theme";
+import { type Theme, useTheme } from "../theme/theme";
 import type { ControlOption } from "../types/airConditioner";
 
 type ControlButtonGroupProps<T extends string> = {
@@ -40,6 +40,8 @@ function ControlOptionButton<T extends string>({
   onPress,
   option,
 }: ControlOptionButtonProps<T>) {
+  const theme = useTheme();
+  const styles = useMemo(() => createStyles(theme), [theme]);
   const activeProgress = useRef(new Animated.Value(active ? 1 : 0)).current;
 
   useEffect(() => {
@@ -53,11 +55,11 @@ function ControlOptionButton<T extends string>({
   const animatedButtonStyle = {
     backgroundColor: activeProgress.interpolate({
       inputRange: [0, 1],
-      outputRange: ["rgba(240, 169, 66, 0)", "#2C2117"],
+      outputRange: [theme.transparent, theme.surfaceWarmPressed],
     }),
     borderColor: activeProgress.interpolate({
       inputRange: [0, 1],
-      outputRange: ["rgba(240, 169, 66, 0)", theme.borderActive],
+      outputRange: [theme.transparent, theme.borderActive],
     }),
     shadowOpacity: activeProgress.interpolate({
       inputRange: [0, 1],
@@ -139,6 +141,8 @@ export function ControlButtonGroup<T extends string>({
   labelAccessory,
   onChange,
 }: ControlButtonGroupProps<T>) {
+  const theme = useTheme();
+  const styles = useMemo(() => createStyles(theme), [theme]);
   const disabled = !isPowered || isDisabled;
   const enabledProgress = useRef(new Animated.Value(disabled ? 0 : 1)).current;
 
@@ -188,7 +192,7 @@ export function ControlButtonGroup<T extends string>({
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (theme: Theme) => StyleSheet.create({
   container: {
     gap: theme.spacing.sm,
   },
@@ -222,13 +226,13 @@ const styles = StyleSheet.create({
   },
   button: {
     alignItems: "center",
-    borderColor: "transparent",
+    borderColor: theme.transparent,
     borderRadius: 14,
     borderWidth: 1,
     height: 50,
     justifyContent: "center",
     minWidth: 0,
-    shadowColor: "#000000",
+    shadowColor: theme.shadows.color,
     shadowOffset: {
       height: 4,
       width: 0,

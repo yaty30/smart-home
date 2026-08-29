@@ -33,7 +33,6 @@ String deviceStateJson() {
   String body = "{";
   body += "\"type\":\"state\",";
   body += "\"ac\":" + acStateJson() + ",";
-  body += "\"display\":" + displayStateJson() + ",";
   body += "\"connection\":{";
   body += "\"wifi\":" + boolString(isWiFiConnected());
   body += "}";
@@ -225,34 +224,6 @@ void handleCommandMessage(uint8_t clientId, const String& message) {
 
   AcState nextState = acState;
 
-  if (command == "display.screenPower" || command == "display.setScreen") {
-    bool screenOn;
-    if (!getJsonBool(message, "value", screenOn)) {
-      sendText(clientId, commandAckJson(requestId, false, "invalid_screen_power"));
-      return;
-    }
-
-    DisplayState nextDisplayState = displayState;
-    nextDisplayState.screenOn = screenOn;
-    applyDisplayState(nextDisplayState);
-    sendText(clientId, commandAckJson(requestId, true));
-    return;
-  }
-
-  if (command == "display.qrVisibility" || command == "display.setQrVisible") {
-    bool qrVisible;
-    if (!getJsonBool(message, "value", qrVisible)) {
-      sendText(clientId, commandAckJson(requestId, false, "invalid_qr_visibility"));
-      return;
-    }
-
-    DisplayState nextDisplayState = displayState;
-    nextDisplayState.qrVisible = qrVisible;
-    applyDisplayState(nextDisplayState);
-    sendText(clientId, commandAckJson(requestId, true));
-    return;
-  }
-
   if (command == "ac.power") {
     bool power;
     if (!getJsonBool(message, "value", power)) {
@@ -260,6 +231,26 @@ void handleCommandMessage(uint8_t clientId, const String& message) {
       return;
     }
     nextState.power = power;
+  } else if (command == "ac.quiet" || command == "ac.setQuiet") {
+    bool quiet;
+    if (!getJsonBool(message, "value", quiet)) {
+      sendText(clientId, commandAckJson(requestId, false, "invalid_quiet"));
+      return;
+    }
+    nextState.quiet = quiet;
+    if (quiet) {
+      nextState.powerful = false;
+    }
+  } else if (command == "ac.powerful" || command == "ac.setPowerful") {
+    bool powerful;
+    if (!getJsonBool(message, "value", powerful)) {
+      sendText(clientId, commandAckJson(requestId, false, "invalid_powerful"));
+      return;
+    }
+    nextState.powerful = powerful;
+    if (powerful) {
+      nextState.quiet = false;
+    }
   } else if (command == "ac.setTemperature") {
     int temp;
     if (!getJsonInt(message, "value", temp) || !parseTemperatureValue(temp, nextState.temperature)) {
