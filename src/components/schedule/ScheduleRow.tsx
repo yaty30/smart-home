@@ -23,7 +23,11 @@ import {
   horizontalAirflowOptions,
   verticalAirflowOptions,
 } from "../AirflowSelectors";
-import { DAY_LABELS, formatRepeat } from "./scheduleConstants";
+import {
+  DAY_LABELS,
+  formatRepeat,
+  scheduleTypeLabels,
+} from "./scheduleConstants";
 import { modeOptions } from "./scheduleModeOptions";
 
 type ScheduleRowProps = {
@@ -103,7 +107,15 @@ export function ScheduleRow({ schedule, onToggleEnabled }: ScheduleRowProps) {
           </View>
         </View>
 
-        {schedule.startTime !== null && (
+        <View style={s.rowMeta}>
+          <View style={s.rowDetailPill}>
+            <Text style={s.rowDetailText}>
+              {scheduleTypeLabels[schedule.type]}
+            </Text>
+          </View>
+        </View>
+
+        {schedule.type !== "auto_off" && schedule.startTime !== null && (
           <View style={s.rowDetails}>
             <View style={s.rowDetailPill}>
               {isValidElement(modeIcon)
@@ -274,6 +286,11 @@ const createStyles = (theme: Theme) =>
       color: theme.textHighlight,
     },
     rowDetails: {
+      flexDirection: "row",
+      flexWrap: "wrap",
+      gap: 6,
+    },
+    rowMeta: {
       flexDirection: "row",
       flexWrap: "wrap",
       gap: 6,

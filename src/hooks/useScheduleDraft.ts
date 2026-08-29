@@ -5,6 +5,7 @@ import { TEMPERATURE_RANGES } from "../constants/acModes";
 import {
   DEFAULT_START_TIME,
   isSameSchedule,
+  normalizeScheduleForType,
   type TimeField,
 } from "../components/schedule/scheduleConstants";
 import type {
@@ -38,9 +39,10 @@ export function useScheduleDraft(initial: AcSchedule, visible: boolean) {
 
   useEffect(() => {
     if (!visible) return;
-    setDraft(initial);
-    setBaseline(initial);
-    setActiveTimePicker(initial.startTime === null ? "end" : "start");
+    const normalized = normalizeScheduleForType(initial);
+    setDraft(normalized);
+    setBaseline(normalized);
+    setActiveTimePicker(normalized.type === "auto_off" ? "end" : "start");
   }, [visible, initial]);
 
   const isDirty = useMemo(
@@ -191,7 +193,14 @@ export function useScheduleDraft(initial: AcSchedule, visible: boolean) {
     isDirty,
     activeTimePicker,
     temperatureRange,
-    hasAnyTime: draft.startTime !== null || draft.endTime !== null,
+    canSave:
+      draft.type === "schedule_time"
+        ? draft.startTime !== null &&
+          draft.endTime !== null &&
+          draft.startTime !== draft.endTime
+        : draft.type === "auto_on"
+          ? draft.startTime !== null
+          : draft.endTime !== null,
     handleTimeChange,
     handleSelectStartTime,
     handleSelectEndTime,

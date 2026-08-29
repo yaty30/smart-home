@@ -1,123 +1,113 @@
 import DateTimePicker, {
   type DateTimePickerEvent,
 } from "@react-native-community/datetimepicker";
-import { ChevronDown, X } from "lucide-react-native";
+import { ChevronDown } from "lucide-react-native";
 import { useMemo } from "react";
 import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
 
 import { type Theme, useTheme } from "../../theme/theme";
+import type { ScheduleType } from "../../types/acSchedule";
 import { dateFromTimeString, formatTime12h } from "../../utils/timeFormat";
 import { Section } from "../Section";
 import { DEFAULT_START_TIME, type TimeField } from "./scheduleConstants";
 
 type ScheduleTimeSectionProps = {
   activeTimePicker: TimeField;
+  scheduleType: ScheduleType;
   startTime: string | null;
   endTime: string | null;
   onSelectStartTime: () => void;
   onSelectEndTime: () => void;
-  onClearStartTime: () => void;
-  onClearEndTime: () => void;
   onTimeChange: (event: DateTimePickerEvent, date?: Date) => void;
 };
 
 export function ScheduleTimeSection({
   activeTimePicker,
+  scheduleType,
   startTime,
   endTime,
   onSelectStartTime,
   onSelectEndTime,
-  onClearStartTime,
-  onClearEndTime,
   onTimeChange,
 }: ScheduleTimeSectionProps) {
   const theme = useTheme();
   const s = useMemo(() => createStyles(theme), [theme]);
+  const showStart = scheduleType !== "auto_off";
+  const showEnd = scheduleType !== "auto_on";
+  const showBothTimes = showStart && showEnd;
+  const pickerTime =
+    activeTimePicker === "start"
+      ? (startTime ?? endTime)
+      : (endTime ?? startTime);
 
   return (
     <Section>
       <View style={s.timeRow}>
-        <TouchableOpacity
-          style={[
-            s.timeButton,
-            activeTimePicker === "start" && s.timeButtonActive,
-          ]}
-          onPress={onSelectStartTime}
-          activeOpacity={0.7}
-        >
-          <Text
+        {showStart && (
+          <TouchableOpacity
             style={[
-              s.timeLabel,
-              activeTimePicker === "start" && s.timeLabelActive,
+              s.timeButton,
+              activeTimePicker === "start" && s.timeButtonActive,
             ]}
+            onPress={onSelectStartTime}
+            activeOpacity={0.7}
           >
-            Turn On
-            <Text style={s.timeLabelOptional}> Optional</Text>
-          </Text>
-          <Text
-            style={[
-              s.timeValue,
-              activeTimePicker === "start" && s.timeValueActive,
-              startTime === null && s.timeValueMuted,
-            ]}
-          >
-            {startTime === null ? "No auto on" : formatTime12h(startTime)}
-          </Text>
-        </TouchableOpacity>
+            <Text
+              style={[
+                s.timeLabel,
+                activeTimePicker === "start" && s.timeLabelActive,
+              ]}
+            >
+              {scheduleType === "schedule_time" ? "Start" : "Turn On"}
+            </Text>
+            <Text
+              style={[
+                s.timeValue,
+                activeTimePicker === "start" && s.timeValueActive,
+                startTime === null && s.timeValueMuted,
+              ]}
+            >
+              {startTime === null ? "Set time" : formatTime12h(startTime)}
+            </Text>
+          </TouchableOpacity>
+        )}
 
-        <ChevronDown
-          size={16}
-          color={theme.textSecondary}
-          style={{ transform: [{ rotate: "-90deg" }] }}
-        />
+        {showBothTimes && (
+          <ChevronDown
+            size={16}
+            color={theme.textSecondary}
+            style={{ transform: [{ rotate: "-90deg" }] }}
+          />
+        )}
 
-        <TouchableOpacity
-          style={[s.timeButton, activeTimePicker === "end" && s.timeButtonActive]}
-          onPress={onSelectEndTime}
-          activeOpacity={0.7}
-        >
-          <Text
+        {showEnd && (
+          <TouchableOpacity
             style={[
-              s.timeLabel,
-              activeTimePicker === "end" && s.timeLabelActive,
+              s.timeButton,
+              activeTimePicker === "end" && s.timeButtonActive,
             ]}
+            onPress={onSelectEndTime}
+            activeOpacity={0.7}
           >
-            Turn Off
-            <Text style={s.timeLabelOptional}> Optional</Text>
-          </Text>
-          <Text
-            style={[
-              s.timeValue,
-              activeTimePicker === "end" && s.timeValueActive,
-              endTime === null && s.timeValueMuted,
-            ]}
-          >
-            {endTime === null ? "No auto off" : formatTime12h(endTime)}
-          </Text>
-        </TouchableOpacity>
-      </View>
-
-      <View style={s.clearTimeRow}>
-        <TouchableOpacity
-          activeOpacity={0.72}
-          accessibilityLabel="Clear turn on time"
-          accessibilityRole="button"
-          onPress={onClearStartTime}
-          style={s.clearEndButton}
-        >
-          <X color={theme.textSecondary} size={15} strokeWidth={2.4} />
-          <Text style={s.clearEndText}>Clear turn on</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          activeOpacity={0.72}
-          accessibilityLabel="Clear turn off time"
-          accessibilityRole="button"
-          onPress={onClearEndTime}
-          style={s.clearEndButton}
-        >
-          <X color={theme.textSecondary} size={15} strokeWidth={2.4} />
-          <Text style={s.clearEndText}>Clear turn off</Text>
-        </TouchableOpacity>
+            <Text
+              style={[
+                s.timeLabel,
+                activeTimePicker === "end" && s.timeLabelActive,
+              ]}
+            >
+              {scheduleType === "schedule_time" ? "End" : "Turn Off"}
+            </Text>
+            <Text
+              style={[
+                s.timeValue,
+                activeTimePicker === "end" && s.timeValueActive,
+                endTime === null && s.timeValueMuted,
+              ]}
+            >
+              {endTime === null ? "Set time" : formatTime12h(endTime)}
+            </Text>
+          </TouchableOpacity>
+        )}
       </View>
 
       <View style={s.timePickerWrapper}>
@@ -125,9 +115,7 @@ export function ScheduleTimeSection({
           mode="time"
           display="spinner"
           value={dateFromTimeString(
-            (activeTimePicker === "start"
-              ? (startTime ?? endTime)
-              : (endTime ?? startTime)) ?? DEFAULT_START_TIME,
+            pickerTime ?? DEFAULT_START_TIME,
           )}
           onChange={onTimeChange}
           style={s.timePicker}
@@ -186,24 +174,6 @@ const createStyles = (theme: Theme) =>
     timePickerWrapper: {
       alignItems: "center",
       marginTop: 8,
-    },
-    clearTimeRow: {
-      alignItems: "center",
-      flexDirection: "row",
-      justifyContent: "space-between",
-      marginTop: 10,
-    },
-    clearEndButton: {
-      alignItems: "center",
-      flexDirection: "row",
-      gap: 6,
-      paddingHorizontal: 8,
-      paddingVertical: 6,
-    },
-    clearEndText: {
-      color: theme.textSecondary,
-      fontSize: 13,
-      fontWeight: "600",
     },
     timePicker: {
       height: 160,

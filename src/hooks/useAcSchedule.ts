@@ -1,21 +1,21 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import {
-  deleteAcScheduleFromDevice,
-  getAcScheduleFromDevice,
-  putAcScheduleToDevice,
+  deleteAcSchedulesFromDevice,
+  getAcSchedulesFromDevice,
+  putAcSchedulesToDevice,
 } from "../api/acScheduleApi";
 import { useDeviceConnection } from "../context/DeviceConnectionContext";
 import {
-  getAcSchedule,
-  removeAcSchedule,
-  saveAcSchedule,
+  getAcSchedules,
+  removeAcSchedules,
+  saveAcSchedules,
 } from "../storage/acScheduleStorage";
-import type { AcSchedule } from "../types/acSchedule";
+import { MAX_AC_SCHEDULES, type AcSchedule } from "../types/acSchedule";
 
 export function useAcSchedule() {
   const { debugMode, pairedDevice } = useDeviceConnection();
-  const [schedule, setSchedule] = useState<AcSchedule | null>(null);
+  const [schedules, setSchedules] = useState<AcSchedule[]>([]);
   const [isScheduleLoading, setIsScheduleLoading] = useState(false);
   const mutationVersion = useRef(0);
 
@@ -24,7 +24,7 @@ export function useAcSchedule() {
 
   useEffect(() => {
     if (pairedDevice === null) {
-      setSchedule(null);
+      setSchedules([]);
       setIsScheduleLoading(false);
       return;
     }
@@ -34,17 +34,17 @@ export function useAcSchedule() {
     setIsScheduleLoading(true);
 
     const loadSchedule = debugMode
-      ? getAcSchedule(pairedDevice)
-      : getAcScheduleFromDevice(pairedDevice);
+      ? getAcSchedules(pairedDevice)
+      : getAcSchedulesFromDevice(pairedDevice);
 
     void loadSchedule
       .then((fetchedSchedule) => {
         if (cancelled || mutationVersion.current !== loadVersion) return;
-        setSchedule(fetchedSchedule);
+        setSchedules(fetchedSchedule);
       })
       .catch(() => {
         if (cancelled || mutationVersion.current !== loadVersion) return;
-        setSchedule(null);
+        setSchedules([]);
       })
       .finally(() => {
         if (!cancelled) {
@@ -64,73 +64,88 @@ export function useAcSchedule() {
       }
 
       mutationVersion.current += 1;
+      const exists = schedules.some((schedule) => schedule.id === nextSchedule.id);
+      const nextSchedules = exists
+        ? schedules.map((schedule) =>
+            schedule.id === nextSchedule.id ? nextSchedule : schedule,
+          )
+        : schedules.length >= MAX_AC_SCHEDULES
+          ? schedules
+          : [...schedules, nextSchedule];
+
+      if (!exists && schedules.length >= MAX_AC_SCHEDULES) {
+        throw new Error(`A maximum of ${MAX_AC_SCHEDULES} schedules is allowed`);
+      }
 
       if (debugMode) {
-        await saveAcSchedule(pairedDevice, nextSchedule);
-        setSchedule(nextSchedule);
+        await saveAcSchedules(pairedDevice, nextSchedules);
+        setSchedules(nextSchedules);
         return;
       }
 
-      const savedSchedule = await putAcScheduleToDevice(
+      const savedSchedules = await putAcSchedulesToDevice(
         pairedDevice,
-        nextSchedule,
+        nextSchedules,
       );
-      const scheduleWithDays = {
-        ...savedSchedule,
-        days: nextSchedule.days,
-        powerful: nextSchedule.powerful,
-        quiet: nextSchedule.quiet,
-        repeatEnabled: nextSchedule.repeatEnabled,
-        repeatFrequency: nextSchedule.repeatFrequency,
-      };
-
-      setSchedule(scheduleWithDays);
-      void saveAcSchedule(pairedDevice, scheduleWithDays).catch(() => { });
+      setSchedules(savedSchedules);
+      void saveAcSchedules(pairedDevice, savedSchedules).catch(() => { });
     },
-    [debugMode, pairedDevice],
+    [debugMode, pairedDevice, schedules],
   );
 
   const toggleScheduleEnabled = useCallback(
-    async (enabled: boolean) => {
-      if (schedule === null) {
-        return;
-      }
+    async (id: string, enabled: boolean) => {
+      const schedule = schedules.find((item) => item.id === id);
+      if (schedule === undefined) return;
 
       await saveSchedule({
         ...schedule,
         enabled,
       });
     },
-    [saveSchedule, schedule],
+    [saveSchedule, schedules],
   );
 
-  const deleteSchedule = useCallback(async () => {
-    if (pairedDevice === null || schedule === null) {
+  const deleteSchedule = useCallback(async (id: string) => {
+    if (pairedDevice === null) {
       return;
     }
+
+    const nextSchedules = schedules.filter((schedule) => schedule.id !== id);
+    if (nextSchedules.length === schedules.length) return;
 
     mutationVersion.current += 1;
 
     try {
       if (debugMode) {
-        await removeAcSchedule(pairedDevice);
-        setSchedule(null);
+        await saveAcSchedules(pairedDevice, nextSchedules);
+        setSchedules(nextSchedules);
         return;
       }
 
-      await deleteAcScheduleFromDevice(pairedDevice);
-      setSchedule(null);
-      void removeAcSchedule(pairedDevice).catch(() => { });
+      if (nextSchedules.length === 0) {
+        await deleteAcSchedulesFromDevice(pairedDevice);
+        setSchedules([]);
+        void removeAcSchedules(pairedDevice).catch(() => { });
+        return;
+      }
+
+      const savedSchedules = await putAcSchedulesToDevice(
+        pairedDevice,
+        nextSchedules,
+      );
+      setSchedules(savedSchedules);
+      void saveAcSchedules(pairedDevice, savedSchedules).catch(() => { });
     } catch (error) {
       console.warn("[Schedule] DELETE failed:", error);
     }
-  }, [debugMode, pairedDevice, schedule]);
+  }, [debugMode, pairedDevice, schedules]);
 
   return {
     deleteSchedule,
     isScheduleLoading,
     saveSchedule,
-    schedule,
+    schedules,
     toggleScheduleEnabled,
   };
 }
