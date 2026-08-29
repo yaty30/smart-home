@@ -51,7 +51,7 @@ const controllerStatusText = (
   online: boolean | undefined,
 ) => {
   if (status === 'connecting') {
-    return 'Syncing';
+    return 'Offline';
   }
 
   if (status === 'unknown' || status === undefined) {
@@ -65,18 +65,18 @@ const deviceStatusText = (device: Device) => {
   const hasKnownPower = typeof device.state.power === 'boolean';
 
   if (!hasKnownPower) {
-    return 'Syncing';
+    return 'Off';
   }
 
   if (device.state.syncStatus === 'offline') {
-    return 'Offline';
+    return 'Off';
   }
 
   if (
     device.state.syncStatus === 'syncing' ||
     device.state.syncStatus === 'unknown'
   ) {
-    return 'Syncing';
+    return 'Off';
   }
 
   return device.state.power ? 'On' : 'Off';
@@ -237,9 +237,9 @@ export function RoomDetailScreen({ navigation, route }: RoomDetailScreenProps) {
           roomController.connectionStatus === undefined;
 
         Alert.alert(
-          waitingForStatus ? 'Controller Syncing' : 'Controller Offline',
+          'Controller Offline',
           waitingForStatus
-            ? `The controller for ${room.name} has not finished syncing yet. Please try again after its status updates.`
+            ? `The controller for ${room.name} is currently offline. Please wait for it to reconnect or check the ESP32 power and Wi-Fi connection.`
             : `The controller for ${room.name} is currently offline. Please ensure the ESP32 is powered on and connected to your network.`,
           [{ text: 'OK' }]
         );

@@ -54,11 +54,11 @@ function HeroCard({ device, onOpenControl }: HeroCardProps) {
     device.state.syncStatus === undefined;
   const isLiveOn = isOn && !isOffline && !isSyncing;
   const powerLabel = !hasKnownPower
-    ? 'SYNC'
+    ? 'OFF'
     : isOffline
-      ? 'OFFLINE'
+      ? 'OFF'
       : isSyncing
-        ? 'SYNC'
+        ? 'OFF'
         : isOn
           ? 'ON'
           : 'OFF';
@@ -307,11 +307,11 @@ function DeviceCard({ device, onPress }: DeviceCardProps) {
     device.state.syncStatus === 'unknown' ||
     device.state.syncStatus === undefined;
   const stateText = !hasKnownPower
-    ? 'Syncing'
+    ? 'Off'
     : isOffline
-      ? 'Offline'
+      ? 'Off'
       : isSyncing
-        ? 'Syncing'
+        ? 'Off'
         : isOn
           ? 'On'
           : 'Off';

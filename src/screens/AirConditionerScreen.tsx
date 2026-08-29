@@ -207,10 +207,10 @@ export function AirConditionerScreen({
     }
 
     if (deviceConnectionStatus === "connected" && deviceState === null) {
-      return "Syncing ESP32 state";
+      return "Off";
     }
 
-    return "Device offline";
+    return "Off";
   }, [deviceConnectionStatus, deviceState]);
 
   const scheduleDeviceKey =
