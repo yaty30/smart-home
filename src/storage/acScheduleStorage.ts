@@ -62,8 +62,9 @@ const isAcSchedule = (value: unknown): value is AcSchedule => {
   const candidate = value as Partial<AcSchedule>;
   return (
     typeof candidate.enabled === "boolean" &&
-    isScheduleTime(candidate.startTime) &&
+    (candidate.startTime === null || isScheduleTime(candidate.startTime)) &&
     (candidate.endTime === null || isScheduleTime(candidate.endTime)) &&
+    (candidate.startTime !== null || candidate.endTime !== null) &&
     isScheduleMode(candidate.mode) &&
     typeof candidate.temperature === "number" &&
     (candidate.fanSpeed === undefined ||

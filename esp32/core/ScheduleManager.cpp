@@ -86,10 +86,10 @@ void handleScheduleExecution() {
   }
   lastScheduleMinute = currentMinute;
 
-  int startMin = timeToMinutes(acSchedule.startTime);
+  int startMin = acSchedule.startTime[0] == '\0' ? -1 : timeToMinutes(acSchedule.startTime);
   int endMin = acSchedule.endTime[0] == '\0' ? -1 : timeToMinutes(acSchedule.endTime);
 
-  if (currentMinute == startMin) {
+  if (startMin >= 0 && currentMinute == startMin) {
     AcState nextState = acState;
     nextState.power          = true;
     nextState.mode           = acSchedule.mode;

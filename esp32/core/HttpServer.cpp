@@ -367,7 +367,11 @@ static bool isValidTimeString(const String& t) {
 static String scheduleJson(const AcSchedule& s) {
   String body = "{";
   body += "\"enabled\":" + boolString(s.enabled) + ",";
-  body += "\"startTime\":\"" + String(s.startTime) + "\",";
+  if (s.startTime[0] == '\0') {
+    body += "\"startTime\":null,";
+  } else {
+    body += "\"startTime\":\"" + String(s.startTime) + "\",";
+  }
   if (s.endTime[0] == '\0') {
     body += "\"endTime\":null,";
   } else {
@@ -454,15 +458,19 @@ void handlePutSchedule() {
   bool quiet        = extractBool("quiet", false);
   bool powerful     = extractBool("powerful", false);
 
-  if (!isValidTimeString(startTime)) {
-    sendJson(400, "{\"success\":false,\"error\":\"Invalid or missing startTime (HH:MM)\"}");
+  if (startTime.length() > 0 && !isValidTimeString(startTime)) {
+    sendJson(400, "{\"success\":false,\"error\":\"Invalid startTime (HH:MM)\"}");
     return;
   }
   if (endTime.length() > 0 && !isValidTimeString(endTime)) {
     sendJson(400, "{\"success\":false,\"error\":\"Invalid endTime (HH:MM)\"}");
     return;
   }
-  if (endTime.length() > 0 && startTime == endTime) {
+  if (startTime.length() == 0 && endTime.length() == 0) {
+    sendJson(400, "{\"success\":false,\"error\":\"Provide startTime, endTime, or both (HH:MM)\"}");
+    return;
+  }
+  if (startTime.length() > 0 && endTime.length() > 0 && startTime == endTime) {
     sendJson(400, "{\"success\":false,\"error\":\"startTime and endTime cannot be the same\"}");
     return;
   }
