@@ -2,7 +2,7 @@
 
 #include <Arduino.h>
 
-#define IR_PIN 13
+#define IR_PIN 21
 // JKE remotes do not encode horizontal airflow. DKE/PKR supports all five
 // manual positions plus auto in IRremoteESP8266.
 #define PANASONIC_AC_MODEL kPanasonicDke

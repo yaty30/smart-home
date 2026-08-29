@@ -36,6 +36,7 @@ import {
   useState,
 } from "react";
 import {
+  Alert,
   Animated,
   KeyboardAvoidingView,
   Modal,
@@ -79,9 +80,30 @@ const NO_DAYS: boolean[] = [false, false, false, false, false, false, false];
 const DAY_LABELS = ["M", "T", "W", "T", "F", "S", "S"];
 const DAY_FULL = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
+// Day groups, indexed Mon–Sun (0–6) so weekday numbers read 1–7.
+type DayGroupId = "all" | "working" | "odd" | "even";
+
+const daysFromIndices = (indices: number[]): boolean[] =>
+  NO_DAYS.map((_, i) => indices.includes(i));
+
+const dayGroups: { id: DayGroupId; label: string; days: boolean[] }[] = [
+  { id: "all", label: "All days", days: daysFromIndices([0, 1, 2, 3, 4, 5, 6]) },
+  { id: "working", label: "Working days", days: daysFromIndices([0, 1, 2, 3, 4]) },
+  { id: "odd", label: "Odd days", days: daysFromIndices([0, 2, 4, 6]) },
+  { id: "even", label: "Even days", days: daysFromIndices([1, 3, 5]) },
+];
+
+// Exact match only — Mon–Fri plus Sunday matches no group.
+const matchDayGroup = (days: boolean[]): DayGroupId | null =>
+  dayGroups.find((group) =>
+    group.days.every((selected, i) => selected === (days[i] === true)),
+  )?.id ?? null;
+
+const DEFAULT_START_TIME = "22:30";
+
 const defaultSchedule: AcSchedule = {
   enabled: true,
-  startTime: "22:30",
+  startTime: DEFAULT_START_TIME,
   endTime: null,
   days: [...NO_DAYS],
   mode: "cold",
@@ -132,6 +154,22 @@ const repeatLabels: Record<ScheduleRepeatFrequency, string> = {
   "bi-weekly": "Bi-weekly",
 };
 
+// Field-by-field so a draft that only differs by object identity is not dirty.
+const isSameSchedule = (a: AcSchedule, b: AcSchedule) =>
+  a.enabled === b.enabled &&
+  a.startTime === b.startTime &&
+  a.endTime === b.endTime &&
+  a.mode === b.mode &&
+  a.temperature === b.temperature &&
+  (a.fanSpeed ?? "auto") === (b.fanSpeed ?? "auto") &&
+  Boolean(a.quiet) === Boolean(b.quiet) &&
+  Boolean(a.powerful) === Boolean(b.powerful) &&
+  Boolean(a.repeatEnabled) === Boolean(b.repeatEnabled) &&
+  (a.repeatFrequency ?? "one-time") === (b.repeatFrequency ?? "one-time") &&
+  a.horizontalAirflow === b.horizontalAirflow &&
+  a.verticalAirflow === b.verticalAirflow &&
+  NO_DAYS.every((_, i) => (a.days[i] === true) === (b.days[i] === true));
+
 const formatRepeat = (schedule: AcSchedule) =>
   schedule.repeatEnabled
     ? repeatLabels[schedule.repeatFrequency ?? "weekly"]
@@ -164,25 +202,29 @@ function ScheduleRow({ schedule, onToggleEnabled }: ScheduleRowProps) {
       <View style={s.rowLeft}>
         <View style={s.rowTimes}>
           <Clock size={14} color={theme.textSecondary} />
-          <Text style={s.rowTimeLabel}>On</Text>
-          <Text style={s.rowTimeText}>{formatTime12h(schedule.startTime)}</Text>
-          {schedule.endTime != null &&
+          {schedule.startTime !== null && (
             <>
-              <ChevronDown
-                size={12}
-                color={theme.textSecondary}
-                style={{ transform: [{ rotate: "-90deg" }] }}
-              />
+              <Text style={s.rowTimeLabel}>On</Text>
+              <Text style={s.rowTimeText}>
+                {formatTime12h(schedule.startTime)}
+              </Text>
+            </>
+          )}
+          {schedule.startTime !== null && schedule.endTime !== null && (
+            <ChevronDown
+              size={12}
+              color={theme.textSecondary}
+              style={{ transform: [{ rotate: "-90deg" }] }}
+            />
+          )}
+          {schedule.endTime !== null && (
+            <>
               <Text style={s.rowTimeLabel}>Off</Text>
-              <Text
-                style={[
-                  s.rowTimeText,
-                  schedule.endTime === null && s.rowTimeTextMuted,
-                ]}
-              >
+              <Text style={s.rowTimeText}>
                 {formatTime12h(schedule.endTime)}
-              </Text></>
-          }
+              </Text>
+            </>
+          )}
         </View>
         <View style={s.dayPills}>
           {DAY_LABELS.map((label, i) => (
@@ -557,12 +599,16 @@ const createStyles = (theme: Theme) => StyleSheet.create({
     alignItems: "center",
     marginTop: 8,
   },
+  clearTimeRow: {
+    alignItems: "center",
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginTop: 10,
+  },
   clearEndButton: {
     alignItems: "center",
-    alignSelf: "flex-end",
     flexDirection: "row",
     gap: 6,
-    marginTop: 10,
     paddingHorizontal: 8,
     paddingVertical: 6,
   },
@@ -598,6 +644,35 @@ const createStyles = (theme: Theme) => StyleSheet.create({
   },
   dayToggleTextActive: {
     color: "#fff",
+  },
+  dayGroupRow: {
+    flexDirection: "row",
+    gap: theme.spacing.sm,
+    marginTop: theme.spacing.sm,
+  },
+  dayGroupButton: {
+    alignItems: "center",
+    backgroundColor: theme.surfaceLow,
+    borderColor: theme.accentMuted,
+    borderRadius: theme.radiusRound,
+    borderWidth: 1,
+    flex: 1,
+    justifyContent: "center",
+    minHeight: 40,
+    paddingHorizontal: 6,
+    paddingVertical: 8,
+  },
+  dayGroupButtonSelected: {
+    borderColor: theme.accentSolid,
+  },
+  dayGroupText: {
+    color: theme.textSecondary,
+    fontSize: 12,
+    fontWeight: "800",
+    textAlign: "center",
+  },
+  dayGroupTextSelected: {
+    color: theme.accentStrong,
   },
   repeatButtonRow: {
     flexDirection: "row",
@@ -915,13 +990,58 @@ function ScheduleEditorSheet({
     }
   }, [visible, translateY]);
 
-  const dismiss = useCallback(() => {
+  // Draft state: a copy of the persisted schedule that only the Save button
+  // commits. `initial` is re-read on open so a dismissed draft is discarded.
+  const [draft, setDraft] = useState<AcSchedule>(initial);
+  const [baseline, setBaseline] = useState<AcSchedule>(initial);
+  const [activeTimePicker, setActiveTimePicker] = useState<TimeField>("start");
+  const [isAdjustingTemperature, setIsAdjustingTemperature] = useState(false);
+
+  useEffect(() => {
+    if (!visible) return;
+    setDraft(initial);
+    setBaseline(initial);
+    setActiveTimePicker(initial.startTime === null ? "end" : "start");
+  }, [visible, initial]);
+
+  const isDirty = useMemo(
+    () => !isSameSchedule(draft, baseline),
+    [draft, baseline],
+  );
+
+  const closeSheet = useCallback(() => {
     Animated.timing(translateY, {
       toValue: 900,
       duration: 260,
       useNativeDriver: false,
     }).start(() => handleCloseRef.current());
   }, [translateY]);
+
+  const closeSheetRef = useRef(closeSheet);
+  useEffect(() => {
+    closeSheetRef.current = closeSheet;
+  }, [closeSheet]);
+
+  // Every dismissal path routes through here so an unsaved draft always asks.
+  const dismiss = useCallback(() => {
+    if (!isDirty) {
+      closeSheetRef.current();
+      return;
+    }
+
+    Alert.alert(
+      "Unsaved changes",
+      "This schedule has changes that haven't been saved. Discard them?",
+      [
+        { text: "Keep Editing", style: "cancel" },
+        {
+          text: "Discard Changes",
+          style: "destructive",
+          onPress: () => closeSheetRef.current(),
+        },
+      ],
+    );
+  }, [isDirty]);
 
   const dismissRef = useRef(dismiss);
   useEffect(() => {
@@ -933,15 +1053,6 @@ function ScheduleEditorSheet({
     dismissRef,
   );
 
-  // form state
-  const [draft, setDraft] = useState<AcSchedule>(initial);
-  useEffect(() => {
-    setDraft(initial);
-  }, [initial]);
-
-  const [activeTimePicker, setActiveTimePicker] = useState<TimeField>("start");
-  const [isAdjustingTemperature, setIsAdjustingTemperature] = useState(false);
-
   const handleTimeChange = useCallback(
     (_: DateTimePickerEvent, date?: Date) => {
       if (!date) return;
@@ -951,12 +1062,35 @@ function ScheduleEditorSheet({
     [activeTimePicker],
   );
 
+  const handleSelectStartTime = useCallback(() => {
+    setActiveTimePicker("start");
+    setDraft((prev) => ({
+      ...prev,
+      startTime:
+        prev.startTime ??
+        (prev.endTime === null
+          ? DEFAULT_START_TIME
+          : addMinutesToTimeString(prev.endTime, -60)),
+    }));
+  }, []);
+
   const handleSelectEndTime = useCallback(() => {
     setActiveTimePicker("end");
     setDraft((prev) => ({
       ...prev,
-      endTime: prev.endTime ?? addMinutesToTimeString(prev.startTime, 60),
+      endTime:
+        prev.endTime ??
+        (prev.startTime === null
+          ? DEFAULT_START_TIME
+          : addMinutesToTimeString(prev.startTime, 60)),
     }));
+  }, []);
+
+  // A schedule needs at least one time, so clearing one requires the other.
+  const handleClearStartTime = useCallback(() => {
+    Haptics.selectionAsync().catch(() => undefined);
+    setActiveTimePicker("end");
+    setDraft((prev) => ({ ...prev, startTime: null }));
   }, []);
 
   const handleClearEndTime = useCallback(() => {
@@ -997,6 +1131,19 @@ function ScheduleEditorSheet({
       return { ...prev, days };
     });
   }, []);
+
+  const handleSelectDayGroup = useCallback((days: boolean[]) => {
+    Haptics.selectionAsync().catch(() => undefined);
+    setDraft((prev) => ({ ...prev, days: [...days] }));
+  }, []);
+
+  // Derived from the weekday toggles, so manual selection keeps this in sync.
+  const activeDayGroup = useMemo(
+    () => matchDayGroup(draft.days),
+    [draft.days],
+  );
+
+  const hasAnyTime = draft.startTime !== null || draft.endTime !== null;
 
   const handleSelectRepeatFrequency = useCallback(
     (repeatFrequency: ScheduleRepeatFrequency) => {
@@ -1068,7 +1215,7 @@ function ScheduleEditorSheet({
                           s.timeButton,
                           activeTimePicker === "start" && s.timeButtonActive,
                         ]}
-                        onPress={() => setActiveTimePicker("start")}
+                        onPress={handleSelectStartTime}
                         activeOpacity={0.7}
                       >
                         <Text
@@ -1078,14 +1225,18 @@ function ScheduleEditorSheet({
                           ]}
                         >
                           Turn On
+                          <Text style={s.timeLabelOptional}> Optional</Text>
                         </Text>
                         <Text
                           style={[
                             s.timeValue,
                             activeTimePicker === "start" && s.timeValueActive,
+                            draft.startTime === null && s.timeValueMuted,
                           ]}
                         >
-                          {formatTime12h(draft.startTime)}
+                          {draft.startTime === null
+                            ? "No auto on"
+                            : formatTime12h(draft.startTime)}
                         </Text>
                       </TouchableOpacity>
 
@@ -1126,31 +1277,53 @@ function ScheduleEditorSheet({
                       </TouchableOpacity>
                     </View>
 
-                    {draft.endTime !== null && (
-                      <TouchableOpacity
-                        activeOpacity={0.72}
-                        accessibilityLabel="Clear turn off time"
-                        accessibilityRole="button"
-                        onPress={handleClearEndTime}
-                        style={s.clearEndButton}
-                      >
-                        <X
-                          color={theme.textSecondary}
-                          size={15}
-                          strokeWidth={2.4}
-                        />
-                        <Text style={s.clearEndText}>Clear turn off</Text>
-                      </TouchableOpacity>
-                    )}
+                    <View style={s.clearTimeRow}>
+                      {draft.startTime !== null && draft.endTime !== null ? (
+                        <TouchableOpacity
+                          activeOpacity={0.72}
+                          accessibilityLabel="Clear turn on time"
+                          accessibilityRole="button"
+                          onPress={handleClearStartTime}
+                          style={s.clearEndButton}
+                        >
+                          <X
+                            color={theme.textSecondary}
+                            size={15}
+                            strokeWidth={2.4}
+                          />
+                          <Text style={s.clearEndText}>Clear turn on</Text>
+                        </TouchableOpacity>
+                      ) : (
+                        <View />
+                      )}
+
+                      {draft.startTime !== null && draft.endTime !== null && (
+                        <TouchableOpacity
+                          activeOpacity={0.72}
+                          accessibilityLabel="Clear turn off time"
+                          accessibilityRole="button"
+                          onPress={handleClearEndTime}
+                          style={s.clearEndButton}
+                        >
+                          <X
+                            color={theme.textSecondary}
+                            size={15}
+                            strokeWidth={2.4}
+                          />
+                          <Text style={s.clearEndText}>Clear turn off</Text>
+                        </TouchableOpacity>
+                      )}
+                    </View>
 
                     <View style={s.timePickerWrapper}>
                       <DateTimePicker
                         mode="time"
                         display="spinner"
                         value={dateFromTimeString(
-                          activeTimePicker === "start"
-                            ? draft.startTime
-                            : (draft.endTime ?? draft.startTime),
+                          (activeTimePicker === "start"
+                            ? (draft.startTime ?? draft.endTime)
+                            : (draft.endTime ?? draft.startTime)) ??
+                            DEFAULT_START_TIME,
                         )}
                         onChange={handleTimeChange}
                         style={s.timePicker}
@@ -1223,6 +1396,35 @@ function ScheduleEditorSheet({
                             </Text>
                           </TouchableOpacity>
                         ))}
+                      </View>
+
+                      <View style={s.dayGroupRow}>
+                        {dayGroups.map((group) => {
+                          const selected = activeDayGroup === group.id;
+
+                          return (
+                            <TouchableOpacity
+                              activeOpacity={0.8}
+                              accessibilityRole="button"
+                              accessibilityState={{ selected }}
+                              key={group.id}
+                              onPress={() => handleSelectDayGroup(group.days)}
+                              style={[
+                                s.dayGroupButton,
+                                selected && s.dayGroupButtonSelected,
+                              ]}
+                            >
+                              <Text
+                                style={[
+                                  s.dayGroupText,
+                                  selected && s.dayGroupTextSelected,
+                                ]}
+                              >
+                                {group.label}
+                              </Text>
+                            </TouchableOpacity>
+                          );
+                        })}
                       </View>
                     </Section>
 
@@ -1442,7 +1644,7 @@ function ScheduleEditorSheet({
                 <AppButton
                   label={saving ? "Saving…" : "Save Schedule"}
                   onPress={() => onSave(draft)}
-                  disabled={saving}
+                  disabled={saving || !hasAnyTime}
                 />
               </View>
             </SafeAreaView>

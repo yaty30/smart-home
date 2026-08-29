@@ -68,16 +68,15 @@ function parseRepeatFrequency(value: unknown): ScheduleRepeatFrequency {
     : "one-time";
 }
 
-function parseScheduleResponse(obj: Record<string, unknown>): AcSchedule {
-  const endTime =
-    typeof obj.endTime === "string" && obj.endTime.length > 0
-      ? obj.endTime
-      : null;
+function parseScheduleTime(value: unknown): string | null {
+  return typeof value === "string" && value.length > 0 ? value : null;
+}
 
+function parseScheduleResponse(obj: Record<string, unknown>): AcSchedule {
   return {
     enabled: Boolean(obj.enabled),
-    startTime: String(obj.startTime),
-    endTime,
+    startTime: parseScheduleTime(obj.startTime),
+    endTime: parseScheduleTime(obj.endTime),
     days: Array.isArray(obj.days) ? (obj.days as boolean[]) : [...ALL_DAYS],
     mode: espToMode(String(obj.mode)),
     temperature: Number(obj.temperature),
@@ -130,7 +129,7 @@ export async function putAcScheduleToDevice(
   const host = device.host.replace(/\/+$/, "");
   const body = JSON.stringify({
     enabled: schedule.enabled,
-    startTime: schedule.startTime,
+    startTime: schedule.startTime ?? null,
     endTime: schedule.endTime ?? null,
     mode: modeToEsp(schedule.mode),
     temperature: schedule.temperature,
