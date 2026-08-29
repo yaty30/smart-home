@@ -10,6 +10,7 @@ import type { Device, DeviceBrand, DeviceType } from '../domain/device';
 import { AppHeader, HeaderIconButton } from '../components/AppHeader';
 import { AddDeviceSheet } from '../components/AddDeviceSheet';
 import { BottomNav, BOTTOM_NAV_CLEARANCE } from '../components/BottomNav';
+import { controllerStatusText } from '../domain/controller';
 import { createDevice } from '../domain/device';
 import { deviceService, executeDeviceCommand } from '../services/deviceService';
 import { SwipeableItem } from '../components/SwipeableItem';
@@ -28,21 +29,6 @@ type RenameTarget =
       type: 'device';
       deviceId: string;
     };
-
-const controllerStatusText = (
-  status: string | undefined,
-  online: boolean | undefined,
-) => {
-  if (status === 'connecting') {
-    return 'Offline';
-  }
-
-  if (status === 'unknown' || status === undefined) {
-    return 'Unknown';
-  }
-
-  return online ? 'Online' : 'Offline';
-};
 
 export function RoomDetailScreen({ navigation, route }: RoomDetailScreenProps) {
   const theme = useTheme();

@@ -7,24 +7,10 @@ import { useRooms } from "../store/rooms";
 import { type Theme, useTheme } from "../theme/theme";
 import type { RootStackScreenProps } from "../navigation/types";
 import { AppHeader, HeaderIconButton } from "../components/AppHeader";
+import { controllerStatusText } from "../domain/controller";
 import { SwipeableItem } from "../components/SwipeableItem";
 
 type ControllersScreenProps = RootStackScreenProps<"Controllers">;
-
-const controllerStatusText = (
-  status: string | undefined,
-  online: boolean,
-) => {
-  if (status === "connecting") {
-    return "Offline";
-  }
-
-  if (status === "unknown" || status === undefined) {
-    return "Unknown";
-  }
-
-  return online ? "Online" : "Offline";
-};
 
 export function ControllersScreen({ navigation }: ControllersScreenProps) {
   const theme = useTheme();

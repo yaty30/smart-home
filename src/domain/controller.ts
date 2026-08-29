@@ -17,6 +17,21 @@ export type Controller = {
   connectionStatus?: ControllerConnectionStatus;
 };
 
+export const controllerStatusText = (
+  connectionStatus: ControllerConnectionStatus | undefined,
+  online: boolean | undefined,
+): string => {
+  if (connectionStatus === "connecting") {
+    return "Offline";
+  }
+
+  if (connectionStatus === "unknown" || connectionStatus === undefined) {
+    return "Unknown";
+  }
+
+  return online ? "Online" : "Offline";
+};
+
 export const createController = (
   controllerId: string,
   name: string,

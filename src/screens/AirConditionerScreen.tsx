@@ -27,75 +27,25 @@ import {
 } from "../components/ScreenView";
 import { BOTTOM_NAV_CLEARANCE } from "../components/BottomNav";
 import { useDeviceConnection } from "../context/DeviceConnectionContext";
-import {
-  deleteAcScheduleFromDevice,
-  getAcScheduleFromDevice,
-  putAcScheduleToDevice,
-} from "../api/acScheduleApi";
-import {
-  getAcSchedule,
-  removeAcSchedule,
-  saveAcSchedule,
-} from "../storage/acScheduleStorage";
+import { useAcCommands } from "../hooks/useAcCommands";
+import { useAcSchedule } from "../hooks/useAcSchedule";
 import { AcScheduleSheet } from "../components/AcScheduleSheet";
 import { type Theme, useTheme } from "../theme/theme";
-import type { AcSchedule } from "../types/acSchedule";
 import type {
   AirConditionerMode,
   AirflowLevel,
   FanSpeed,
 } from "../types/airConditioner";
-import type {
-  DeviceStateSnapshot,
-  EspAirflow,
-  EspFanSpeed,
-} from "../types/device";
+import type { EspFanSpeed } from "../types/device";
 import { temperatureRangeForMode } from "../constants/acModes";
+import {
+  acSnapshotToUiState,
+  airflowLevelToEspPosition,
+  modeToEspMode,
+} from "../utils/acProtocol";
 import { normalizeTemperature } from "../utils/temperatureGauge";
 import { HeaderIconButton } from "../components/AppHeader";
 import { useDevices } from "../store/devices";
-
-const modeToEspMode = (mode: AirConditionerMode) => {
-  switch (mode) {
-    case "auto":
-      return "auto";
-    case "cold":
-      return "cool";
-    case "dry":
-      return "dry";
-    case "heat":
-      return "heat";
-    case "fan":
-      return "fan";
-    default:
-      return "cool";
-  }
-};
-
-const airflowLevelToEspPosition: Record<
-  AirflowLevel,
-  Exclude<EspAirflow, "auto">
-> = {
-  one: "1",
-  two: "2",
-  three: "3",
-  four: "4",
-  five: "5",
-};
-
-const espPositionToAirflowLevel: Record<
-  "1" | "2" | "3" | "4" | "5",
-  AirflowLevel
-> = {
-  "1": "one",
-  "2": "two",
-  "3": "three",
-  "4": "four",
-  "5": "five",
-};
-
-const DEVICE_COMMAND_TIMEOUT_MS = 1500;
-const TEMPERATURE_COMMAND_DEBOUNCE_MS = 400;
 
 type AirConditionerScreenProps = {
   deviceId: string;
@@ -108,12 +58,9 @@ export function AirConditionerScreen({
 }: AirConditionerScreenProps) {
   const {
     deviceConnectionStatus,
-    debugMode,
     deviceState,
     isDeviceConnected,
     pairedDevice,
-    reportDeviceUnreachable,
-    updateDeviceState,
   } = useDeviceConnection();
   const navigation = useNavigation<RootStackNavigationProp<"DeviceControl">>();
   const theme = useTheme();
@@ -140,16 +87,10 @@ export function AirConditionerScreen({
   const [powerful, setPowerful] = useState(false);
   const [isAdjustingTemperature, setIsAdjustingTemperature] = useState(false);
   const [isScheduleSheetVisible, setIsScheduleSheetVisible] = useState(false);
-  const [isScheduleLoading, setIsScheduleLoading] = useState(false);
-  const [schedule, setSchedule] = useState<AcSchedule | null>(null);
   const [isHeaderScrolled, setIsHeaderScrolled] = useState(false);
   const latestTemperature = useRef(temperature);
   const latestFanSpeed = useRef<FanSpeed>(fanSpeed);
   const latestHeaderScrolled = useRef(false);
-  const scheduleMutationVersion = useRef(0);
-  const temperatureCommandTimer = useRef<ReturnType<typeof setTimeout> | null>(
-    null,
-  );
   const controlEnabledProgress = useRef(new Animated.Value(1)).current;
   const modeTemperatures = useRef<Partial<Record<AirConditionerMode, number>>>({
     auto: 24,
@@ -179,48 +120,26 @@ export function AirConditionerScreen({
     return "Off";
   }, [deviceConnectionStatus, deviceState]);
 
-  const scheduleDeviceKey =
-    pairedDevice === null ? null : `${pairedDevice.host}|${pairedDevice.token}`;
   const powerStatusText = canControlDevice
     ? power
       ? "On"
       : "Off"
     : unavailableStatusText;
 
-  useEffect(() => {
-    if (pairedDevice === null) {
-      setSchedule(null);
-      setIsScheduleLoading(false);
-      return;
-    }
-
-    let cancelled = false;
-    const loadVersion = scheduleMutationVersion.current;
-    setIsScheduleLoading(true);
-
-    const loadSchedule = debugMode
-      ? getAcSchedule(pairedDevice)
-      : getAcScheduleFromDevice(pairedDevice);
-
-    void loadSchedule
-      .then((fetchedSchedule) => {
-        if (cancelled || scheduleMutationVersion.current !== loadVersion) return;
-        setSchedule(fetchedSchedule);
-      })
-      .catch(() => {
-        if (cancelled || scheduleMutationVersion.current !== loadVersion) return;
-        setSchedule(null);
-      })
-      .finally(() => {
-        if (!cancelled) {
-          setIsScheduleLoading(false);
-        }
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [debugMode, scheduleDeviceKey]);
+  const {
+    clearTemperatureCommandTimer,
+    logDroppedCommand,
+    sendAcCommand,
+    sendTemperatureCommandDebounced,
+    updateAcSnapshot,
+  } = useAcCommands({ canControlDevice });
+  const {
+    deleteSchedule: handleDeleteSchedule,
+    isScheduleLoading,
+    saveSchedule: handleSaveSchedule,
+    schedule,
+    toggleScheduleEnabled: handleToggleScheduleEnabled,
+  } = useAcSchedule();
 
   useEffect(() => {
     Animated.timing(controlEnabledProgress, {
@@ -242,44 +161,32 @@ export function AirConditionerScreen({
       return;
     }
 
-    const nextMode: AirConditionerMode =
-      deviceState.ac.mode === "cool" ? "cold" : deviceState.ac.mode;
-    const nextTemperature = deviceState.ac.temperature;
-    latestTemperature.current = nextTemperature;
-    modeTemperatures.current[nextMode] = nextTemperature;
-    setTemperature(nextTemperature);
-    setMode(nextMode);
-    setPower(deviceState.ac.power);
+    const next = acSnapshotToUiState(deviceState.ac);
 
-    if (deviceState.ac.fan === "auto") {
-      setFanAuto(true);
-    } else {
-      const nextFanSpeed = Number(deviceState.ac.fan) as FanSpeed;
-      latestFanSpeed.current = nextFanSpeed;
-      setFanSpeed(nextFanSpeed);
-      setFanAuto(false);
+    latestTemperature.current = next.temperature;
+    modeTemperatures.current[next.mode] = next.temperature;
+    setTemperature(next.temperature);
+    setMode(next.mode);
+    setPower(next.power);
+
+    setFanAuto(next.fanAuto);
+    if (next.fanSpeed !== null) {
+      latestFanSpeed.current = next.fanSpeed;
+      setFanSpeed(next.fanSpeed);
     }
 
-    if (deviceState.ac.swingHorizontal === "auto") {
-      setHorizontalAirflowAuto(true);
-    } else {
-      setHorizontalAirflow(
-        espPositionToAirflowLevel[deviceState.ac.swingHorizontal],
-      );
-      setHorizontalAirflowAuto(false);
+    setHorizontalAirflowAuto(next.horizontalAirflowAuto);
+    if (next.horizontalAirflow !== null) {
+      setHorizontalAirflow(next.horizontalAirflow);
     }
 
-    if (deviceState.ac.swingVertical === "auto") {
-      setVerticalAirflowAuto(true);
-    } else {
-      setVerticalAirflow(
-        espPositionToAirflowLevel[deviceState.ac.swingVertical],
-      );
-      setVerticalAirflowAuto(false);
+    setVerticalAirflowAuto(next.verticalAirflowAuto);
+    if (next.verticalAirflow !== null) {
+      setVerticalAirflow(next.verticalAirflow);
     }
 
-    setQuiet(deviceState.ac.power ? deviceState.ac.quiet : false);
-    setPowerful(deviceState.ac.power ? deviceState.ac.powerful : false);
+    setQuiet(next.quiet);
+    setPowerful(next.powerful);
   }, [deviceState]);
 
   const triggerSelectionHaptic = useCallback(() => {
@@ -289,124 +196,6 @@ export function AirConditionerScreen({
   const triggerPressHaptic = useCallback(() => {
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
   }, []);
-
-  const logDroppedCommand = useCallback((description: string) => {
-    console.log(
-      `[Device] Dropped command because ESP32 is offline: ${description}`,
-    );
-  }, []);
-
-  const updateAcSnapshot = useCallback(
-    (acPatch: Partial<DeviceStateSnapshot["ac"]>) => {
-      updateDeviceState((currentState) =>
-        currentState === null
-          ? currentState
-          : {
-            ...currentState,
-            ac: {
-              ...currentState.ac,
-              ...acPatch,
-            },
-          },
-      );
-    },
-    [updateDeviceState],
-  );
-
-  const sendAcCommand = useCallback(
-    async (params: Record<string, string | number>) => {
-      const description = Object.entries(params)
-        .map(([key, value]) => `${key}=${String(value)}`)
-        .join(",");
-
-      if (!canControlDevice || pairedDevice === null) {
-        logDroppedCommand(description);
-        return false;
-      }
-
-      if (debugMode) {
-        console.log(`[Device] Debug command accepted: ${description}`);
-        return true;
-      }
-
-      const host = pairedDevice.host.replace(/\/+$/, "");
-      const searchParams = new URLSearchParams();
-      const controller = new AbortController();
-      const timeout = setTimeout(
-        () => controller.abort(),
-        DEVICE_COMMAND_TIMEOUT_MS,
-      );
-
-      Object.entries(params).forEach(([key, value]) => {
-        searchParams.append(key, String(value));
-      });
-
-      try {
-        console.log(`[Device] Command sent immediately: ${description}`);
-        const response = await fetch(`${host}/ac?${searchParams.toString()}`, {
-          headers: {
-            Authorization: `Bearer ${pairedDevice.token}`,
-          },
-          method: "GET",
-          signal: controller.signal,
-        });
-
-        if (!response.ok) {
-          console.warn("ESP32 AC request failed", response.status);
-          return false;
-        }
-        return true;
-      } catch (error) {
-        console.warn("ESP32 AC request failed without retry.", error);
-        reportDeviceUnreachable();
-        return false;
-      } finally {
-        clearTimeout(timeout);
-      }
-    },
-    [
-      canControlDevice,
-      debugMode,
-      logDroppedCommand,
-      pairedDevice,
-      reportDeviceUnreachable,
-    ],
-  );
-
-  const clearTemperatureCommandTimer = useCallback(() => {
-    if (temperatureCommandTimer.current !== null) {
-      clearTimeout(temperatureCommandTimer.current);
-      temperatureCommandTimer.current = null;
-    }
-  }, []);
-
-  const sendTemperatureCommandDebounced = useCallback(
-    (nextTemperature: number) => {
-      clearTemperatureCommandTimer();
-      temperatureCommandTimer.current = setTimeout(() => {
-        temperatureCommandTimer.current = null;
-
-        if (!canControlDevice) {
-          logDroppedCommand(`temp=${nextTemperature}`);
-          return;
-        }
-
-        void sendAcCommand({
-          temp: nextTemperature,
-        });
-      }, TEMPERATURE_COMMAND_DEBOUNCE_MS);
-    },
-    [
-      canControlDevice,
-      clearTemperatureCommandTimer,
-      logDroppedCommand,
-      sendAcCommand,
-    ],
-  );
-
-  useEffect(() => {
-    return clearTemperatureCommandTimer;
-  }, [clearTemperatureCommandTimer]);
 
   const handleTemperatureChange = useCallback(
     (nextTemperature: number) => {
@@ -822,75 +611,6 @@ export function AirConditionerScreen({
     },
     [],
   );
-
-  const handleSaveSchedule = useCallback(
-    async (nextSchedule: AcSchedule) => {
-      if (pairedDevice === null) {
-        throw new Error("No paired device available for schedule");
-      }
-
-      scheduleMutationVersion.current += 1;
-
-      if (debugMode) {
-        await saveAcSchedule(pairedDevice, nextSchedule);
-        setSchedule(nextSchedule);
-        return;
-      }
-
-      const savedSchedule = await putAcScheduleToDevice(
-        pairedDevice,
-        nextSchedule,
-      );
-      const scheduleWithDays = {
-        ...savedSchedule,
-        days: nextSchedule.days,
-        powerful: nextSchedule.powerful,
-        quiet: nextSchedule.quiet,
-        repeatEnabled: nextSchedule.repeatEnabled,
-        repeatFrequency: nextSchedule.repeatFrequency,
-      };
-
-      setSchedule(scheduleWithDays);
-      void saveAcSchedule(pairedDevice, scheduleWithDays).catch(() => { });
-    },
-    [debugMode, pairedDevice],
-  );
-
-  const handleToggleScheduleEnabled = useCallback(
-    async (enabled: boolean) => {
-      if (schedule === null) {
-        return;
-      }
-
-      await handleSaveSchedule({
-        ...schedule,
-        enabled,
-      });
-    },
-    [handleSaveSchedule, schedule],
-  );
-
-  const handleDeleteSchedule = useCallback(async () => {
-    if (pairedDevice === null || schedule === null) {
-      return;
-    }
-
-    scheduleMutationVersion.current += 1;
-
-    try {
-      if (debugMode) {
-        await removeAcSchedule(pairedDevice);
-        setSchedule(null);
-        return;
-      }
-
-      await deleteAcScheduleFromDevice(pairedDevice);
-      setSchedule(null);
-      void removeAcSchedule(pairedDevice).catch(() => { });
-    } catch (error) {
-      console.warn("[Schedule] DELETE failed:", error);
-    }
-  }, [debugMode, pairedDevice, schedule]);
 
   return (
     <ScreenView>

@@ -2,7 +2,7 @@ import { useMemo } from 'react';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
 import { StatusDot } from '../common/StatusDot';
-import type { Device } from '../../domain/device';
+import { type Device, devicePowerPresentation } from '../../domain/device';
 import { type Theme, useTheme } from '../../theme/theme';
 import { DeviceTypeIcon } from './DeviceTypeIcon';
 
@@ -14,13 +14,9 @@ type DeviceCardProps = {
 export function DeviceCard({ device, onPress }: DeviceCardProps) {
   const theme = useTheme();
   const deviceCardStyles = useMemo(() => createDeviceCardStyles(theme), [theme]);
-  const isOn = device.state.power === true;
-  const hasKnownPower = typeof device.state.power === 'boolean';
-  const isOffline = device.state.syncStatus === 'offline';
-  const isSyncing =
-    device.state.syncStatus === 'syncing' ||
-    device.state.syncStatus === 'unknown' ||
-    device.state.syncStatus === undefined;
+  const { hasKnownPower, isOffline, isOn, isSyncing } = devicePowerPresentation(
+    device.state,
+  );
   const stateText = !hasKnownPower
     ? 'Off'
     : isOffline

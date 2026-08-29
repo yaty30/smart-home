@@ -3,7 +3,11 @@ import type { ComponentType } from 'react';
 import { useMemo } from 'react';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
-import type { Device, DeviceType } from '../../domain/device';
+import {
+  type Device,
+  type DeviceType,
+  devicePowerPresentation,
+} from '../../domain/device';
 import { type Theme, useTheme } from '../../theme/theme';
 
 type IconComponent = ComponentType<{
@@ -20,13 +24,11 @@ const iconByDeviceType: Record<DeviceType, IconComponent> = {
 };
 
 const deviceStatusText = (device: Device) => {
-  const hasKnownPower = typeof device.state.power === 'boolean';
+  const { hasKnownPower, isOffline, isOn } = devicePowerPresentation(
+    device.state,
+  );
 
-  if (!hasKnownPower) {
-    return 'Off';
-  }
-
-  if (device.state.syncStatus === 'offline') {
+  if (!hasKnownPower || isOffline) {
     return 'Off';
   }
 
@@ -37,7 +39,7 @@ const deviceStatusText = (device: Device) => {
     return 'Off';
   }
 
-  return device.state.power ? 'On' : 'Off';
+  return isOn ? 'On' : 'Off';
 };
 
 type RoomDeviceCardProps = {
