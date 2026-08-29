@@ -1,4 +1,4 @@
-import { Bot, QrCode } from "lucide-react-native";
+import { Bot } from "lucide-react-native";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Animated,
