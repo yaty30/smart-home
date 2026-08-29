@@ -1,5 +1,5 @@
-import { AirVent, ChevronLeft, FolderPen, Lightbulb, PackagePlus, Plus, Trash2, Tv, Wifi, WifiOff, Power, ChevronRight } from 'lucide-react-native';
-import { Animated, Keyboard, Modal, Pressable, StyleSheet, Text, TextInput, TouchableOpacity, View, ScrollView, Alert } from 'react-native';
+import { ChevronLeft, FolderPen, PackagePlus, Plus, Trash2 } from 'lucide-react-native';
+import { Animated, Keyboard, StyleSheet, Text, TouchableOpacity, View, ScrollView, Alert } from 'react-native';
 import { useState, useCallback, useEffect, useMemo } from 'react';
 import { useRooms } from '../store/rooms';
 import { useDevices } from '../store/devices';
@@ -7,22 +7,18 @@ import { useControllers } from '../store/controllers';
 import { type Theme, useTheme } from '../theme/theme';
 import type { RootStackScreenProps } from '../navigation/types';
 import type { Device, DeviceBrand, DeviceType } from '../domain/device';
-import type { ComponentType } from 'react';
 import { AppHeader, HeaderIconButton } from '../components/AppHeader';
 import { AddDeviceSheet } from '../components/AddDeviceSheet';
 import { BottomNav, BOTTOM_NAV_CLEARANCE } from '../components/BottomNav';
 import { createDevice } from '../domain/device';
 import { deviceService, executeDeviceCommand } from '../services/deviceService';
 import { SwipeableItem } from '../components/SwipeableItem';
+import { RenameDialog } from '../components/room/RenameDialog';
+import { RoomControllerCard } from '../components/room/RoomControllerCard';
+import { RoomDeviceCard } from '../components/room/RoomDeviceCard';
 import { useBottomNavAnimation } from '../hooks/useBottomNavAnimation';
 
 type RoomDetailScreenProps = RootStackScreenProps<'RoomDetail'>;
-
-type IconComponent = ComponentType<{
-  color?: string;
-  size?: number;
-  strokeWidth?: number;
-}>;
 
 type RenameTarget =
   | {
@@ -32,19 +28,6 @@ type RenameTarget =
       type: 'device';
       deviceId: string;
     };
-
-const iconByDeviceType: Record<DeviceType, IconComponent> = {
-  ac: AirVent,
-  light: Lightbulb,
-  tv: Tv,
-  fan: AirVent,
-};
-
-const createDeviceColors = (theme: Theme) => ({
-  POWERED_GREEN: theme.statusColors.online,
-  POWERED_GREEN_MUTED: theme.statusColors.onlineMuted,
-  POWERED_GREEN_BORDER: theme.statusColors.onlineBorder,
-});
 
 const controllerStatusText = (
   status: string | undefined,
@@ -61,32 +44,9 @@ const controllerStatusText = (
   return online ? 'Online' : 'Offline';
 };
 
-const deviceStatusText = (device: Device) => {
-  const hasKnownPower = typeof device.state.power === 'boolean';
-
-  if (!hasKnownPower) {
-    return 'Off';
-  }
-
-  if (device.state.syncStatus === 'offline') {
-    return 'Off';
-  }
-
-  if (
-    device.state.syncStatus === 'syncing' ||
-    device.state.syncStatus === 'unknown'
-  ) {
-    return 'Off';
-  }
-
-  return device.state.power ? 'On' : 'Off';
-};
-
-
 export function RoomDetailScreen({ navigation, route }: RoomDetailScreenProps) {
   const theme = useTheme();
   const styles = useMemo(() => createStyles(theme), [theme]);
-  const deviceColors = useMemo(() => createDeviceColors(theme), [theme]);
   const { roomId } = route.params;
   const { getRoomById, removeRoom, updateRoomName } = useRooms();
   const { getDeviceById, getDevicesByRoom, removeDevice, removeDevicesByRoom, addDevice, updateDeviceName, updateDeviceState } = useDevices();
@@ -106,7 +66,6 @@ export function RoomDetailScreen({ navigation, route }: RoomDetailScreenProps) {
   const devices = getDevicesByRoom(roomId);
 
   const roomController = controllers.find((c) => c.roomId === roomId);
-  const ControllerStatusIcon = roomController?.online ? Wifi : WifiOff;
   const currentControllerStatusText = controllerStatusText(
     roomController?.connectionStatus,
     roomController?.online,
@@ -333,36 +292,11 @@ export function RoomDetailScreen({ navigation, route }: RoomDetailScreenProps) {
         contentContainerStyle={styles.contentContainer}
       >
         {roomController && (
-          <TouchableOpacity
-            activeOpacity={0.84}
-            accessibilityRole="button"
-            accessibilityLabel="View controller details"
+          <RoomControllerCard
+            controller={roomController}
+            statusText={currentControllerStatusText}
             onPress={() => navigation.navigate('Controllers')}
-            style={styles.controllerCard}
-          >
-            <View style={styles.controllerHeader}>
-              <View style={styles.controllerIconWrapper}>
-                <ControllerStatusIcon
-                  color={roomController.online ? theme.accent : theme.textMuted}
-                  size={20}
-                  strokeWidth={2.2}
-                />
-              </View>
-              <View style={styles.controllerInfoSection}>
-                <Text style={styles.controllerLabel}>Controller</Text>
-                <Text style={[
-                  styles.controllerStatus,
-                  roomController.online && styles.controllerStatusOnline
-                ]}>
-                  {currentControllerStatusText}
-                </Text>
-              </View>
-              <ChevronRight color={theme.textMuted} size={20} strokeWidth={2.2} />
-            </View>
-            <View style={styles.controllerDetails}>
-              <Text style={styles.controllerIP}>{roomController.ip}</Text>
-            </View>
-          </TouchableOpacity>
+          />
         )}
 
         <View style={styles.sectionHeader}>
@@ -386,14 +320,6 @@ export function RoomDetailScreen({ navigation, route }: RoomDetailScreenProps) {
         ) : (
           <View style={styles.deviceList}>
             {devices.map((device) => {
-              const Icon = iconByDeviceType[device.type];
-              const isPowered = device.state.power === true;
-              const hasKnownPower = typeof device.state.power === 'boolean';
-              const isOffline = device.state.syncStatus === 'offline';
-              const isSynced = device.state.syncStatus === 'synced';
-              const canTogglePower =
-                roomController?.online === true && hasKnownPower;
-
               return (
                 <SwipeableItem
                   key={device.id}
@@ -403,76 +329,18 @@ export function RoomDetailScreen({ navigation, route }: RoomDetailScreenProps) {
                   onSwipeStart={() => setScrollEnabled(false)}
                   style={styles.deviceCardWrapper}
                 >
-                  <View style={[styles.deviceCard, isPowered && isSynced && styles.deviceCardOn]}>
-                    <TouchableOpacity
-                      activeOpacity={0.84}
-                      accessibilityRole="button"
-                      accessibilityLabel={`Open ${device.name}`}
-                      onPress={() => {
-                        if (device.type === 'ac') {
-                          navigation.navigate('DeviceControl', { deviceId: device.id });
-                        }
-                      }}
-                      style={styles.deviceCardContent}
-                    >
-                      <View style={[styles.deviceIcon, isPowered && isSynced && styles.deviceIconOn]}>
-                        <Icon
-                          color={isPowered && !isOffline ? deviceColors.POWERED_GREEN : theme.textMuted}
-                          size={20}
-                          strokeWidth={2.2}
-                        />
-                      </View>
-                      <View style={styles.deviceInfo}>
-                        <Text numberOfLines={1} style={styles.deviceName}>
-                          {device.name}
-                        </Text>
-                        {device.type === 'ac' && device.brand && (
-                          <Text numberOfLines={1} style={styles.deviceBrand}>
-                            {device.brand.charAt(0).toUpperCase() + device.brand.slice(1)}
-                          </Text>
-                        )}
-                        {device.type === 'ac' && isPowered && isSynced && (
-                          <View style={styles.deviceStatus}>
-                            <Text style={styles.deviceStatusText}>
-                              {device.state.temperature}°C
-                            </Text>
-                            <Text style={styles.deviceStatusSeparator}>•</Text>
-                            <Text style={styles.deviceStatusText}>
-                              {device.state.mode ? device.state.mode.charAt(0).toUpperCase() + device.state.mode.slice(1) : 'Auto'}
-                            </Text>
-                            <Text style={styles.deviceStatusSeparator}>•</Text>
-                            <Text style={styles.deviceStatusText}>
-                              {device.state.fanSpeed === 'auto' ? 'Auto Fan' : `Fan ${device.state.fanSpeed}`}
-                            </Text>
-                          </View>
-                        )}
-                        {device.type === 'ac' && (!isPowered || !isSynced) && (
-                          <Text style={styles.deviceStatusText}>
-                            {deviceStatusText(device)}
-                          </Text>
-                        )}
-                      </View>
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      activeOpacity={0.72}
-                      accessibilityRole="button"
-                      accessibilityLabel={`Toggle ${device.name} power`}
-                      accessibilityState={{ disabled: !canTogglePower }}
-                      disabled={!canTogglePower}
-                      onPress={() => void handleTogglePower(device.id, isPowered)}
-                      style={[
-                        styles.powerButton,
-                        isPowered && isSynced && styles.powerButtonOn,
-                        !canTogglePower && styles.powerButtonDisabled,
-                      ]}
-                    >
-                      <Power
-                        color={isPowered && !isOffline ? deviceColors.POWERED_GREEN : theme.textMuted}
-                        size={20}
-                        strokeWidth={2.4}
-                      />
-                    </TouchableOpacity>
-                  </View>
+                  <RoomDeviceCard
+                    device={device}
+                    controllerOnline={roomController?.online === true}
+                    onOpen={() => {
+                      if (device.type === 'ac') {
+                        navigation.navigate('DeviceControl', { deviceId: device.id });
+                      }
+                    }}
+                    onTogglePower={(currentPower) =>
+                      void handleTogglePower(device.id, currentPower)
+                    }
+                  />
                 </SwipeableItem>
               );
             })}
@@ -486,54 +354,17 @@ export function RoomDetailScreen({ navigation, route }: RoomDetailScreenProps) {
         onContinue={handleAddDevice}
       />
 
-      <Modal
-        animationType="fade"
-        onRequestClose={handleCloseRename}
-        transparent
+      <RenameDialog
         visible={renameTarget !== null}
-      >
-        <Pressable style={styles.renameBackdrop} onPress={handleCloseRename}>
-          <Pressable style={styles.renameDialog} onPress={(event) => event.stopPropagation()}>
-            <Text style={styles.renameTitle}>{renameTitle}</Text>
-            <Text style={styles.renameLabel}>{renameLabel}</Text>
-            <TextInput
-              autoCapitalize="words"
-              autoCorrect={false}
-              onChangeText={setRenameValue}
-              onSubmitEditing={handleSubmitRename}
-              placeholder={renameTarget?.type === 'device' ? 'Air Conditioner' : 'Living Room'}
-              placeholderTextColor={theme.textMuted}
-              returnKeyType="done"
-              style={styles.renameInput}
-              value={renameValue}
-            />
-            <View style={styles.renameActions}>
-              <TouchableOpacity
-                activeOpacity={0.74}
-                accessibilityRole="button"
-                accessibilityLabel="Cancel rename"
-                onPress={handleCloseRename}
-                style={styles.renameSecondaryButton}
-              >
-                <Text style={styles.renameSecondaryText}>Cancel</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                activeOpacity={0.74}
-                accessibilityRole="button"
-                accessibilityLabel={`Save ${renameTarget?.type ?? 'item'} name`}
-                disabled={renameValue.trim().length === 0}
-                onPress={handleSubmitRename}
-                style={[
-                  styles.renamePrimaryButton,
-                  renameValue.trim().length === 0 && styles.renameButtonDisabled,
-                ]}
-              >
-                <Text style={styles.renamePrimaryText}>Save</Text>
-              </TouchableOpacity>
-            </View>
-          </Pressable>
-        </Pressable>
-      </Modal>
+        title={renameTitle}
+        label={renameLabel}
+        placeholder={renameTarget?.type === 'device' ? 'Air Conditioner' : 'Living Room'}
+        saveAccessibilityLabel={`Save ${renameTarget?.type ?? 'item'} name`}
+        value={renameValue}
+        onChangeValue={setRenameValue}
+        onCancel={handleCloseRename}
+        onSubmit={handleSubmitRename}
+      />
 
       <Animated.View
         pointerEvents="box-none"
@@ -631,59 +462,6 @@ const createStyles = (theme: Theme) => StyleSheet.create({
     letterSpacing: 0,
     textAlign: 'center',
   },
-  controllerCard: {
-    alignItems: 'stretch',
-    backgroundColor: theme.surfaceWarm,
-    borderColor: theme.border,
-    borderRadius: theme.radiusMedium,
-    borderWidth: 1,
-    gap: theme.spacing.sm,
-    marginBottom: theme.spacing.xl,
-    padding: theme.spacing.md,
-  },
-  controllerHeader: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    gap: theme.spacing.md,
-  },
-  controllerIconWrapper: {
-    alignItems: 'center',
-    backgroundColor: theme.accentMuted,
-    borderColor: theme.borderActive,
-    borderRadius: 12,
-    borderWidth: 1,
-    height: 40,
-    justifyContent: 'center',
-    width: 40,
-  },
-  controllerInfoSection: {
-    flex: 1,
-    gap: theme.spacing.xs,
-  },
-  controllerLabel: {
-    color: theme.text,
-    fontSize: 14,
-    fontWeight: '800',
-    letterSpacing: 0,
-  },
-  controllerStatus: {
-    color: theme.textMuted,
-    fontSize: 12,
-    fontWeight: '600',
-    letterSpacing: 0,
-  },
-  controllerStatusOnline: {
-    color: theme.statusColors.online,
-  },
-  controllerDetails: {
-    paddingLeft: 52,
-  },
-  controllerIP: {
-    color: theme.textMuted,
-    fontSize: 12,
-    fontWeight: '600',
-    letterSpacing: 0,
-  },
   sectionHeader: {
     alignItems: 'center',
     flexDirection: 'row',
@@ -712,172 +490,5 @@ const createStyles = (theme: Theme) => StyleSheet.create({
   },
   deviceCardWrapper: {
     borderRadius: theme.radiusMedium,
-  },
-  deviceCard: {
-    alignItems: 'center',
-    backgroundColor: theme.surfaceWarm,
-    borderColor: theme.border,
-    borderRadius: theme.radiusMedium,
-    borderWidth: 1,
-    flexDirection: 'row',
-    gap: theme.spacing.md,
-    padding: theme.spacing.md,
-  },
-  deviceCardOn: {
-    backgroundColor: theme.statusColors.onlineMuted,
-    borderColor: theme.statusColors.onlineBorder,
-  },
-  deviceCardContent: {
-    alignItems: 'center',
-    flex: 1,
-    flexDirection: 'row',
-    gap: theme.spacing.md,
-  },
-  deviceIcon: {
-    alignItems: 'center',
-    backgroundColor: theme.accentMuted,
-    borderColor: theme.borderActive,
-    borderRadius: 12,
-    borderWidth: 1,
-    height: 40,
-    justifyContent: 'center',
-    width: 40,
-  },
-  deviceIconOn: {
-    backgroundColor: theme.statusColors.onlineMuted,
-    borderColor: theme.statusColors.onlineBorder,
-  },
-  deviceInfo: {
-    flex: 1,
-    gap: theme.spacing.xs,
-  },
-  deviceName: {
-    color: theme.text,
-    fontSize: 14,
-    fontWeight: '800',
-    letterSpacing: 0,
-  },
-  deviceBrand: {
-    color: theme.textMuted,
-    fontSize: 11,
-    fontWeight: '600',
-    letterSpacing: 0,
-  },
-  deviceStatus: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    gap: theme.spacing.xs,
-  },
-  deviceStatusText: {
-    color: theme.textMuted,
-    fontSize: 11,
-    fontWeight: '600',
-    letterSpacing: 0,
-  },
-  deviceStatusSeparator: {
-    color: theme.textMuted,
-    fontSize: 11,
-    fontWeight: '600',
-  },
-  powerButton: {
-    alignItems: 'center',
-    backgroundColor: theme.surfaceLow,
-    borderColor: theme.border,
-    borderRadius: 18,
-    borderWidth: 1,
-    height: 44,
-    justifyContent: 'center',
-    width: 44,
-  },
-  powerButtonOn: {
-    backgroundColor: theme.statusColors.onlineMuted,
-    borderColor: theme.statusColors.onlineBorder,
-  },
-  powerButtonDisabled: {
-    opacity: 0.52,
-  },
-  deleteSection: {
-    marginTop: 'auto',
-    paddingTop: theme.spacing.xxl,
-  },
-  renameBackdrop: {
-    alignItems: 'center',
-    backgroundColor: theme.scrim,
-    flex: 1,
-    justifyContent: 'center',
-    padding: theme.spacing.xl,
-  },
-  renameDialog: {
-    backgroundColor: theme.paperBackground,
-    borderColor: theme.border,
-    borderRadius: theme.radiusMedium,
-    borderWidth: 1,
-    maxWidth: 420,
-    padding: theme.spacing.xl,
-    width: '100%',
-  },
-  renameTitle: {
-    color: theme.text,
-    fontSize: 22,
-    fontWeight: '800',
-    letterSpacing: 0,
-    marginBottom: theme.spacing.xl,
-  },
-  renameLabel: {
-    color: theme.textSecondary,
-    fontSize: 13,
-    fontWeight: '800',
-    letterSpacing: 0,
-    marginBottom: theme.spacing.sm,
-    textTransform: 'uppercase',
-  },
-  renameInput: {
-    backgroundColor: theme.surfaceLow,
-    borderColor: theme.border,
-    borderRadius: 14,
-    borderWidth: 1,
-    color: theme.text,
-    fontSize: 16,
-    fontWeight: '700',
-    height: 54,
-    paddingHorizontal: theme.spacing.lg,
-  },
-  renameActions: {
-    flexDirection: 'row',
-    gap: theme.spacing.md,
-    justifyContent: 'flex-end',
-    marginTop: theme.spacing.xl,
-  },
-  renameSecondaryButton: {
-    alignItems: 'center',
-    borderColor: theme.border,
-    borderRadius: 14,
-    borderWidth: 1,
-    height: 46,
-    justifyContent: 'center',
-    paddingHorizontal: theme.spacing.lg,
-  },
-  renameSecondaryText: {
-    color: theme.textSecondary,
-    fontSize: 14,
-    fontWeight: '800',
-    letterSpacing: 0,
-  },
-  renamePrimaryButton: {
-    alignItems: 'center',
-    backgroundColor: theme.accent,
-    borderRadius: 14,
-    height: 46,
-    justifyContent: 'center',
-    paddingHorizontal: theme.spacing.xl,
-  },
-  renameButtonDisabled: {
-    opacity: 0.45,
-  },
-  renamePrimaryText: {
-    color: theme.textOnAccent,
-    fontSize: 14,
-    fontWeight: '900',
-    letterSpacing: 0,
   },
 });

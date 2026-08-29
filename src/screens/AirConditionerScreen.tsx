@@ -1,16 +1,7 @@
 import * as Haptics from "expo-haptics";
 import { useNavigation } from "@react-navigation/native";
-import {
-  AirVent,
-  CalendarClock,
-  Ellipsis,
-  Moon,
-  Power,
-  PowerOff,
-  Star,
-  Zap,
-} from "lucide-react-native";
-import { ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { CalendarClock, Ellipsis, Star } from "lucide-react-native";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Alert,
   Animated,
@@ -19,7 +10,6 @@ import {
   ScrollView,
   StyleSheet,
   Text,
-  TouchableOpacity,
   useWindowDimensions,
   View,
 } from "react-native";
@@ -27,19 +17,15 @@ import {
 import { ACHeader } from "../components/ACHeader";
 import { useBottomNavAnimation } from "../hooks/useBottomNavAnimation";
 import type { RootStackNavigationProp } from "../navigation/types";
-import {
-  HorizontalAirflowSelector,
-  VerticalAirflowSelector,
-} from "../components/AirflowSelectors";
-import { ArcTemperatureGauge } from "../components/ArcTemperatureGauge";
-import { CollapsibleView } from "../components/CollapsibleView";
-import { FanSpeedControl } from "../components/FanSpeedControl";
+import { AcLiveControls } from "../components/ac/AcLiveControls";
+import { AcModePillRow } from "../components/ac/AcModePillRow";
+import { AcTemperatureCard } from "../components/ac/AcTemperatureCard";
+import { AnimatedBottomNav } from "../components/AnimatedBottomNav";
 import {
   SCREEN_BOTTOM_SAFE_PADDING,
   ScreenView,
 } from "../components/ScreenView";
-import { Section } from "../components/Section";
-import { BottomNav, BOTTOM_NAV_CLEARANCE } from "../components/BottomNav";
+import { BOTTOM_NAV_CLEARANCE } from "../components/BottomNav";
 import { useDeviceConnection } from "../context/DeviceConnectionContext";
 import {
   deleteAcScheduleFromDevice,
@@ -64,10 +50,7 @@ import type {
   EspAirflow,
   EspFanSpeed,
 } from "../types/device";
-import {
-  MODE_ICONS,
-  temperatureRangeForMode,
-} from "../constants/acModes";
+import { temperatureRangeForMode } from "../constants/acModes";
 import { normalizeTemperature } from "../utils/temperatureGauge";
 import { HeaderIconButton } from "../components/AppHeader";
 import { useDevices } from "../store/devices";
@@ -114,22 +97,6 @@ const espPositionToAirflowLevel: Record<
 const DEVICE_COMMAND_TIMEOUT_MS = 1500;
 const TEMPERATURE_COMMAND_DEBOUNCE_MS = 400;
 
-const modeStlyes = {
-  opacity: 0.86
-}
-
-const MODE_PILL_IDS: AirConditionerMode[] = ["auto", "cold", "dry", "heat"];
-
-const modePills = (theme: Theme): { id: AirConditionerMode; label: string, icon: ReactNode }[] => {
-  const icons = MODE_ICONS(theme);
-
-  return MODE_PILL_IDS.map((id) => {
-    const { color, icon: Icon, label } = icons[id];
-
-    return { id, label, icon: <Icon style={modeStlyes} size={18} color={color} /> };
-  });
-};
-
 type AirConditionerScreenProps = {
   deviceId: string;
   onBackPress: () => void;
@@ -151,7 +118,6 @@ export function AirConditionerScreen({
   const navigation = useNavigation<RootStackNavigationProp<"DeviceControl">>();
   const theme = useTheme();
   const styles = useMemo(() => createStyles(theme), [theme]);
-  const modePillsData = useMemo(() => modePills(theme), [theme]);
   const { width } = useWindowDimensions();
   const {
     animateBottomNavOut,
@@ -958,172 +924,50 @@ export function AirConditionerScreen({
             <Text style={styles.connectionStatus}>{unavailableStatusText}</Text>
           ) : null}
 
-          <Animated.View style={[styles.modePillRow, liveLabelDimStyle]}>
-            {modePillsData.map((modeOption) => {
-              const selected = mode === modeOption.id;
+          <AcModePillRow
+            dimStyle={liveLabelDimStyle}
+            enabled={liveControlsEnabled}
+            mode={mode}
+            onSelectMode={handleModeChange}
+          />
 
-              return (
-                <TouchableOpacity
-                  activeOpacity={0.8}
-                  accessibilityRole="button"
-                  accessibilityState={{
-                    disabled: !liveControlsEnabled,
-                    selected,
-                  }}
-                  disabled={!liveControlsEnabled}
-                  key={modeOption.id}
-                  onPress={() => handleModeChange(modeOption.id)}
-                  style={[styles.modePill, selected && styles.modePillSelected]}
-                >
-                  {modeOption.icon}
-                  <Text
-                    style={[
-                      styles.modePillText,
-                      selected && styles.modePillTextSelected,
-                    ]}
-                  >
-                    {modeOption.label}
-                  </Text>
-                </TouchableOpacity>
-              );
-            })}
-          </Animated.View>
+          <AcTemperatureCard
+            canControlDevice={canControlDevice}
+            gaugeSize={gaugeSize}
+            maxTemperature={temperatureRange.max}
+            minTemperature={temperatureRange.min}
+            onChangeTemperature={handleTemperatureChange}
+            onInteractionEnd={handleTemperatureInteractionEnd}
+            onInteractionStart={() => setIsAdjustingTemperature(true)}
+            onTogglePower={handleTogglePower}
+            onTogglePowerful={() => handlePowerfulChange(!powerful)}
+            onToggleQuiet={() => handleQuietChange(!quiet)}
+            power={power}
+            powerful={powerful}
+            powerfulControlEnabled={powerfulControlEnabled}
+            quiet={quiet}
+            quietControlEnabled={quietControlEnabled}
+            subtitle={`Living Room · ${powerStatusText}`}
+            title="Air Conditioner"
+            temperature={temperature}
+          />
 
-          <Section>
-            <View style={styles.temperatureHeader}>
-              <View style={styles.temperatureTitleGroup}>
-                <View style={styles.temperatureTitleContainer}>
-                  <AirVent color={theme.text} />
-                  <Text style={styles.cardTitle}>Air Conditioner</Text>
-                </View>
-                <Text style={styles.cardSubtitle}>
-                  Living Room · {powerStatusText}
-                </Text>
-              </View>
-              <View style={styles.temperatureActions}>
-                <TouchableOpacity
-                  activeOpacity={0.75}
-                  accessibilityLabel="Toggle quiet mode"
-                  accessibilityRole="switch"
-                  accessibilityState={{
-                    checked: quiet,
-                    disabled: !quietControlEnabled,
-                  }}
-                  disabled={!quietControlEnabled}
-                  onPress={() => handleQuietChange(!quiet)}
-                  style={[
-                    styles.quietButton,
-                    quiet ? styles.quietButtonOn : styles.quietButtonOff,
-                    !quietControlEnabled && styles.powerCornerButtonDisabled,
-                  ]}
-                >
-                  <Moon
-                    color={quiet ? theme.quietAccent : theme.text}
-                    size={20}
-                    strokeWidth={2.4}
-                  />
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                  activeOpacity={0.75}
-                  accessibilityLabel="Toggle powerful mode"
-                  accessibilityRole="switch"
-                  accessibilityState={{
-                    checked: powerful,
-                    disabled: !powerfulControlEnabled,
-                  }}
-                  disabled={!powerfulControlEnabled}
-                  onPress={() => handlePowerfulChange(!powerful)}
-                  style={[
-                    styles.quietButton,
-                    powerful ? styles.powerfulButtonOn : styles.quietButtonOff,
-                    !powerfulControlEnabled && styles.powerCornerButtonDisabled,
-                  ]}
-                >
-                  <Zap
-                    color={powerful ? theme.powerfulAccent : theme.text}
-                    size={20}
-                    strokeWidth={2.4}
-                  />
-                </TouchableOpacity>
-                <TouchableOpacity
-                  activeOpacity={0.75}
-                  accessibilityLabel="Toggle air conditioner power"
-                  accessibilityRole="switch"
-                  accessibilityState={{
-                    checked: power,
-                    disabled: !canControlDevice,
-                  }}
-                  disabled={!canControlDevice}
-                  onPress={handleTogglePower}
-                  style={[
-                    styles.powerCornerButton,
-                    power
-                      ? styles.powerCornerButtonOn
-                      : styles.powerCornerButtonOff,
-                    !canControlDevice && styles.powerCornerButtonDisabled,
-                  ]}
-                >
-                  {power ? (
-                    <PowerOff
-                      color={theme.powerAccent}
-                      size={20}
-                      strokeWidth={2.4}
-                    />
-                  ) : (
-                    <Power color={theme.accent} size={20} strokeWidth={2.4} />
-                  )}
-                </TouchableOpacity>
-              </View>
-            </View>
-
-            <ArcTemperatureGauge
-              isDisabled={!canControlDevice}
-              isPowered={power}
-              maxTemperature={temperatureRange.max}
-              minTemperature={temperatureRange.min}
-              onChangeTemperature={handleTemperatureChange}
-              onInteractionEnd={handleTemperatureInteractionEnd}
-              onInteractionStart={() => setIsAdjustingTemperature(true)}
-              size={gaugeSize}
-              temperature={temperature}
-            />
-          </Section>
-
-          <CollapsibleView visible={power}>
-            <View style={styles.liveControlSections}>
-              <Section>
-                <FanSpeedControl
-                  isAuto={fanAuto}
-                  isDisabled={!canControlDevice}
-                  isPowered={power}
-                  onChangeAuto={handleFanAutoChange}
-                  onChangeSpeed={handleFanSpeedChange}
-                  speed={fanSpeed}
-                />
-              </Section>
-
-              <Section style={styles.airflowCard}>
-                <HorizontalAirflowSelector
-                  isAuto={horizontalAirflowAuto}
-                  isDisabled={!canControlDevice}
-                  isPowered={power}
-                  onChangeAuto={handleHorizontalAirflowAutoChange}
-                  onChangeLevel={handleHorizontalAirflowChange}
-                  selectedLevel={horizontalAirflow}
-                />
-                <VerticalAirflowSelector
-                  isAuto={verticalAirflowAuto}
-                  isDisabled={!canControlDevice}
-                  isPowered={power}
-                  onChangeAuto={handleVerticalAirflowAutoChange}
-                  onChangeLevel={handleVerticalAirflowChange}
-                  selectedLevel={verticalAirflow}
-                />
-              </Section>
-            </View>
-          </CollapsibleView>
-
+          <AcLiveControls
+            canControlDevice={canControlDevice}
+            fanAuto={fanAuto}
+            fanSpeed={fanSpeed}
+            horizontalAirflow={horizontalAirflow}
+            horizontalAirflowAuto={horizontalAirflowAuto}
+            onChangeFanAuto={handleFanAutoChange}
+            onChangeFanSpeed={handleFanSpeedChange}
+            onChangeHorizontalAirflow={handleHorizontalAirflowChange}
+            onChangeHorizontalAirflowAuto={handleHorizontalAirflowAutoChange}
+            onChangeVerticalAirflow={handleVerticalAirflowChange}
+            onChangeVerticalAirflowAuto={handleVerticalAirflowAutoChange}
+            power={power}
+            verticalAirflow={verticalAirflow}
+            verticalAirflowAuto={verticalAirflowAuto}
+          />
         </View>
       </ScrollView>
 
@@ -1138,63 +982,49 @@ export function AirConditionerScreen({
       />
 
       {/* Bottom nav enters with this screen and also exits during swipe-back. */}
-      <Animated.View
-        pointerEvents="box-none"
-        style={[
-          styles.bottomNavAnimationLayer,
+      <AnimatedBottomNav
+        opacity={bottomNavOpacity}
+        translateY={bottomNavTranslateY}
+        items={[
           {
-            opacity: bottomNavOpacity,
-            transform: [{ translateY: bottomNavTranslateY }],
+            icon: (
+              <CalendarClock
+                color={theme.accentStrong}
+                size={22}
+                strokeWidth={2.2}
+              />
+            ),
+            label: "Schedule",
+            onPress: () => setIsScheduleSheetVisible(true),
           },
-        ]}
-      >
-        <BottomNav
-          visible
-          items={[
-            {
-              icon: (
-                <CalendarClock
-                  color={theme.accentStrong}
+          {
+            active: isFavourite,
+            icon: (
+              isFavourite ? (
+                <Star
+                  color={theme.accent}
+                  size={22}
+                  strokeWidth={2.2}
+                  fill={theme.accent}
+                />
+              ) : (
+                <Star
+                  color={theme.accentMuted}
                   size={22}
                   strokeWidth={2.2}
                 />
-              ),
-              label: "Schedule",
-              onPress: () => setIsScheduleSheetVisible(true),
-            },
-            {
-              active: isFavourite,
-              icon: (
-                isFavourite ? (
-                  <Star
-                    color={theme.accent}
-                    size={22}
-                    strokeWidth={2.2}
-                    fill={theme.accent}
-                  />
-                ) : (
-                  <Star
-                    color={theme.accentMuted}
-                    size={22}
-                    strokeWidth={2.2}
-                  />
-                )
-              ),
-              label: isFavourite ? "Remove Favourite" : "Set Favourite",
-              onPress: handleSetFavourite,
-            },
-          ]}
-        />
-      </Animated.View>
+              )
+            ),
+            label: isFavourite ? "Remove Favourite" : "Set Favourite",
+            onPress: handleSetFavourite,
+          },
+        ]}
+      />
     </ScreenView>
   );
 }
 
 const createStyles = (theme: Theme) => StyleSheet.create({
-  bottomNavAnimationLayer: {
-    ...StyleSheet.absoluteFillObject,
-    zIndex: 30,
-  },
   content: {
     flexGrow: 1,
     paddingBottom: SCREEN_BOTTOM_SAFE_PADDING + theme.spacing.xl + BOTTOM_NAV_CLEARANCE,
@@ -1204,196 +1034,6 @@ const createStyles = (theme: Theme) => StyleSheet.create({
     marginHorizontal: theme.spacing.lg,
     paddingTop: theme.spacing.sm,
   },
-  headerMenuButton: {
-    alignItems: "center",
-    backgroundColor: theme.surfaceLow,
-    borderColor: "rgba(255, 255, 255, 0.08)",
-    borderRadius: theme.radiusRound,
-    borderWidth: 1,
-    height: 42,
-    justifyContent: "center",
-    width: 42,
-  },
-  modePillRow: {
-    flexDirection: "row",
-    gap: theme.spacing.sm,
-  },
-  modePill: {
-    alignItems: "center",
-    backgroundColor: "rgba(255, 255, 255, 0.04)",
-    borderColor: theme.accentMuted,
-    borderRadius: theme.radiusRound,
-    borderWidth: 1,
-    flex: 1,
-    justifyContent: "center",
-    paddingVertical: 12,
-    flexDirection: 'row',
-    gap: theme.spacing.xs
-  },
-  modePillSelected: {
-    // backgroundColor: theme.accentStrong,
-    borderColor: theme.accentSolid,
-  },
-  modePillText: {
-    color: theme.textSecondary,
-    fontSize: 14,
-    fontWeight: "800",
-    letterSpacing: 0,
-  },
-  modePillTextSelected: {
-    color: theme.accentStrong,
-  },
-  temperatureHeader: {
-    alignItems: "flex-start",
-    flexDirection: "row",
-    gap: theme.spacing.md,
-    justifyContent: "space-between",
-  },
-  temperatureTitleGroup: {
-    flex: 1,
-    gap: theme.spacing.xs,
-    minWidth: 0,
-  },
-  temperatureTitleContainer: {
-    display: "flex",
-    flexDirection: "row",
-    gap: 6,
-  },
-  temperatureActions: {
-    alignItems: "center",
-    flexDirection: "row",
-    gap: theme.spacing.sm,
-  },
-  quietButton: {
-    alignItems: "center",
-    borderRadius: 16,
-    borderWidth: 1,
-    height: 46,
-    justifyContent: "center",
-    width: 46,
-  },
-  quietButtonOn: {
-    backgroundColor: theme.quietAccentMuted,
-    borderColor: theme.quietAccent,
-  },
-  quietButtonOff: {
-    backgroundColor: theme.controlBackground,
-    borderColor: theme.border,
-  },
-  powerfulButtonOn: {
-    backgroundColor: theme.powerfulAccentMuted,
-    borderColor: theme.powerfulAccent,
-  },
-  powerCornerButton: {
-    alignItems: "center",
-    borderRadius: 16,
-    borderWidth: 1,
-    height: 46,
-    justifyContent: "center",
-    width: 46,
-  },
-  powerCornerButtonOn: {
-    backgroundColor: theme.powerAccentMuted,
-    borderColor: theme.powerButton.borderOn,
-  },
-  powerCornerButtonOff: {
-    backgroundColor: theme.surfaceWarm,
-    borderColor: theme.borderActive,
-  },
-  powerCornerButtonDisabled: {
-    opacity: 0.44,
-  },
-  scheduleTitleRow: {
-    alignItems: "center",
-    flexDirection: "row",
-    justifyContent: "space-between",
-    marginTop: theme.spacing.sm,
-    minHeight: 32,
-  },
-  sectionTitle: {
-    color: theme.text,
-    fontSize: 20,
-    fontWeight: "900",
-    letterSpacing: 0,
-  },
-  summaryTimeField: {
-    backgroundColor: theme.controlBackground,
-    borderColor: theme.borders.soft,
-    borderRadius: 16,
-    borderWidth: 1,
-    flex: 1,
-    gap: theme.spacing.xs,
-    minWidth: 0,
-    padding: theme.spacing.md,
-  },
-  summaryTimeValueRow: {
-    alignItems: "center",
-    flexDirection: "row",
-    justifyContent: "space-between",
-  },
-  summaryTimeValue: {
-    color: theme.text,
-    fontSize: 17,
-    fontWeight: "800",
-    letterSpacing: 0,
-  },
-  airflowCard: {
-    gap: theme.spacing.lg,
-  },
-  liveControlSections: {
-    gap: theme.spacing.md,
-  },
-  emptyScheduleCard: {
-    alignItems: "flex-start",
-  },
-  cardTitle: {
-    color: theme.text,
-    fontSize: 17,
-    fontWeight: "800",
-    letterSpacing: 0,
-  },
-  cardSubtitle: {
-    color: theme.textSecondary,
-    fontSize: 15,
-    fontWeight: "500",
-    letterSpacing: 0,
-    lineHeight: 21,
-  },
-  summaryRows: {
-    gap: theme.spacing.md,
-  },
-  summaryRow: {
-    alignItems: "center",
-    flexDirection: "row",
-    justifyContent: "space-between",
-  },
-  summaryLabel: {
-    color: theme.textSecondary,
-    fontSize: 14,
-    fontWeight: "600",
-    letterSpacing: 0,
-  },
-  summaryValue: {
-    color: theme.text,
-    flexShrink: 1,
-    fontSize: 15,
-    fontWeight: "800",
-    letterSpacing: 0,
-    textAlign: "right",
-  },
-  scheduleActionRow: {
-    flexDirection: "row",
-    gap: theme.spacing.md,
-  },
-  actionButton: {
-    flex: 1,
-  },
-  validationText: {
-    color: theme.powerAccent,
-    fontSize: 13,
-    fontWeight: "700",
-    letterSpacing: 0,
-  },
   connectionStatus: {
     color: theme.textSecondary,
     fontSize: theme.typography.body,
@@ -1401,63 +1041,4 @@ const createStyles = (theme: Theme) => StyleSheet.create({
     letterSpacing: 0,
     textAlign: "center",
   },
-  timeGrid: {
-    flexDirection: "row",
-    gap: theme.spacing.md,
-  },
-  timeField: {
-    flex: 1,
-    gap: theme.spacing.sm,
-    minWidth: 0,
-  },
-  timeLabel: {
-    color: theme.textSecondary,
-    fontSize: 15,
-    fontWeight: "600",
-    letterSpacing: 0,
-  },
-  timeButton: {
-    alignItems: "center",
-    backgroundColor: theme.controlBackground,
-    borderColor: theme.borderStrong,
-    borderRadius: 16,
-    borderWidth: 1,
-    flexDirection: "row",
-    gap: theme.spacing.sm,
-    height: 48,
-    justifyContent: "space-between",
-    paddingHorizontal: theme.spacing.md,
-  },
-  timeValue: {
-    color: theme.textSecondary,
-    flexShrink: 1,
-    fontSize: 15,
-    fontWeight: "700",
-    letterSpacing: 0,
-  },
-  timePickerBackdrop: {
-    alignItems: "center",
-    backgroundColor: theme.overlays.timePickerBackdrop,
-    flex: 1,
-    justifyContent: "flex-end",
-    paddingBottom: theme.spacing.xl,
-    paddingHorizontal: theme.spacing.sm,
-  },
-  timePickerPanel: {
-    alignItems: "center",
-    backgroundColor: theme.paperBackground,
-    borderColor: theme.borderStrong,
-    borderRadius: 22,
-    borderWidth: 1,
-    paddingVertical: theme.spacing.sm,
-    width: "100%",
-  },
-  timePicker: {
-    alignSelf: "center",
-    minWidth: 360,
-    width: "100%",
-  },
-  modeIcon: {
-    opacity: 0.6
-  }
 });
