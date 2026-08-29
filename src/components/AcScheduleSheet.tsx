@@ -62,17 +62,14 @@ import { FanSpeedControl } from "./FanSpeedControl";
 import { Section } from "./Section";
 import { SwipeableItem } from "./SwipeableItem";
 import { type Theme, useTheme } from "../theme/theme";
-import type {
-  AcSchedule,
-  ScheduleRepeatFrequency,
-} from "../types/acSchedule";
+import type { AcSchedule, ScheduleRepeatFrequency } from "../types/acSchedule";
 import type {
   AirConditionerMode,
   AirflowLevel,
   FanSpeed,
 } from "../types/airConditioner";
 import { normalizeTemperature } from "../utils/temperatureGauge";
-import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { MaterialCommunityIcons } from "@expo/vector-icons";
 
 type TimeField = "start" | "end";
 
@@ -87,8 +84,16 @@ const daysFromIndices = (indices: number[]): boolean[] =>
   NO_DAYS.map((_, i) => indices.includes(i));
 
 const dayGroups: { id: DayGroupId; label: string; days: boolean[] }[] = [
-  { id: "all", label: "All days", days: daysFromIndices([0, 1, 2, 3, 4, 5, 6]) },
-  { id: "working", label: "Working days", days: daysFromIndices([0, 1, 2, 3, 4]) },
+  {
+    id: "all",
+    label: "All days",
+    days: daysFromIndices([0, 1, 2, 3, 4, 5, 6]),
+  },
+  {
+    id: "working",
+    label: "Working days",
+    days: daysFromIndices([0, 1, 2, 3, 4]),
+  },
   { id: "odd", label: "Odd days", days: daysFromIndices([0, 2, 4, 6]) },
   { id: "even", label: "Even days", days: daysFromIndices([1, 3, 5]) },
 ];
@@ -134,7 +139,9 @@ const MODE_OPTION_IDS: Exclude<AirConditionerMode, "fan">[] = [
   "heat",
 ];
 
-const modeOptions = (theme: Theme): {
+const modeOptions = (
+  theme: Theme,
+): {
   id: Exclude<AirConditionerMode, "fan">;
   label: string;
   icon: ReactNode;
@@ -144,7 +151,11 @@ const modeOptions = (theme: Theme): {
   return MODE_OPTION_IDS.map((id) => {
     const { color, icon: Icon, label } = icons[id];
 
-    return { id, label, icon: <Icon style={modeStyles} size={18} color={color} /> };
+    return {
+      id,
+      label,
+      icon: <Icon style={modeStyles} size={18} color={color} />,
+    };
   });
 };
 
@@ -195,10 +206,15 @@ function ScheduleRow({ schedule, onToggleEnabled }: ScheduleRowProps) {
   const VerticalAirflowIcon = verticalAirflowOption?.icon;
   const HorizontalAirflowIcon = horizontalAirflowOption?.icon;
 
-  const modeIcon = modeOpts?.find(m => m.id === schedule.mode)?.icon ?? null
+  const modeIcon = modeOpts?.find((m) => m.id === schedule.mode)?.icon ?? null;
 
   return (
-    <View style={{ ...s.row, borderColor: schedule.enabled ? theme.accent : theme.accentMuted }}>
+    <View
+      style={{
+        ...s.row,
+        borderColor: schedule.enabled ? theme.accent : theme.accentMuted,
+      }}
+    >
       <View style={s.rowLeft}>
         <View style={s.rowTimes}>
           <Clock size={14} color={theme.textSecondary} />
@@ -243,109 +259,116 @@ function ScheduleRow({ schedule, onToggleEnabled }: ScheduleRowProps) {
             </View>
           ))}
 
-          <View style={s.rowDetailPill}>
+          <View style={{ ...s.rowDetailPill, marginLeft: theme.spacing.xs }}>
             <Repeat size={16} color={theme.accentGlow} />
             <Text style={s.rowDetailText}>{formatRepeat(schedule)}</Text>
           </View>
         </View>
 
-        <View style={s.rowDetails}>
-          <View style={s.rowDetailPill}>
-            {/* <Text style={s.rowDetailText}></Text> */}
-            {isValidElement(modeIcon)
-              ? cloneElement(modeIcon as ReactElement<{ size?: number }>, {
-                size: 14,
-              })
-              : null}
-              <Text style={{color: theme.text, fontWeight: '600', fontSize: 13}}>{schedule.temperature} °C</Text>
-          </View>
-          <View style={s.rowDetailPill}>
-            <View style={s.rowDetailInline}>
-              <View style={s.rowDetailIconFrame}>
-                <Fan size={16} color={theme.accentGlow} />
-              </View>
-
-              {schedule.fanSpeed === undefined ||
-                schedule.fanSpeed === "auto" ? (
-                <Text style={{ ...s.rowDetailText, marginLeft: theme.spacing.xs }}>Auto</Text>
-              ) : (
+        {schedule.startTime !== null && (
+          <View style={s.rowDetails}>
+            <View style={s.rowDetailPill}>
+              {isValidElement(modeIcon)
+                ? cloneElement(modeIcon as ReactElement<{ size?: number }>, {
+                    size: 14,
+                  })
+                : null}
+              <Text
+                style={{ color: theme.text, fontWeight: "600", fontSize: 13 }}
+              >
+                {schedule.temperature} °C
+              </Text>
+            </View>
+            <View style={s.rowDetailPill}>
+              <View style={s.rowDetailInline}>
                 <View style={s.rowDetailIconFrame}>
-                  <MaterialCommunityIcons
+                  <Fan size={16} color={theme.accentGlow} />
+                </View>
+
+                {schedule.fanSpeed === undefined ||
+                schedule.fanSpeed === "auto" ? (
+                  <Text
+                    style={{ ...s.rowDetailText, marginLeft: theme.spacing.xs }}
+                  >
+                    Auto
+                  </Text>
+                ) : (
+                  <View style={s.rowDetailIconFrame}>
+                    <MaterialCommunityIcons
+                      color={theme.accent}
+                      name={`numeric-${schedule.fanSpeed}`}
+                      size={20}
+                      style={s.rowDetailNumericIcon}
+                    />
+                  </View>
+                )}
+              </View>
+            </View>
+            <View style={s.rowDetailPill}>
+              <View
+                style={{
+                  transform: [{ rotate: "-63.5deg" }, { translateX: 1 }],
+                }}
+              >
+                <DraftingCompass color={theme.accentGlow} size={16} />
+              </View>
+              {VerticalAirflowIcon ? (
+                <View
+                  style={{
+                    transform: [
+                      {
+                        rotate: `${verticalAirflowOption?.iconRotation ?? 0}deg`,
+                      },
+                    ],
+                  }}
+                >
+                  <VerticalAirflowIcon
                     color={theme.accent}
-                    name={`numeric-${schedule.fanSpeed}`}
-                    size={20}
-                    style={s.rowDetailNumericIcon}
+                    size={16}
+                    strokeWidth={2.2}
                   />
                 </View>
+              ) : (
+                <Text style={s.rowDetailText}>Auto</Text>
               )}
             </View>
-          </View>
-          <View style={s.rowDetailPill}>
-            <View style={{
-              transform: [
-                { rotate: "-63.5deg" },
-                { translateX: 1 }
-              ]
-            }}>
-              <DraftingCompass color={theme.accentGlow} size={16} />
-            </View>
-            {VerticalAirflowIcon ? (
-              <View
-                style={{
-                  transform: [
-                    { rotate: `${verticalAirflowOption?.iconRotation ?? 0}deg` },
-                  ],
-                }}
-              >
-                <VerticalAirflowIcon
-                  color={theme.accent}
-                  size={16}
-                  strokeWidth={2.2}
-                />
-              </View>
-            ) : (
-              <Text style={s.rowDetailText}>Auto</Text>
-            )}
-          </View>
 
-          <View style={s.rowDetailPill}>
-            <View style={{ transform: [{ rotate: "0deg" }] }}>
-              <DraftingCompass size={16} color={theme.accentGlow} />
-            </View>
-            {HorizontalAirflowIcon ? (
-              <View
-                style={{
-                  transform: [
-                    {
-                      rotate: `${horizontalAirflowOption?.iconRotation ?? 0}deg`,
-                    },
-                  ],
-                }}
-              >
-                <HorizontalAirflowIcon
-                  color={theme.accent}
-                  size={16}
-                  strokeWidth={2.2}
-                />
-              </View>
-            ) : (
-              <Text style={s.rowDetailText}>Auto</Text>
-            )}
-          </View>
-
-
-          {schedule.powerful ?
             <View style={s.rowDetailPill}>
-              <Zap size={16} color={theme.powerfulAccent} />
-            </View> :
-            schedule.quiet ?
+              <View style={{ transform: [{ rotate: "0deg" }] }}>
+                <DraftingCompass size={16} color={theme.accentGlow} />
+              </View>
+              {HorizontalAirflowIcon ? (
+                <View
+                  style={{
+                    transform: [
+                      {
+                        rotate: `${horizontalAirflowOption?.iconRotation ?? 0}deg`,
+                      },
+                    ],
+                  }}
+                >
+                  <HorizontalAirflowIcon
+                    color={theme.accent}
+                    size={16}
+                    strokeWidth={2.2}
+                  />
+                </View>
+              ) : (
+                <Text style={s.rowDetailText}>Auto</Text>
+              )}
+            </View>
+
+            {schedule.powerful ? (
+              <View style={s.rowDetailPill}>
+                <Zap size={16} color={theme.powerfulAccent} />
+              </View>
+            ) : schedule.quiet ? (
               <View style={s.rowDetailPill}>
                 <Moon size={16} color={theme.quietAccent} />
-              </View> :
-              null
-          }
-
-        </View>
+              </View>
+            ) : null}
+          </View>
+        )}
       </View>
       <Switch
         value={schedule.enabled}
@@ -359,426 +382,427 @@ function ScheduleRow({ schedule, onToggleEnabled }: ScheduleRowProps) {
 
 // ─── Styles ──────────────────────────────────────────────────────────────────
 
-const createStyles = (theme: Theme) => StyleSheet.create({
-  // shared sheet chrome
-  modalRoot: {
-    flex: 1,
-  },
-  backdrop: {
-    backgroundColor: theme.overlays.modalBackdrop,
-  },
-  kavFill: {
-    flex: 1,
-    justifyContent: "flex-end",
-  },
-  sheet: {
-    backgroundColor: theme.paperBackground,
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    height: "90%",
-    maxHeight: "92%",
-    shadowColor: theme.shadows.color,
-    shadowOffset: { width: 0, height: -2 },
-    shadowOpacity: 0.12,
-    shadowRadius: 12,
-    elevation: 16,
-  },
-  safeArea: {
-    flex: 1,
-  },
-  handleArea: {
-    alignItems: "center",
-    height: 28,
-    justifyContent: "center",
-  },
-  handle: {
-    backgroundColor: theme.border,
-    borderRadius: 3,
-    height: 4,
-    width: 40,
-  },
-  contentOuter: {
-    flex: 1,
-  },
-  scroll: {
-    flex: 1,
-  },
-  scrollContent: {
-    paddingBottom: 24,
-    paddingHorizontal: 20,
-    gap: theme.spacing.lg,
-  },
-  footer: {
-    borderTopColor: theme.border,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    padding: 16,
-  },
+const createStyles = (theme: Theme) =>
+  StyleSheet.create({
+    // shared sheet chrome
+    modalRoot: {
+      flex: 1,
+    },
+    backdrop: {
+      backgroundColor: theme.overlays.modalBackdrop,
+    },
+    kavFill: {
+      flex: 1,
+      justifyContent: "flex-end",
+    },
+    sheet: {
+      backgroundColor: theme.paperBackground,
+      borderTopLeftRadius: 20,
+      borderTopRightRadius: 20,
+      height: "90%",
+      maxHeight: "92%",
+      shadowColor: theme.shadows.color,
+      shadowOffset: { width: 0, height: -2 },
+      shadowOpacity: 0.12,
+      shadowRadius: 12,
+      elevation: 16,
+    },
+    safeArea: {
+      flex: 1,
+    },
+    handleArea: {
+      alignItems: "center",
+      height: 28,
+      justifyContent: "center",
+    },
+    handle: {
+      backgroundColor: theme.border,
+      borderRadius: 3,
+      height: 4,
+      width: 40,
+    },
+    contentOuter: {
+      flex: 1,
+    },
+    scroll: {
+      flex: 1,
+    },
+    scrollContent: {
+      paddingBottom: 24,
+      paddingHorizontal: 20,
+      gap: theme.spacing.lg,
+    },
+    footer: {
+      borderTopColor: theme.border,
+      borderTopWidth: StyleSheet.hairlineWidth,
+      padding: 16,
+    },
 
-  // list sheet
-  listHeader: {
-    alignItems: "center",
-    flexDirection: "row",
-    justifyContent: "space-between",
-    marginBottom: 16,
-    marginTop: 4,
-  },
-  sheetTitle: {
-    color: theme.text,
-    fontSize: 18,
-    fontWeight: "600",
-  },
-  addButton: {
-    alignItems: "center",
-    height: 36,
-    justifyContent: "center",
-    width: 36,
-  },
-  emptyText: {
-    color: theme.textSecondary,
-    fontSize: 14,
-    textAlign: "center",
-    paddingVertical: 32,
-  },
+    // list sheet
+    listHeader: {
+      alignItems: "center",
+      flexDirection: "row",
+      justifyContent: "space-between",
+      marginBottom: 16,
+      marginTop: 4,
+    },
+    sheetTitle: {
+      color: theme.text,
+      fontSize: 18,
+      fontWeight: "600",
+    },
+    addButton: {
+      alignItems: "center",
+      height: 36,
+      justifyContent: "center",
+      width: 36,
+    },
+    emptyText: {
+      color: theme.textSecondary,
+      fontSize: 14,
+      textAlign: "center",
+      paddingVertical: 32,
+    },
 
-  // schedule row
-  scheduleSwipeItem: {
-    borderRadius: 12,
-  },
-  row: {
-    alignItems: "center",
-    backgroundColor: theme.surfaceLow,
-    borderRadius: 12,
-    borderWidth: 1,
-    flexDirection: "row",
-    justifyContent: "space-between",
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-  },
-  rowLeft: {
-    flex: 1,
-    gap: theme.spacing.lg,
-    minWidth: 0,
-  },
-  rowTimes: {
-    alignItems: "center",
-    flexDirection: "row",
-    gap: 6,
-  },
-  rowTimeText: {
-    color: theme.text,
-    fontSize: 15,
-    fontWeight: "500",
-  },
-  rowTimeTextMuted: {
-    color: theme.textSecondary,
-  },
-  rowTimeLabel: {
-    color: theme.textSecondary,
-    fontSize: 12,
-    fontWeight: "600",
-  },
-  dayPills: {
-    flexDirection: "row",
-    gap: 4,
-    alignItems: 'center'
-  },
-  dayPill: {
-    alignItems: "center",
-    borderRadius: 4,
-    height: 22,
-    justifyContent: "center",
-    width: 22,
-  },
-  dayPillActive: {
-    backgroundColor: theme.accent,
-  },
-  dayPillText: {
-    color: theme.textSecondary,
-    fontSize: 11,
-    fontWeight: "500",
-  },
-  dayPillTextActive: {
-    color: theme.textHighlight,
-  },
-  rowDetails: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 6,
-  },
-  rowDetailPill: {
-    alignItems: "center",
-    backgroundColor: theme.paperBackground,
-    borderColor: theme.border,
-    borderRadius: 8,
-    borderWidth: StyleSheet.hairlineWidth,
-    flexDirection: "row",
-    gap: 4,
-    justifyContent: "center",
-    minHeight: 30,
-    paddingHorizontal: theme.spacing.sm,
-    paddingVertical: 5,
-  },
-  rowDetailLabel: {
-    color: theme.textSecondary,
-    fontSize: 11,
-    fontWeight: "700",
-  },
-  rowDetailText: {
-    color: theme.text,
-    fontSize: 11,
-    fontWeight: "700",
-    lineHeight: 14,
-  },
-  rowDetailInline: {
-    alignItems: "center",
-    flexDirection: "row",
-    justifyContent: "center",
-  },
-  rowDetailIconFrame: {
-    alignItems: "center",
-    height: 20,
-    justifyContent: "center",
-    width: 20,
-  },
-  rowDetailNumericIcon: {
-    height: 20,
-    lineHeight: 20,
-    textAlign: "center",
-  },
+    // schedule row
+    scheduleSwipeItem: {
+      borderRadius: 12,
+    },
+    row: {
+      alignItems: "center",
+      backgroundColor: theme.surfaceLow,
+      borderRadius: 12,
+      borderWidth: 1,
+      flexDirection: "row",
+      justifyContent: "space-between",
+      paddingHorizontal: 14,
+      paddingVertical: 12,
+    },
+    rowLeft: {
+      flex: 1,
+      gap: theme.spacing.lg,
+      minWidth: 0,
+    },
+    rowTimes: {
+      alignItems: "center",
+      flexDirection: "row",
+      gap: 6,
+    },
+    rowTimeText: {
+      color: theme.text,
+      fontSize: 15,
+      fontWeight: "500",
+    },
+    rowTimeTextMuted: {
+      color: theme.textSecondary,
+    },
+    rowTimeLabel: {
+      color: theme.textSecondary,
+      fontSize: 12,
+      fontWeight: "600",
+    },
+    dayPills: {
+      flexDirection: "row",
+      gap: 6,
+      alignItems: "center",
+    },
+    dayPill: {
+      alignItems: "center",
+      borderRadius: 4,
+      height: 22,
+      justifyContent: "center",
+      width: 22,
+    },
+    dayPillActive: {
+      backgroundColor: theme.accent,
+    },
+    dayPillText: {
+      color: theme.textSecondary,
+      fontSize: 11,
+      fontWeight: "500",
+    },
+    dayPillTextActive: {
+      color: theme.textHighlight,
+    },
+    rowDetails: {
+      flexDirection: "row",
+      flexWrap: "wrap",
+      gap: 6,
+    },
+    rowDetailPill: {
+      alignItems: "center",
+      backgroundColor: theme.paperBackground,
+      borderColor: theme.border,
+      borderRadius: 8,
+      borderWidth: StyleSheet.hairlineWidth,
+      flexDirection: "row",
+      gap: 4,
+      justifyContent: "center",
+      minHeight: 30,
+      paddingHorizontal: theme.spacing.sm,
+      paddingVertical: 5,
+    },
+    rowDetailLabel: {
+      color: theme.textSecondary,
+      fontSize: 11,
+      fontWeight: "700",
+    },
+    rowDetailText: {
+      color: theme.text,
+      fontSize: 11,
+      fontWeight: "700",
+      lineHeight: 14,
+    },
+    rowDetailInline: {
+      alignItems: "center",
+      flexDirection: "row",
+      justifyContent: "center",
+    },
+    rowDetailIconFrame: {
+      alignItems: "center",
+      height: 20,
+      justifyContent: "center",
+      width: 20,
+    },
+    rowDetailNumericIcon: {
+      height: 20,
+      lineHeight: 20,
+      textAlign: "center",
+    },
 
-  // editor sheet
-  editorTitle: {
-    color: theme.text,
-    fontSize: 18,
-    fontWeight: "600",
-  },
-  timeRow: {
-    alignItems: "center",
-    flexDirection: "row",
-    gap: 12,
-    justifyContent: "center",
-  },
-  timeButton: {
-    alignItems: "center",
-    backgroundColor: theme.surfaceLow,
-    borderColor: "transparent",
-    borderWidth: 1,
-    borderRadius: 12,
-    flex: 1,
-    paddingVertical: 12,
-  },
-  timeButtonActive: {
-    backgroundColor: theme.accentMuted,
-    borderColor: theme.accentSolid,
-  },
-  timeLabel: {
-    color: theme.textSecondary,
-    fontSize: 12,
-    marginBottom: 4,
-  },
-  timeLabelActive: {
-    color: theme.accentStrong,
-  },
-  timeLabelOptional: {
-    color: theme.textSecondary,
-    fontSize: 11,
-    fontWeight: "500",
-  },
-  timeValue: {
-    color: theme.text,
-    fontSize: 18,
-    fontWeight: "600",
-  },
-  timeValueActive: {
-    color: theme.accentStrong,
-  },
-  timeValueMuted: {
-    color: theme.textSecondary,
-  },
-  timePickerWrapper: {
-    alignItems: "center",
-    marginTop: 8,
-  },
-  clearTimeRow: {
-    alignItems: "center",
-    flexDirection: "row",
-    justifyContent: "space-between",
-    marginTop: 10,
-  },
-  clearEndButton: {
-    alignItems: "center",
-    flexDirection: "row",
-    gap: 6,
-    paddingHorizontal: 8,
-    paddingVertical: 6,
-  },
-  clearEndText: {
-    color: theme.textSecondary,
-    fontSize: 13,
-    fontWeight: "600",
-  },
-  timePicker: {
-    height: 160,
-    width: "100%",
-  },
-  daysRow: {
-    flexDirection: "row",
-    gap: 6,
-    flexWrap: "wrap",
-  },
-  dayToggle: {
-    alignItems: "center",
-    backgroundColor: theme.surfaceLow,
-    borderRadius: 8,
-    flex: 1,
-    minWidth: 40,
-    paddingVertical: 8,
-  },
-  dayToggleActive: {
-    backgroundColor: theme.accent,
-  },
-  dayToggleText: {
-    color: theme.textSecondary,
-    fontSize: 12,
-    fontWeight: "500",
-  },
-  dayToggleTextActive: {
-    color: "#fff",
-  },
-  dayGroupRow: {
-    flexDirection: "row",
-    gap: theme.spacing.sm,
-    marginTop: theme.spacing.sm,
-  },
-  dayGroupButton: {
-    alignItems: "center",
-    backgroundColor: theme.surfaceLow,
-    borderColor: theme.accentMuted,
-    borderRadius: theme.radiusRound,
-    borderWidth: 1,
-    flex: 1,
-    justifyContent: "center",
-    minHeight: 40,
-    paddingHorizontal: 6,
-    paddingVertical: 8,
-  },
-  dayGroupButtonSelected: {
-    borderColor: theme.accentSolid,
-  },
-  dayGroupText: {
-    color: theme.textSecondary,
-    fontSize: 12,
-    fontWeight: "800",
-    textAlign: "center",
-  },
-  dayGroupTextSelected: {
-    color: theme.accentStrong,
-  },
-  repeatButtonRow: {
-    flexDirection: "row",
-    gap: theme.spacing.sm,
-  },
-  repeatButton: {
-    alignItems: "center",
-    backgroundColor: theme.surfaceLow,
-    borderColor: theme.accentMuted,
-    borderRadius: theme.radiusRound,
-    borderWidth: 1,
-    flex: 1,
-    justifyContent: "center",
-    minHeight: 44,
-    paddingHorizontal: 8,
-    paddingVertical: 12,
-  },
-  repeatButtonSelected: {
-    borderColor: theme.accentSolid,
-  },
-  repeatButtonText: {
-    color: theme.textSecondary,
-    fontSize: 13,
-    fontWeight: "800",
-    letterSpacing: 0,
-    textAlign: "center",
-  },
-  repeatButtonTextSelected: {
-    color: theme.accentStrong,
-  },
-  modePillRow: {
-    flexDirection: "row",
-    gap: theme.spacing.sm,
-  },
-  modePill: {
-    alignItems: "center",
-    backgroundColor: "rgba(255, 255, 255, 0.04)",
-    borderColor: theme.accentMuted,
-    borderRadius: theme.radiusRound,
-    borderWidth: 1,
-    flex: 1,
-    flexDirection: "row",
-    gap: theme.spacing.xs,
-    justifyContent: "center",
-    paddingVertical: 12,
-  },
-  modePillSelected: {
-    borderColor: theme.accentSolid,
-  },
-  modePillText: {
-    color: theme.textSecondary,
-    fontSize: 14,
-    fontWeight: "800",
-    letterSpacing: 0,
-  },
-  modePillTextSelected: {
-    color: theme.accentStrong,
-  },
-  temperatureHeader: {
-    alignItems: "flex-start",
-    flexDirection: "row",
-    gap: 12,
-    justifyContent: "space-between",
-  },
-  temperatureTitleGroup: {
-    flex: 1,
-    gap: 4,
-    minWidth: 0,
-    flexDirection: 'row',
-  },
-  temperatureTitle: {
-    color: theme.text,
-    fontSize: 17,
-    fontWeight: "800",
-  },
-  temperatureSubtitle: {
-    color: theme.textSecondary,
-    fontSize: 14,
-    fontWeight: "500",
-  },
-  temperatureActions: {
-    alignItems: "center",
-    flexDirection: "row",
-    gap: 8,
-  },
-  featureButton: {
-    alignItems: "center",
-    borderRadius: 16,
-    borderWidth: 1,
-    height: 46,
-    justifyContent: "center",
-    width: 46,
-  },
-  featureButtonOff: {
-    backgroundColor: theme.controlBackground,
-    borderColor: theme.border,
-  },
-  quietButtonOn: {
-    backgroundColor: theme.quietAccentMuted,
-    borderColor: theme.quietAccent,
-  },
-  powerfulButtonOn: {
-    backgroundColor: theme.powerfulAccentMuted,
-    borderColor: theme.powerfulAccent,
-  },
-});
+    // editor sheet
+    editorTitle: {
+      color: theme.text,
+      fontSize: 18,
+      fontWeight: "600",
+    },
+    timeRow: {
+      alignItems: "center",
+      flexDirection: "row",
+      gap: 12,
+      justifyContent: "center",
+    },
+    timeButton: {
+      alignItems: "center",
+      backgroundColor: theme.surfaceLow,
+      borderColor: "transparent",
+      borderWidth: 1,
+      borderRadius: 12,
+      flex: 1,
+      paddingVertical: 12,
+    },
+    timeButtonActive: {
+      backgroundColor: theme.accentMuted,
+      borderColor: theme.accentSolid,
+    },
+    timeLabel: {
+      color: theme.textSecondary,
+      fontSize: 12,
+      marginBottom: 4,
+    },
+    timeLabelActive: {
+      color: theme.accentStrong,
+    },
+    timeLabelOptional: {
+      color: theme.textSecondary,
+      fontSize: 11,
+      fontWeight: "500",
+    },
+    timeValue: {
+      color: theme.text,
+      fontSize: 18,
+      fontWeight: "600",
+    },
+    timeValueActive: {
+      color: theme.accentStrong,
+    },
+    timeValueMuted: {
+      color: theme.textSecondary,
+    },
+    timePickerWrapper: {
+      alignItems: "center",
+      marginTop: 8,
+    },
+    clearTimeRow: {
+      alignItems: "center",
+      flexDirection: "row",
+      justifyContent: "space-between",
+      marginTop: 10,
+    },
+    clearEndButton: {
+      alignItems: "center",
+      flexDirection: "row",
+      gap: 6,
+      paddingHorizontal: 8,
+      paddingVertical: 6,
+    },
+    clearEndText: {
+      color: theme.textSecondary,
+      fontSize: 13,
+      fontWeight: "600",
+    },
+    timePicker: {
+      height: 160,
+      width: "100%",
+    },
+    daysRow: {
+      flexDirection: "row",
+      gap: 6,
+      flexWrap: "wrap",
+    },
+    dayToggle: {
+      alignItems: "center",
+      backgroundColor: theme.surfaceLow,
+      borderRadius: 8,
+      flex: 1,
+      minWidth: 40,
+      paddingVertical: 8,
+    },
+    dayToggleActive: {
+      backgroundColor: theme.accent,
+    },
+    dayToggleText: {
+      color: theme.textSecondary,
+      fontSize: 12,
+      fontWeight: "500",
+    },
+    dayToggleTextActive: {
+      color: "#fff",
+    },
+    dayGroupRow: {
+      flexDirection: "row",
+      gap: theme.spacing.sm,
+      marginTop: theme.spacing.sm,
+    },
+    dayGroupButton: {
+      alignItems: "center",
+      backgroundColor: theme.surfaceLow,
+      borderColor: theme.accentMuted,
+      borderRadius: theme.radiusRound,
+      borderWidth: 1,
+      flex: 1,
+      justifyContent: "center",
+      minHeight: 40,
+      paddingHorizontal: 6,
+      paddingVertical: 8,
+    },
+    dayGroupButtonSelected: {
+      borderColor: theme.accentSolid,
+    },
+    dayGroupText: {
+      color: theme.textSecondary,
+      fontSize: 12,
+      fontWeight: "800",
+      textAlign: "center",
+    },
+    dayGroupTextSelected: {
+      color: theme.accentStrong,
+    },
+    repeatButtonRow: {
+      flexDirection: "row",
+      gap: theme.spacing.sm,
+    },
+    repeatButton: {
+      alignItems: "center",
+      backgroundColor: theme.surfaceLow,
+      borderColor: theme.accentMuted,
+      borderRadius: theme.radiusRound,
+      borderWidth: 1,
+      flex: 1,
+      justifyContent: "center",
+      minHeight: 44,
+      paddingHorizontal: 8,
+      paddingVertical: 12,
+    },
+    repeatButtonSelected: {
+      borderColor: theme.accentSolid,
+    },
+    repeatButtonText: {
+      color: theme.textSecondary,
+      fontSize: 13,
+      fontWeight: "800",
+      letterSpacing: 0,
+      textAlign: "center",
+    },
+    repeatButtonTextSelected: {
+      color: theme.accentStrong,
+    },
+    modePillRow: {
+      flexDirection: "row",
+      gap: theme.spacing.sm,
+    },
+    modePill: {
+      alignItems: "center",
+      backgroundColor: "rgba(255, 255, 255, 0.04)",
+      borderColor: theme.accentMuted,
+      borderRadius: theme.radiusRound,
+      borderWidth: 1,
+      flex: 1,
+      flexDirection: "row",
+      gap: theme.spacing.xs,
+      justifyContent: "center",
+      paddingVertical: 12,
+    },
+    modePillSelected: {
+      borderColor: theme.accentSolid,
+    },
+    modePillText: {
+      color: theme.textSecondary,
+      fontSize: 14,
+      fontWeight: "800",
+      letterSpacing: 0,
+    },
+    modePillTextSelected: {
+      color: theme.accentStrong,
+    },
+    temperatureHeader: {
+      alignItems: "flex-start",
+      flexDirection: "row",
+      gap: 12,
+      justifyContent: "space-between",
+    },
+    temperatureTitleGroup: {
+      flex: 1,
+      gap: 4,
+      minWidth: 0,
+      flexDirection: "row",
+    },
+    temperatureTitle: {
+      color: theme.text,
+      fontSize: 17,
+      fontWeight: "800",
+    },
+    temperatureSubtitle: {
+      color: theme.textSecondary,
+      fontSize: 14,
+      fontWeight: "500",
+    },
+    temperatureActions: {
+      alignItems: "center",
+      flexDirection: "row",
+      gap: 8,
+    },
+    featureButton: {
+      alignItems: "center",
+      borderRadius: 16,
+      borderWidth: 1,
+      height: 46,
+      justifyContent: "center",
+      width: 46,
+    },
+    featureButtonOff: {
+      backgroundColor: theme.controlBackground,
+      borderColor: theme.border,
+    },
+    quietButtonOn: {
+      backgroundColor: theme.quietAccentMuted,
+      borderColor: theme.quietAccent,
+    },
+    powerfulButtonOn: {
+      backgroundColor: theme.powerfulAccentMuted,
+      borderColor: theme.powerfulAccent,
+    },
+  });
 
 // ─── AcScheduleSheet (list sheet) ────────────────────────────────────────────
 
@@ -844,10 +868,7 @@ export function AcScheduleSheet({
     dismissRef.current = dismiss;
   }, [dismiss]);
 
-  const { scrollAtTop, handlePan } = useSheetDismiss(
-    translateY,
-    dismissRef,
-  );
+  const { scrollAtTop, handlePan } = useSheetDismiss(translateY, dismissRef);
 
   const handleSave = useCallback(
     async (draft: AcSchedule) => {
@@ -1138,10 +1159,7 @@ function ScheduleEditorSheet({
   }, []);
 
   // Derived from the weekday toggles, so manual selection keeps this in sync.
-  const activeDayGroup = useMemo(
-    () => matchDayGroup(draft.days),
-    [draft.days],
-  );
+  const activeDayGroup = useMemo(() => matchDayGroup(draft.days), [draft.days]);
 
   const hasAnyTime = draft.startTime !== null || draft.endTime !== null;
 
@@ -1278,41 +1296,34 @@ function ScheduleEditorSheet({
                     </View>
 
                     <View style={s.clearTimeRow}>
-                      {draft.startTime !== null && draft.endTime !== null ? (
-                        <TouchableOpacity
-                          activeOpacity={0.72}
-                          accessibilityLabel="Clear turn on time"
-                          accessibilityRole="button"
-                          onPress={handleClearStartTime}
-                          style={s.clearEndButton}
-                        >
-                          <X
-                            color={theme.textSecondary}
-                            size={15}
-                            strokeWidth={2.4}
-                          />
-                          <Text style={s.clearEndText}>Clear turn on</Text>
-                        </TouchableOpacity>
-                      ) : (
-                        <View />
-                      )}
-
-                      {draft.startTime !== null && draft.endTime !== null && (
-                        <TouchableOpacity
-                          activeOpacity={0.72}
-                          accessibilityLabel="Clear turn off time"
-                          accessibilityRole="button"
-                          onPress={handleClearEndTime}
-                          style={s.clearEndButton}
-                        >
-                          <X
-                            color={theme.textSecondary}
-                            size={15}
-                            strokeWidth={2.4}
-                          />
-                          <Text style={s.clearEndText}>Clear turn off</Text>
-                        </TouchableOpacity>
-                      )}
+                      <TouchableOpacity
+                        activeOpacity={0.72}
+                        accessibilityLabel="Clear turn on time"
+                        accessibilityRole="button"
+                        onPress={handleClearStartTime}
+                        style={s.clearEndButton}
+                      >
+                        <X
+                          color={theme.textSecondary}
+                          size={15}
+                          strokeWidth={2.4}
+                        />
+                        <Text style={s.clearEndText}>Clear turn on</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        activeOpacity={0.72}
+                        accessibilityLabel="Clear turn off time"
+                        accessibilityRole="button"
+                        onPress={handleClearEndTime}
+                        style={s.clearEndButton}
+                      >
+                        <X
+                          color={theme.textSecondary}
+                          size={15}
+                          strokeWidth={2.4}
+                        />
+                        <Text style={s.clearEndText}>Clear turn off</Text>
+                      </TouchableOpacity>
                     </View>
 
                     <View style={s.timePickerWrapper}>
@@ -1342,7 +1353,8 @@ function ScheduleEditorSheet({
                       <View style={s.repeatButtonRow}>
                         {repeatOptions.map((option) => {
                           const selected =
-                            (draft.repeatFrequency ?? "one-time") === option.value;
+                            (draft.repeatFrequency ?? "one-time") ===
+                            option.value;
 
                           return (
                             <TouchableOpacity
@@ -1371,7 +1383,12 @@ function ScheduleEditorSheet({
                         })}
                       </View>
 
-                      <View style={{ ...s.temperatureTitleGroup, marginTop: theme.spacing.sm }}>
+                      <View
+                        style={{
+                          ...s.temperatureTitleGroup,
+                          marginTop: theme.spacing.sm,
+                        }}
+                      >
                         <CalendarFold color={theme.text} size={18} />
                         <Text style={s.temperatureTitle}>On</Text>
                       </View>
@@ -1445,7 +1462,8 @@ function ScheduleEditorSheet({
                               accessibilityState={{ selected }}
                               key={modeOption.id}
                               onPress={() => {
-                                const nextRange = TEMPERATURE_RANGES[modeOption.id];
+                                const nextRange =
+                                  TEMPERATURE_RANGES[modeOption.id];
 
                                 setDraft((prev) => ({
                                   ...prev,
@@ -1479,8 +1497,19 @@ function ScheduleEditorSheet({
                     {/* ── Temperature ── */}
                     <Section>
                       <View style={s.temperatureHeader}>
-                        <View style={{ ...s.temperatureTitleGroup, flexDirection: 'column' }}>
-                          <View style={{ display: 'flex', flexDirection: 'row', gap: 4 }}>
+                        <View
+                          style={{
+                            ...s.temperatureTitleGroup,
+                            flexDirection: "column",
+                          }}
+                        >
+                          <View
+                            style={{
+                              display: "flex",
+                              flexDirection: "row",
+                              gap: 4,
+                            }}
+                          >
                             <Thermometer color={theme.text} size={18} />
                             <Text style={s.temperatureTitle}>Temperature</Text>
                           </View>
@@ -1580,7 +1609,7 @@ function ScheduleEditorSheet({
                         }}
                         speed={
                           draft.fanSpeed === undefined ||
-                            draft.fanSpeed === "auto"
+                          draft.fanSpeed === "auto"
                             ? (3 as FanSpeed)
                             : draft.fanSpeed
                         }

@@ -1,4 +1,4 @@
-import { ChevronLeft, Wifi, WifiOff } from "lucide-react-native";
+import { ChevronLeft, Plus, Wifi, WifiOff } from "lucide-react-native";
 import { StyleSheet, Text, View, ScrollView, Alert } from "react-native";
 import { useMemo } from "react";
 import { useControllers } from "../store/controllers";
@@ -16,7 +16,7 @@ const controllerStatusText = (
   online: boolean,
 ) => {
   if (status === "connecting") {
-    return "Syncing";
+    return "Offline";
   }
 
   if (status === "unknown" || status === undefined) {
@@ -72,6 +72,15 @@ export function ControllersScreen({ navigation }: ControllersScreenProps) {
             }}
           >
             <ChevronLeft color={theme.accent} size={26} strokeWidth={2.35} />
+          </HeaderIconButton>
+        }
+        rightAction={
+          <HeaderIconButton
+            accessibilityLabel="Add controller"
+            framed
+            onPress={() => navigation.navigate("PairController")}
+          >
+            <Plus color={theme.accent} size={24} strokeWidth={2.6} />
           </HeaderIconButton>
         }
         title="Controllers"
