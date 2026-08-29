@@ -1,7 +1,6 @@
 import { BlurView } from "expo-blur";
-import { ArrowLeft, ChevronLeft } from "lucide-react-native";
-import type { ReactNode } from "react";
-import { useEffect, useRef } from "react";
+import { ChevronLeft } from "lucide-react-native";
+import { useEffect, useMemo, useRef, type ReactNode } from "react";
 import {
   Animated,
   StyleSheet,
@@ -10,7 +9,7 @@ import {
   View,
 } from "react-native";
 
-import { theme } from "../theme/theme";
+import { type Theme, useTheme } from "../theme/theme";
 
 type ACHeaderProps = {
   eyebrow?: string;
@@ -27,6 +26,8 @@ export function ACHeader({
   rightAccessory,
   title = "Air Conditioner",
 }: ACHeaderProps) {
+  const theme = useTheme();
+  const styles = useMemo(() => createStyles(theme), [theme]);
   const glassOpacity = useRef(new Animated.Value(isScrolled ? 1 : 0)).current;
 
   useEffect(() => {
@@ -76,16 +77,16 @@ export function ACHeader({
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (theme: Theme) => StyleSheet.create({
   headerWrap: {
     backgroundColor: "transparent",
-    paddingHorizontal: theme.spacing.xl,
     paddingTop: 2,
+    width: "100%",
     zIndex: 10,
   },
   headerWrapScrolled: {
     elevation: 10,
-    shadowColor: "#000000",
+    shadowColor: theme.shadows.color,
     shadowOffset: {
       height: 8,
       width: 0,
@@ -96,23 +97,22 @@ const styles = StyleSheet.create({
   container: {
     alignItems: "center",
     backgroundColor: "transparent",
-    borderRadius: theme.radiusLarge,
     flexDirection: "row",
     justifyContent: "space-between",
     minHeight: 60,
     overflow: "hidden",
-    paddingHorizontal: theme.spacing.sm,
+    paddingHorizontal: theme.spacing.lg,
+    width: "100%",
   },
   glassLayer: {
     ...StyleSheet.absoluteFillObject,
-    borderColor: theme.border,
-    borderRadius: theme.radiusLarge,
-    borderWidth: 1,
+    borderBottomColor: theme.border,
+    borderBottomWidth: 1,
     overflow: "hidden",
   },
   glassTint: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: "rgba(33, 22, 15, 0.12)",
+    backgroundColor: theme.overlays.glassTint,
   },
   topSeal: {
     backgroundColor: theme.accentSubtle,
@@ -161,7 +161,7 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontWeight: "800",
     letterSpacing: 0,
-    textShadowColor: "rgba(0, 0, 0, 0.32)",
+    textShadowColor: theme.overlays.timePickerBackdrop,
     textShadowOffset: {
       height: 1,
       width: 0,

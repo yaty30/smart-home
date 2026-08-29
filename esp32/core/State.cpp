@@ -7,11 +7,7 @@ AcState acState = {
   kPanasonicAcFanAuto,
   kPanasonicAcSwingVAuto,
   kPanasonicAcSwingHAuto,
-  false
-};
-
-DisplayState displayState = {
-  true,
+  false,
   false
 };
 
@@ -20,6 +16,19 @@ AcState pendingState = acState;
 unsigned long pendingIRQueuedAt = 0;
 bool isPaired = false;
 bool pairingMode = true;
+
+AcSchedule acSchedule = {
+  false,                    // valid
+  false,                    // enabled
+  "22:30",                  // startTime
+  "",                       // endTime
+  kPanasonicAcCool,         // mode
+  24,                       // temperature
+  false,                    // quiet
+  false,                    // powerful
+  kPanasonicAcSwingVAuto,   // swingVertical
+  kPanasonicAcSwingHAuto    // swingHorizontal
+};
 
 String jsonEscape(const String& value) {
   String escaped;
@@ -172,16 +181,8 @@ String acStateJson() {
   body += "\"swing\":\"" + swingVerticalString(acState.swingVertical) + "\",";
   body += "\"swingVertical\":\"" + swingVerticalString(acState.swingVertical) + "\",";
   body += "\"swingHorizontal\":\"" + swingHorizontalString(acState.swingHorizontal) + "\",";
-  body += "\"quiet\":" + boolString(acState.quiet);
-  body += "}";
-  return body;
-}
-
-String displayStateJson() {
-  String body = "{";
-  body += "\"screenOn\":" + boolString(displayState.screenOn) + ",";
-  body += "\"qrVisible\":" + boolString(displayState.qrVisible) + ",";
-  body += "\"pairingMode\":" + boolString(pairingMode);
+  body += "\"quiet\":" + boolString(acState.quiet) + ",";
+  body += "\"powerful\":" + boolString(acState.powerful);
   body += "}";
   return body;
 }
@@ -200,14 +201,14 @@ bool parsePower(const String& value, bool& power) {
   return false;
 }
 
-bool parseQuiet(const String& value, bool& quiet) {
-  if (value == "on" || value == "true") {
-    quiet = true;
+bool parseToggle(const String& value, bool& enabled) {
+  if (value == "on" || value == "true" || value == "1") {
+    enabled = true;
     return true;
   }
 
-  if (value == "off" || value == "false") {
-    quiet = false;
+  if (value == "off" || value == "false" || value == "0") {
+    enabled = false;
     return true;
   }
 

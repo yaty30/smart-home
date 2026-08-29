@@ -1,7 +1,6 @@
 #include "Pairing.h"
 
 #include "Config.h"
-#include "Display.h"
 #include "State.h"
 #include "StateManager.h"
 #include "WebSocketServer.h"
@@ -23,8 +22,17 @@ bool isAuthorizedBearer(const String& authorizationHeader) {
   return authorizationHeader == expected;
 }
 
+String controllerIdFromIP(const String& ip) {
+  String controllerId = "ctrl-";
+  controllerId += ip;
+  controllerId.replace(".", "-");
+  return controllerId;
+}
+
 void initPairing() {
   pinMode(BOOT_BUTTON_PIN, INPUT_PULLUP);
+  Serial.printf("Hold BOOT for %lu ms while running to reset pairing\n",
+                PAIRING_BUTTON_HOLD_MS);
 }
 
 void enterPairingMode() {
@@ -34,7 +42,6 @@ void enterPairingMode() {
 
   pairingMode = true;
   Serial.println("Pairing mode enabled");
-  renderDisplayState();
   broadcastState();
 }
 
@@ -55,22 +62,19 @@ void handlePairingButton() {
 
   if (!bootButtonHoldHandled && isPaired && millis() - bootButtonPressedAt >= PAIRING_BUTTON_HOLD_MS) {
     bootButtonHoldHandled = true;
-    enterPairingMode();
+    Serial.println("BOOT long-hold detected; resetting pairing");
+    resetPairing();
   }
 }
 
 void completePairing() {
   applyPairingState(true);
   pairingMode = false;
-  DisplayState nextDisplayState = displayState;
-  nextDisplayState.qrVisible = false;
-  applyDisplayState(nextDisplayState);
   Serial.println("Pairing complete");
 }
 
 void resetPairing() {
   applyPairingState(false);
   pairingMode = true;
-  renderDisplayState();
-  broadcastState();
+  Serial.println("Pairing reset");
 }

@@ -4,6 +4,7 @@
 
 bool isAuthorizedToken(const String& token);
 bool isAuthorizedBearer(const String& authorizationHeader);
+String controllerIdFromIP(const String& ip);
 void initPairing();
 void handlePairingButton();
 void enterPairingMode();
