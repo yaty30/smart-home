@@ -138,7 +138,7 @@ export function AirConditionerScreen({
     deleteSchedule: handleDeleteSchedule,
     isScheduleLoading,
     saveSchedule: handleSaveSchedule,
-    schedule,
+    schedules,
     toggleScheduleEnabled: handleToggleScheduleEnabled,
   } = useAcSchedule();
   const { getRoomById } = useRooms();
@@ -705,7 +705,7 @@ export function AirConditionerScreen({
         onSaveSchedule={handleSaveSchedule}
         onDeleteSchedule={handleDeleteSchedule}
         onToggleScheduleEnabled={handleToggleScheduleEnabled}
-        schedule={schedule}
+        schedules={schedules}
         visible={isScheduleSheetVisible}
       />
 

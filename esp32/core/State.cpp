@@ -17,18 +17,8 @@ unsigned long pendingIRQueuedAt = 0;
 bool isPaired = false;
 bool pairingMode = true;
 
-AcSchedule acSchedule = {
-  false,                    // valid
-  false,                    // enabled
-  "22:30",                  // startTime
-  "",                       // endTime
-  kPanasonicAcCool,         // mode
-  24,                       // temperature
-  false,                    // quiet
-  false,                    // powerful
-  kPanasonicAcSwingVAuto,   // swingVertical
-  kPanasonicAcSwingHAuto    // swingHorizontal
-};
+AcSchedule acSchedules[MAX_AC_SCHEDULES] = {};
+uint8_t acScheduleCount = 0;
 
 String jsonEscape(const String& value) {
   String escaped;

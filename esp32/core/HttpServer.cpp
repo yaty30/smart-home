@@ -364,8 +364,60 @@ static bool isValidTimeString(const String& t) {
   return h >= 0 && h <= 23 && m >= 0 && m <= 59;
 }
 
+static String scheduleTypeString(uint8_t type) {
+  switch (type) {
+    case ScheduleTypeAutoOn:
+      return "auto_on";
+    case ScheduleTypeAutoOff:
+      return "auto_off";
+    case ScheduleTypeScheduleTime:
+    default:
+      return "schedule_time";
+  }
+}
+
+static bool parseScheduleType(const String& value, uint8_t& type) {
+  if (value.length() == 0 || value == "schedule_time") {
+    type = ScheduleTypeScheduleTime;
+    return true;
+  }
+  if (value == "auto_on") {
+    type = ScheduleTypeAutoOn;
+    return true;
+  }
+  if (value == "auto_off") {
+    type = ScheduleTypeAutoOff;
+    return true;
+  }
+  return false;
+}
+
+static bool isValidRepeatFrequency(const String& value) {
+  return value == "one-time" || value == "weekly" || value == "bi-weekly";
+}
+
+static void setAllScheduleDays(bool days[7]) {
+  for (uint8_t i = 0; i < 7; i++) {
+    days[i] = true;
+  }
+}
+
+static String scheduleDaysJson(const bool days[7]) {
+  String body = "[";
+  for (uint8_t i = 0; i < 7; i++) {
+    if (i > 0) {
+      body += ",";
+    }
+    body += boolString(days[i]);
+  }
+  body += "]";
+  return body;
+}
+
 static String scheduleJson(const AcSchedule& s) {
   String body = "{";
+  body += "\"id\":\"" + jsonEscape(String(s.id)) + "\",";
+  body += "\"type\":\"" + scheduleTypeString(s.type) + "\",";
   body += "\"enabled\":" + boolString(s.enabled) + ",";
   if (s.startTime[0] == '\0') {
     body += "\"startTime\":null,";
@@ -377,8 +429,12 @@ static String scheduleJson(const AcSchedule& s) {
   } else {
     body += "\"endTime\":\"" + String(s.endTime) + "\",";
   }
+  body += "\"days\":" + scheduleDaysJson(s.days) + ",";
+  body += "\"repeatEnabled\":" + boolString(s.repeatEnabled) + ",";
+  body += "\"repeatFrequency\":\"" + String(s.repeatFrequency) + "\",";
   body += "\"mode\":\"" + modeString(s.mode) + "\",";
   body += "\"temperature\":" + String(s.temperature) + ",";
+  body += "\"fan\":\"" + fanString(s.fan) + "\",";
   body += "\"quiet\":" + boolString(s.quiet) + ",";
   body += "\"powerful\":" + boolString(s.powerful) + ",";
   body += "\"swingVertical\":\"" + swingVerticalString(s.swingVertical) + "\",";
@@ -387,15 +443,27 @@ static String scheduleJson(const AcSchedule& s) {
   return body;
 }
 
+static String schedulesJson(const AcSchedule schedules[], uint8_t count) {
+  String body = "[";
+  for (uint8_t i = 0; i < count; i++) {
+    if (i > 0) {
+      body += ",";
+    }
+    body += scheduleJson(schedules[i]);
+  }
+  body += "]";
+  return body;
+}
+
 void handleGetSchedule() {
   logRequestContent("handleGetSchedule");
 
-  if (!acSchedule.valid) {
+  if (acScheduleCount == 0) {
     sendJson(404, "{\"success\":false,\"error\":\"No schedule set\"}");
     return;
   }
 
-  String body = "{\"success\":true,\"schedule\":" + scheduleJson(acSchedule) + "}";
+  String body = "{\"success\":true,\"schedules\":" + schedulesJson(acSchedules, acScheduleCount) + "}";
   sendJson(200, body);
 }
 
@@ -410,123 +478,295 @@ void handlePutSchedule() {
   // Minimal JSON field extraction — avoids pulling in ArduinoJson
   String body = server.arg("plain");
 
-  auto extractStr = [&](const char* key) -> String {
+  auto extractScheduleObjects = [&](String objects[], uint8_t& count) -> bool {
+    count = 0;
+    int schedulesPos = body.indexOf("\"schedules\"");
+    if (schedulesPos < 0) {
+      objects[count++] = body;
+      return true;
+    }
+
+    int arrayStart = body.indexOf('[', schedulesPos);
+    if (arrayStart < 0) return false;
+    int depth = 0;
+    int objectStart = -1;
+    bool inString = false;
+    bool escaping = false;
+
+    for (int i = arrayStart + 1; i < (int)body.length(); i++) {
+      char c = body[i];
+      if (inString) {
+        if (escaping) {
+          escaping = false;
+        } else if (c == '\\') {
+          escaping = true;
+        } else if (c == '"') {
+          inString = false;
+        }
+        continue;
+      }
+
+      if (c == '"') {
+        inString = true;
+        continue;
+      }
+      if (c == '{') {
+        if (depth == 0) {
+          objectStart = i;
+        }
+        depth++;
+      } else if (c == '}') {
+        depth--;
+        if (depth < 0) return false;
+        if (depth == 0 && objectStart >= 0) {
+          if (count >= MAX_AC_SCHEDULES) return false;
+          objects[count++] = body.substring(objectStart, i + 1);
+          objectStart = -1;
+        }
+      } else if (c == ']' && depth == 0) {
+        return true;
+      }
+    }
+
+    return false;
+  };
+
+  auto parseScheduleObject = [&](const String& scheduleBody, AcSchedule& schedule, uint8_t index) -> bool {
+    auto extractStr = [&](const char* key) -> String {
     String search = "\"" + String(key) + "\"";
-    int pos = body.indexOf(search);
+    int pos = scheduleBody.indexOf(search);
     if (pos < 0) return "";
-    int colon = body.indexOf(':', pos + search.length());
+    int colon = scheduleBody.indexOf(':', pos + search.length());
     if (colon < 0) return "";
     int quote1 = colon + 1;
-    while (quote1 < (int)body.length() && body[quote1] == ' ') quote1++;
-    if (quote1 >= (int)body.length() || body[quote1] != '"') return "";
-    int quote2 = body.indexOf('"', quote1 + 1);
+    while (quote1 < (int)scheduleBody.length() && scheduleBody[quote1] == ' ') quote1++;
+    if (quote1 >= (int)scheduleBody.length() || scheduleBody[quote1] != '"') return "";
+    int quote2 = scheduleBody.indexOf('"', quote1 + 1);
     if (quote2 < 0) return "";
-    return body.substring(quote1 + 1, quote2);
-  };
+    return scheduleBody.substring(quote1 + 1, quote2);
+    };
 
-  auto extractBool = [&](const char* key, bool fallback) -> bool {
+    auto extractBool = [&](const char* key, bool fallback) -> bool {
     String search = "\"" + String(key) + "\"";
-    int pos = body.indexOf(search);
+    int pos = scheduleBody.indexOf(search);
     if (pos < 0) return fallback;
-    int colon = body.indexOf(':', pos + search.length());
+    int colon = scheduleBody.indexOf(':', pos + search.length());
     if (colon < 0) return fallback;
     int start = colon + 1;
-    while (start < (int)body.length() && body[start] == ' ') start++;
-    if (body.substring(start, start + 4) == "true") return true;
-    if (body.substring(start, start + 5) == "false") return false;
+    while (start < (int)scheduleBody.length() && scheduleBody[start] == ' ') start++;
+    if (scheduleBody.substring(start, start + 4) == "true") return true;
+    if (scheduleBody.substring(start, start + 5) == "false") return false;
     return fallback;
-  };
+    };
 
-  auto extractInt = [&](const char* key, int fallback) -> int {
+    auto extractInt = [&](const char* key, int fallback) -> int {
     String search = "\"" + String(key) + "\"";
-    int pos = body.indexOf(search);
+    int pos = scheduleBody.indexOf(search);
     if (pos < 0) return fallback;
-    int colon = body.indexOf(':', pos + search.length());
+    int colon = scheduleBody.indexOf(':', pos + search.length());
     if (colon < 0) return fallback;
     int start = colon + 1;
-    while (start < (int)body.length() && body[start] == ' ') start++;
-    return body.substring(start).toInt();
+    while (start < (int)scheduleBody.length() && scheduleBody[start] == ' ') start++;
+    return scheduleBody.substring(start).toInt();
+    };
+
+    auto extractBoolArray7 = [&](const char* key, bool values[7]) -> bool {
+    String search = "\"" + String(key) + "\"";
+    int pos = scheduleBody.indexOf(search);
+    if (pos < 0) return false;
+    int colon = scheduleBody.indexOf(':', pos + search.length());
+    if (colon < 0) return false;
+    int start = scheduleBody.indexOf('[', colon);
+    if (start < 0) return false;
+    int end = scheduleBody.indexOf(']', start);
+    if (end < 0) return false;
+
+    int cursor = start + 1;
+    for (uint8_t i = 0; i < 7; i++) {
+      while (cursor < end && (scheduleBody[cursor] == ' ' || scheduleBody[cursor] == ',')) {
+        cursor++;
+      }
+      if (scheduleBody.substring(cursor, cursor + 4) == "true") {
+        values[i] = true;
+        cursor += 4;
+      } else if (scheduleBody.substring(cursor, cursor + 5) == "false") {
+        values[i] = false;
+        cursor += 5;
+      } else {
+        return false;
+      }
+    }
+    return true;
+    };
+
+    String id = extractStr("id");
+    String typeStr = extractStr("type");
+    String startTime = extractStr("startTime");
+    String endTime = extractStr("endTime");
+    String modeStr = extractStr("mode");
+    String fanStr = extractStr("fan");
+    int temperature = extractInt("temperature", -1);
+    String swingV = extractStr("swingVertical");
+    String swingH = extractStr("swingHorizontal");
+    String repeatFrequency = extractStr("repeatFrequency");
+    bool enabled = extractBool("enabled", true);
+    bool quiet = extractBool("quiet", false);
+    bool powerful = extractBool("powerful", false);
+    bool repeatEnabled = extractBool("repeatEnabled", false);
+    bool days[7];
+    setAllScheduleDays(days);
+    bool hasDays = scheduleBody.indexOf("\"days\"") >= 0;
+    if (hasDays && !extractBoolArray7("days", days)) {
+      sendJson(400, "{\"success\":false,\"error\":\"Invalid days array\"}");
+      return false;
+    }
+
+    if (repeatFrequency.length() == 0) {
+      repeatFrequency = "one-time";
+    }
+    if (!isValidRepeatFrequency(repeatFrequency)) {
+      sendJson(400, "{\"success\":false,\"error\":\"Invalid repeatFrequency\"}");
+      return false;
+    }
+
+    if (startTime.length() > 0 && !isValidTimeString(startTime)) {
+      sendJson(400, "{\"success\":false,\"error\":\"Invalid startTime (HH:MM)\"}");
+      return false;
+    }
+    if (endTime.length() > 0 && !isValidTimeString(endTime)) {
+      sendJson(400, "{\"success\":false,\"error\":\"Invalid endTime (HH:MM)\"}");
+      return false;
+    }
+    if (startTime.length() == 0 && endTime.length() == 0) {
+      sendJson(400, "{\"success\":false,\"error\":\"Provide startTime, endTime, or both (HH:MM)\"}");
+      return false;
+    }
+    if (startTime.length() > 0 && endTime.length() > 0 && startTime == endTime) {
+      sendJson(400, "{\"success\":false,\"error\":\"startTime and endTime cannot be the same\"}");
+      return false;
+    }
+
+    uint8_t nextType;
+    if (typeStr.length() == 0) {
+      nextType = startTime.length() > 0 && endTime.length() == 0
+        ? ScheduleTypeAutoOn
+        : startTime.length() == 0 && endTime.length() > 0
+          ? ScheduleTypeAutoOff
+          : ScheduleTypeScheduleTime;
+    } else if (!parseScheduleType(typeStr, nextType)) {
+      sendJson(400, "{\"success\":false,\"error\":\"Invalid schedule type\"}");
+      return false;
+    }
+
+    if (nextType == ScheduleTypeScheduleTime &&
+        (startTime.length() == 0 || endTime.length() == 0)) {
+      sendJson(400, "{\"success\":false,\"error\":\"schedule_time requires startTime and endTime\"}");
+      return false;
+    }
+    if (nextType == ScheduleTypeAutoOn &&
+        (startTime.length() == 0 || endTime.length() > 0)) {
+      sendJson(400, "{\"success\":false,\"error\":\"auto_on requires startTime only\"}");
+      return false;
+    }
+    if (nextType == ScheduleTypeAutoOff &&
+        (endTime.length() == 0 || startTime.length() > 0)) {
+      sendJson(400, "{\"success\":false,\"error\":\"auto_off requires endTime only\"}");
+      return false;
+    }
+
+    uint8_t nextMode = kPanasonicAcCool;
+    int nextTemp = 24;
+    uint8_t nextFan = kPanasonicAcFanAuto;
+    uint8_t nextSwingV = kPanasonicAcSwingVAuto;
+    uint8_t nextSwingH = kPanasonicAcSwingHAuto;
+
+    if (nextType != ScheduleTypeAutoOff) {
+      if (!parseMode(modeStr, nextMode) || nextMode == kPanasonicAcFan) {
+        sendJson(400, "{\"success\":false,\"error\":\"Invalid mode (auto|cool|dry|heat)\"}");
+        return false;
+      }
+
+      if (!parseTemperatureValue(temperature, nextTemp)) {
+        sendJson(400, "{\"success\":false,\"error\":\"Invalid temperature (16-30)\"}");
+        return false;
+      }
+
+      if (fanStr.length() > 0 && !parseFan(fanStr, nextFan)) {
+        sendJson(400, "{\"success\":false,\"error\":\"Invalid fan\"}");
+        return false;
+      }
+
+      if (swingV.length() > 0 && !parseSwingVertical(swingV, nextSwingV)) {
+        sendJson(400, "{\"success\":false,\"error\":\"Invalid swingVertical\"}");
+        return false;
+      }
+
+      if (swingH.length() > 0 && !parseSwingHorizontal(swingH, nextSwingH)) {
+        sendJson(400, "{\"success\":false,\"error\":\"Invalid swingHorizontal\"}");
+        return false;
+      }
+    }
+
+    if (id.length() == 0) {
+      id = "schedule-" + String(index + 1);
+    }
+
+    schedule.valid = true;
+    strncpy(schedule.id, id.c_str(), sizeof(schedule.id) - 1);
+    schedule.id[sizeof(schedule.id) - 1] = '\0';
+    schedule.enabled = enabled;
+    schedule.type = nextType;
+    strncpy(schedule.startTime, startTime.c_str(), 5);
+    schedule.startTime[5] = '\0';
+    strncpy(schedule.endTime, endTime.c_str(), 5);
+    schedule.endTime[5] = '\0';
+    for (uint8_t i = 0; i < 7; i++) {
+      schedule.days[i] = days[i];
+    }
+    schedule.repeatEnabled = repeatEnabled;
+    strncpy(schedule.repeatFrequency, repeatFrequency.c_str(), 11);
+    schedule.repeatFrequency[11] = '\0';
+    schedule.mode = nextMode;
+    schedule.temperature = nextTemp;
+    schedule.fan = nextFan;
+    schedule.quiet = quiet && !powerful;
+    schedule.powerful = powerful;
+    schedule.swingVertical = nextSwingV;
+    schedule.swingHorizontal = nextSwingH;
+    return true;
   };
 
-  String startTime = extractStr("startTime");
-  String endTime   = extractStr("endTime");
-  String modeStr   = extractStr("mode");
-  int temperature  = extractInt("temperature", -1);
-  String swingV    = extractStr("swingVertical");
-  String swingH    = extractStr("swingHorizontal");
-  bool enabled     = extractBool("enabled", true);
-  bool quiet        = extractBool("quiet", false);
-  bool powerful     = extractBool("powerful", false);
-
-  if (startTime.length() > 0 && !isValidTimeString(startTime)) {
-    sendJson(400, "{\"success\":false,\"error\":\"Invalid startTime (HH:MM)\"}");
-    return;
-  }
-  if (endTime.length() > 0 && !isValidTimeString(endTime)) {
-    sendJson(400, "{\"success\":false,\"error\":\"Invalid endTime (HH:MM)\"}");
-    return;
-  }
-  if (startTime.length() == 0 && endTime.length() == 0) {
-    sendJson(400, "{\"success\":false,\"error\":\"Provide startTime, endTime, or both (HH:MM)\"}");
-    return;
-  }
-  if (startTime.length() > 0 && endTime.length() > 0 && startTime == endTime) {
-    sendJson(400, "{\"success\":false,\"error\":\"startTime and endTime cannot be the same\"}");
+  String scheduleObjects[MAX_AC_SCHEDULES];
+  uint8_t nextCount = 0;
+  if (!extractScheduleObjects(scheduleObjects, nextCount)) {
+    sendJson(400, "{\"success\":false,\"error\":\"Invalid schedules payload or more than 8 schedules\"}");
     return;
   }
 
-  uint8_t nextMode;
-  if (!parseMode(modeStr, nextMode) || nextMode == kPanasonicAcFan) {
-    sendJson(400, "{\"success\":false,\"error\":\"Invalid mode (auto|cool|dry|heat)\"}");
-    return;
+  AcSchedule nextSchedules[MAX_AC_SCHEDULES] = {};
+  for (uint8_t i = 0; i < nextCount; i++) {
+    if (!parseScheduleObject(scheduleObjects[i], nextSchedules[i], i)) {
+      return;
+    }
   }
 
-  int nextTemp;
-  if (!parseTemperatureValue(temperature, nextTemp)) {
-    sendJson(400, "{\"success\":false,\"error\":\"Invalid temperature (16-30)\"}");
-    return;
+  for (uint8_t i = 0; i < nextCount; i++) {
+    acSchedules[i] = nextSchedules[i];
   }
+  acScheduleCount = nextCount;
 
-  uint8_t nextSwingV = kPanasonicAcSwingVAuto;
-  if (swingV.length() > 0 && !parseSwingVertical(swingV, nextSwingV)) {
-    sendJson(400, "{\"success\":false,\"error\":\"Invalid swingVertical\"}");
-    return;
-  }
-
-  uint8_t nextSwingH = kPanasonicAcSwingHAuto;
-  if (swingH.length() > 0 && !parseSwingHorizontal(swingH, nextSwingH)) {
-    sendJson(400, "{\"success\":false,\"error\":\"Invalid swingHorizontal\"}");
-    return;
-  }
-
-  acSchedule.valid    = true;
-  acSchedule.enabled  = enabled;
-  strncpy(acSchedule.startTime, startTime.c_str(), 5);
-  acSchedule.startTime[5] = '\0';
-  strncpy(acSchedule.endTime, endTime.c_str(), 5);
-  acSchedule.endTime[5] = '\0';
-  acSchedule.mode            = nextMode;
-  acSchedule.temperature     = nextTemp;
-  acSchedule.quiet           = quiet && !powerful;
-  acSchedule.powerful        = powerful;
-  acSchedule.swingVertical   = nextSwingV;
-  acSchedule.swingHorizontal = nextSwingH;
-
-  saveSchedule(acSchedule);
+  saveSchedules(acSchedules, acScheduleCount);
   resetScheduleExecutionCursor();
 
-  String respBody = "{\"success\":true,\"schedule\":" + scheduleJson(acSchedule) + "}";
+  String respBody = "{\"success\":true,\"schedules\":" + schedulesJson(acSchedules, acScheduleCount) + "}";
   sendJson(200, respBody);
 }
 
 void handleDeleteSchedule() {
   logRequestContent("handleDeleteSchedule");
 
-  acSchedule.valid   = false;
-  acSchedule.enabled = false;
-  acSchedule.quiet   = false;
-  acSchedule.powerful = false;
-  clearSchedule();
+  acScheduleCount = 0;
+  clearSchedules();
   resetScheduleExecutionCursor();
 
   sendJson(200, "{\"success\":true}");

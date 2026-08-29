@@ -70,7 +70,7 @@ void handleScheduleExecution() {
     return;
   }
 
-  if (!acSchedule.valid || !acSchedule.enabled) {
+  if (acScheduleCount == 0) {
     return;
   }
 
@@ -80,33 +80,46 @@ void handleScheduleExecution() {
   }
 
   int currentMinute = timeinfo.tm_hour * 60 + timeinfo.tm_min;
+  int scheduleDayIndex = (timeinfo.tm_wday + 6) % 7; // tm_wday is Sun-Sat.
 
   if (currentMinute == lastScheduleMinute) {
     return;
   }
   lastScheduleMinute = currentMinute;
 
-  int startMin = acSchedule.startTime[0] == '\0' ? -1 : timeToMinutes(acSchedule.startTime);
-  int endMin = acSchedule.endTime[0] == '\0' ? -1 : timeToMinutes(acSchedule.endTime);
+  for (uint8_t i = 0; i < acScheduleCount; i++) {
+    const AcSchedule& schedule = acSchedules[i];
+    if (!schedule.valid || !schedule.enabled || !schedule.days[scheduleDayIndex]) {
+      continue;
+    }
 
-  if (startMin >= 0 && currentMinute == startMin) {
-    AcState nextState = acState;
-    nextState.power          = true;
-    nextState.mode           = acSchedule.mode;
-    nextState.temperature    = acSchedule.temperature;
-    nextState.quiet          = acSchedule.quiet;
-    nextState.powerful       = acSchedule.powerful;
-    nextState.swingVertical  = acSchedule.swingVertical;
-    nextState.swingHorizontal = acSchedule.swingHorizontal;
-    applyACState(nextState);
-    Serial.println("[Schedule] AC turned ON by schedule");
-    return;
-  }
+    int startMin = schedule.startTime[0] == '\0' ? -1 : timeToMinutes(schedule.startTime);
+    int endMin = schedule.endTime[0] == '\0' ? -1 : timeToMinutes(schedule.endTime);
 
-  if (endMin >= 0 && currentMinute == endMin) {
-    AcState nextState = acState;
-    nextState.power = false;
-    applyACState(nextState);
-    Serial.println("[Schedule] AC turned OFF by schedule");
+    if (schedule.type != ScheduleTypeAutoOff &&
+        startMin >= 0 &&
+        currentMinute == startMin) {
+      AcState nextState = acState;
+      nextState.power          = true;
+      nextState.mode           = schedule.mode;
+      nextState.temperature    = schedule.temperature;
+      nextState.fan            = schedule.fan;
+      nextState.quiet          = schedule.quiet;
+      nextState.powerful       = schedule.powerful;
+      nextState.swingVertical  = schedule.swingVertical;
+      nextState.swingHorizontal = schedule.swingHorizontal;
+      applyACState(nextState);
+      Serial.printf("[Schedule] AC turned ON by schedule %s\n", schedule.id);
+      continue;
+    }
+
+    if (schedule.type != ScheduleTypeAutoOn &&
+        endMin >= 0 &&
+        currentMinute == endMin) {
+      AcState nextState = acState;
+      nextState.power = false;
+      applyACState(nextState);
+      Serial.printf("[Schedule] AC turned OFF by schedule %s\n", schedule.id);
+    }
   }
 }

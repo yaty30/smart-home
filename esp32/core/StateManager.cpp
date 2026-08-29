@@ -15,8 +15,8 @@ void initStateManager() {
     Serial.println("Restored state from Preferences");
   }
 
-  if (loadSchedule(acSchedule)) {
-    Serial.println("Restored schedule from Preferences");
+  if (loadSchedules(acSchedules, acScheduleCount)) {
+    Serial.printf("Restored %u schedule(s) from Preferences\n", acScheduleCount);
   }
 
   pairingMode = !isPaired;

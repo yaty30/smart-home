@@ -1,4 +1,8 @@
-import type { AcSchedule, ScheduleRepeatFrequency } from "../../types/acSchedule";
+import type {
+  AcSchedule,
+  ScheduleRepeatFrequency,
+  ScheduleType,
+} from "../../types/acSchedule";
 import type { AirConditionerMode } from "../../types/airConditioner";
 
 export type TimeField = "start" | "end";
@@ -36,10 +40,17 @@ export const matchDayGroup = (days: boolean[]): DayGroupId | null =>
 
 export const DEFAULT_START_TIME = "22:30";
 
+export const createScheduleId = () =>
+  `schedule-${Date.now().toString(36)}-${Math.random()
+    .toString(36)
+    .slice(2, 8)}`;
+
 export const defaultSchedule: AcSchedule = {
+  id: "draft",
+  type: "schedule_time",
   enabled: true,
   startTime: DEFAULT_START_TIME,
-  endTime: null,
+  endTime: "23:30",
   days: [...NO_DAYS],
   mode: "cold",
   temperature: 24,
@@ -51,6 +62,52 @@ export const defaultSchedule: AcSchedule = {
   horizontalAirflow: "auto",
   verticalAirflow: "auto",
 };
+
+export const scheduleTypeLabels: Record<ScheduleType, string> = {
+  schedule_time: "Schedule Time",
+  auto_on: "Auto Turn On",
+  auto_off: "Auto Turn Off",
+};
+
+export const inferScheduleType = (
+  schedule: Pick<AcSchedule, "startTime" | "endTime">,
+): ScheduleType => {
+  if (schedule.startTime !== null && schedule.endTime === null) {
+    return "auto_on";
+  }
+  if (schedule.startTime === null && schedule.endTime !== null) {
+    return "auto_off";
+  }
+  return "schedule_time";
+};
+
+export const normalizeScheduleForType = (
+  schedule: AcSchedule,
+  type: ScheduleType = schedule.type ?? inferScheduleType(schedule),
+): AcSchedule => {
+  const next: AcSchedule = { ...schedule, id: schedule.id, type };
+
+  if (type === "schedule_time") {
+    next.startTime = next.startTime ?? DEFAULT_START_TIME;
+    next.endTime =
+      next.endTime ??
+      (next.startTime === DEFAULT_START_TIME ? "23:30" : DEFAULT_START_TIME);
+  } else if (type === "auto_on") {
+    next.startTime = next.startTime ?? DEFAULT_START_TIME;
+    next.endTime = null;
+  } else {
+    next.startTime = null;
+    next.endTime = next.endTime ?? DEFAULT_START_TIME;
+  }
+
+  return next;
+};
+
+export const createScheduleForType = (
+  type: ScheduleType,
+  source: AcSchedule = defaultSchedule,
+): AcSchedule =>
+  normalizeScheduleForType({ ...source, id: createScheduleId() }, type);
 
 export const repeatOptions: { label: string; value: ScheduleRepeatFrequency }[] = [
   { label: "One time", value: "one-time" },
@@ -73,6 +130,8 @@ export const MODE_OPTION_IDS: Exclude<AirConditionerMode, "fan">[] = [
 
 // Field-by-field so a draft that only differs by object identity is not dirty.
 export const isSameSchedule = (a: AcSchedule, b: AcSchedule) =>
+  (a.type ?? inferScheduleType(a)) === (b.type ?? inferScheduleType(b)) &&
+  a.id === b.id &&
   a.enabled === b.enabled &&
   a.startTime === b.startTime &&
   a.endTime === b.endTime &&
