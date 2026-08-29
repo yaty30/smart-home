@@ -3,7 +3,7 @@ import { useMemo } from 'react';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
 import { AcStatePills } from '../AcStatePills';
-import type { Device } from '../../domain/device';
+import { type Device, devicePowerPresentation } from '../../domain/device';
 import { useRooms } from '../../store/rooms';
 import { type Theme, useTheme } from '../../theme/theme';
 import { DeviceTypeIcon } from './DeviceTypeIcon';
@@ -16,14 +16,8 @@ type HeroCardProps = {
 export function HeroCard({ device, onOpenControl }: HeroCardProps) {
   const theme = useTheme();
   const heroStyles = useMemo(() => createHeroStyles(theme), [theme]);
-  const isOn = device.state.power === true;
-  const hasKnownPower = typeof device.state.power === 'boolean';
-  const isOffline = device.state.syncStatus === 'offline';
-  const isSyncing =
-    device.state.syncStatus === 'syncing' ||
-    device.state.syncStatus === 'unknown' ||
-    device.state.syncStatus === undefined;
-  const isLiveOn = isOn && !isOffline && !isSyncing;
+  const { hasKnownPower, isLiveOn, isOffline, isOn, isSyncing } =
+    devicePowerPresentation(device.state);
   const powerLabel = !hasKnownPower
     ? 'OFF'
     : isOffline

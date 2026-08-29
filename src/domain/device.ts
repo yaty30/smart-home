@@ -44,6 +44,33 @@ export type Device = {
   state: DeviceState;
 };
 
+export type DevicePowerPresentation = {
+  hasKnownPower: boolean;
+  isOffline: boolean;
+  isSyncing: boolean;
+  isOn: boolean;
+  isLiveOn: boolean;
+};
+
+export const devicePowerPresentation = (
+  state: DeviceState,
+): DevicePowerPresentation => {
+  const isOn = state.power === true;
+  const isOffline = state.syncStatus === "offline";
+  const isSyncing =
+    state.syncStatus === "syncing" ||
+    state.syncStatus === "unknown" ||
+    state.syncStatus === undefined;
+
+  return {
+    hasKnownPower: typeof state.power === "boolean",
+    isOffline,
+    isSyncing,
+    isOn,
+    isLiveOn: isOn && !isOffline && !isSyncing,
+  };
+};
+
 export const createDevice = (
   name: string,
   roomId: string,
