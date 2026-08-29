@@ -113,6 +113,7 @@ export function DeviceConnectionProvider({
     useState<DeviceStateSnapshot>(debugDeviceState);
   const reconnectAttempt = useRef(0);
   const activeSocket = useRef<WebSocket | null>(null);
+  const restStatusReachable = useRef(false);
 
   const pairedDevice: PairedDevice | null = controller
     ? { host: controller.ip, token: controller.token }
@@ -129,6 +130,18 @@ export function DeviceConnectionProvider({
 
     return deviceStateToDeviceStateSnapshot(device.state);
   }, [debugMode, debugState, device]);
+
+  useEffect(() => {
+    if (!debugMode) {
+      return;
+    }
+
+    const selectedDeviceState =
+      device && device.type === 'ac'
+        ? deviceStateToDeviceStateSnapshot(device.state)
+        : null;
+    setDebugState(selectedDeviceState ?? debugDeviceState);
+  }, [debugMode, deviceId]);
 
   useEffect(() => {
     if (debugMode) {
@@ -159,9 +172,9 @@ export function DeviceConnectionProvider({
       }
     };
 
-    const loadRestStatus = async () => {
+    const loadRestStatus = async (): Promise<boolean> => {
       if (!controllerId) {
-        return;
+        return false;
       }
 
       try {
@@ -177,12 +190,18 @@ export function DeviceConnectionProvider({
         if (active && controllerId) {
           applyControllerDeviceStatus(controllerId, snapshot);
           updateControllerConnectionStatus(controllerId, 'online');
+          setDeviceConnectionStatus('connected');
         }
+        restStatusReachable.current = true;
+        return true;
       } catch {
+        restStatusReachable.current = false;
         if (active && controllerId && !websocketAuthenticated) {
           markControllerDevicesOffline(controllerId);
           updateControllerConnectionStatus(controllerId, 'offline');
+          setDeviceConnectionStatus('disconnected');
         }
+        return false;
       }
     };
 
@@ -191,8 +210,10 @@ export function DeviceConnectionProvider({
         return;
       }
 
-      setDeviceConnectionStatus('connecting');
-      if (controllerId) {
+      if (!restStatusReachable.current) {
+        setDeviceConnectionStatus('connecting');
+      }
+      if (controllerId && !restStatusReachable.current) {
         updateControllerConnectionStatus(controllerId, 'connecting');
         markControllerDevicesSyncing(controllerId);
       }
@@ -256,23 +277,17 @@ export function DeviceConnectionProvider({
           activeSocket.current = null;
         }
         websocketAuthenticated = false;
-        setDeviceConnectionStatus('disconnected');
-        if (controllerId) {
-          updateControllerConnectionStatus(controllerId, 'offline');
-          markControllerDevicesOffline(controllerId);
-        }
         reconnectAttempt.current += 1;
         const delay = Math.min(1000 * 2 ** reconnectAttempt.current, 10000);
         reconnectTimer = setTimeout(() => {
-          void loadRestStatus();
-          connect();
+          void loadRestStatus().finally(connect);
         }, delay);
       };
     };
 
     reconnectAttempt.current = 0;
-    void loadRestStatus();
-    connect();
+    restStatusReachable.current = false;
+    void loadRestStatus().finally(connect);
 
     return () => {
       active = false;

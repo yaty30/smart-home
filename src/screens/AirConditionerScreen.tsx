@@ -46,6 +46,7 @@ import {
 import { normalizeTemperature } from "../utils/temperatureGauge";
 import { HeaderIconButton } from "../components/AppHeader";
 import { useDevices } from "../store/devices";
+import { useRooms } from "../store/rooms";
 
 type AirConditionerScreenProps = {
   deviceId: string;
@@ -140,6 +141,13 @@ export function AirConditionerScreen({
     schedule,
     toggleScheduleEnabled: handleToggleScheduleEnabled,
   } = useAcSchedule();
+  const { getRoomById } = useRooms();
+  const selectedDevice = devices.find((device) => device.id === deviceId);
+  const selectedRoom = selectedDevice
+    ? getRoomById(selectedDevice.roomId)
+    : undefined;
+  const selectedDeviceName = selectedDevice?.name ?? "Air Conditioner";
+  const selectedRoomName = selectedRoom?.name ?? "Room";
 
   useEffect(() => {
     Animated.timing(controlEnabledProgress, {
@@ -624,10 +632,10 @@ export function AirConditionerScreen({
         stickyHeaderIndices={[0]}
       >
         <ACHeader
-          eyebrow="Living Room"
+          eyebrow={selectedRoomName}
           isScrolled={isHeaderScrolled}
           onBackPress={handleBackPress}
-          title="Air Conditioner"
+          title={selectedDeviceName}
           rightAccessory={
             <HeaderIconButton
               accessibilityLabel="More options"
@@ -667,8 +675,8 @@ export function AirConditionerScreen({
             powerfulControlEnabled={powerfulControlEnabled}
             quiet={quiet}
             quietControlEnabled={quietControlEnabled}
-            subtitle={`Living Room · ${powerStatusText}`}
-            title="Air Conditioner"
+            subtitle={`${selectedRoomName} · ${powerStatusText}`}
+            title={selectedDeviceName}
             temperature={temperature}
           />
 
