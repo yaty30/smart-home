@@ -4,6 +4,7 @@
 #include "State.h"
 #include "StateManager.h"
 #include "WebSocketServer.h"
+#include "WiFiManager.h"
 
 namespace {
 bool bootButtonWasPressed = false;
@@ -23,10 +24,8 @@ bool isAuthorizedBearer(const String& authorizationHeader) {
 }
 
 String controllerIdFromIP(const String& ip) {
-  String controllerId = "ctrl-";
-  controllerId += ip;
-  controllerId.replace(".", "-");
-  return controllerId;
+  (void)ip;
+  return controllerId();
 }
 
 void initPairing() {

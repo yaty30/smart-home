@@ -12,11 +12,8 @@ static const unsigned long PAIRING_BUTTON_HOLD_MS = 3000;
 #define WEBSOCKET_PORT 81
 #define WEBSOCKET_PATH "/ws"
 
-// static const char WIFI_SSID[] = "RVD17WL06";
-// static const char WIFI_PASSWORD[] = "rvdky388941";
-
-static const char WIFI_SSID[] = "KSQ";
-static const char WIFI_PASSWORD[] = "Briannothome";
+static const char SETUP_AP_PREFIX[] = "smart__home__controller__";
+static const char SETUP_AP_PASSWORD[] = "smarthome-setup";
 
 static const char PAIRING_TOKEN[] = "abc123";
 
