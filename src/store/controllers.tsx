@@ -115,7 +115,18 @@ export function ControllersProvider({ children }: PropsWithChildren) {
 
   const addController = useCallback(
     async (controller: Controller) => {
-      const updated = [...controllers, sanitizeControllerForRuntime(controller)];
+      const runtimeController = sanitizeControllerForRuntime(controller);
+      const existingIndex = controllers.findIndex(
+        (current) =>
+          current.id === runtimeController.id ||
+          current.controllerId === runtimeController.controllerId,
+      );
+      const updated =
+        existingIndex >= 0
+          ? controllers.map((current, index) =>
+              index === existingIndex ? runtimeController : current,
+            )
+          : [...controllers, runtimeController];
       setControllers(updated);
       await persistControllers(updated);
     },

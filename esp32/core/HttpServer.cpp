@@ -61,13 +61,21 @@ void logRequestContent(const char* handlerName) {
       Serial.print("  ");
       Serial.print(server.argName(i));
       Serial.print(" = ");
-      Serial.println(server.arg(i));
+      if (server.argName(i).equalsIgnoreCase("password")) {
+        Serial.println("<redacted>");
+      } else {
+        Serial.println(server.arg(i));
+      }
     }
   }
 
   if (server.hasArg("plain")) {
-    Serial.print("[HTTP] body: ");
-    Serial.println(server.arg("plain"));
+    if (server.uri() == "/setup/wifi") {
+      Serial.println("[HTTP] body: <redacted>");
+    } else {
+      Serial.print("[HTTP] body: ");
+      Serial.println(server.arg("plain"));
+    }
   }
 
   Serial.print("[HTTP] Authorization header present: ");
@@ -96,6 +104,7 @@ void applyACStateAndRespond(const AcState& nextState) {
 String statusJson() {
   String body = "{";
   body += "\"ac\":" + acStateJson() + ",";
+  body += "\"controllerId\":\"" + jsonEscape(controllerId()) + "\",";
   body += "\"wifi\":{";
   body += "\"connected\":" + boolString(isWiFiConnected()) + ",";
   body += "\"rssi\":" + String(isWiFiConnected() ? WiFi.RSSI() : 0) + ",";
@@ -125,7 +134,8 @@ void handleRoot() {
   String ip = currentIPString();
   String body = "{";
   body += "\"name\":\"ESP32-C3 Panasonic AC Controller\",";
-  body += "\"controllerId\":\"" + jsonEscape(controllerIdFromIP(ip)) + "\",";
+  body += "\"controllerId\":\"" + jsonEscape(controllerId()) + "\",";
+  body += "\"shortId\":\"" + jsonEscape(controllerShortId()) + "\",";
   body += "\"ip\":\"" + ip + "\",";
   body += "\"token\":\"" + jsonEscape(PAIRING_TOKEN) + "\",";
   body += "\"websocket\":\"" + jsonEscape(webSocketUrl()) + "\",";
@@ -138,6 +148,9 @@ void handleRoot() {
   body += "\"GET /temp/16..30\",";
   body += "\"GET /mode/auto|cool|dry|fan|heat\",";
   body += "\"GET /wifi\",";
+  body += "\"GET /setup/info\",";
+  body += "\"GET /setup/networks\",";
+  body += "\"POST /setup/wifi\",";
   body += "\"POST /pair/complete\"";
   body += "]";
   body += "}";
@@ -239,12 +252,166 @@ void handleWifi() {
 
   String body = "{";
   body += "\"connected\":" + boolString(isWiFiConnected()) + ",";
-  body += "\"ssid\":\"" + jsonEscape(WIFI_SSID) + "\",";
+  body += "\"ssid\":\"" + jsonEscape(currentWiFiSSID()) + "\",";
   body += "\"ip\":\"" + currentIPString() + "\",";
   body += "\"rssi\":" + String(isWiFiConnected() ? WiFi.RSSI() : 0);
   body += "}";
 
   sendJson(200, body);
+}
+
+bool getJsonStringField(const String& json, const String& key, String& value) {
+  String pattern = "\"" + key + "\"";
+  int keyIndex = json.indexOf(pattern);
+  if (keyIndex < 0) {
+    return false;
+  }
+
+  int colonIndex = json.indexOf(':', keyIndex + pattern.length());
+  if (colonIndex < 0) {
+    return false;
+  }
+
+  int quoteIndex = json.indexOf('"', colonIndex + 1);
+  if (quoteIndex < 0) {
+    return false;
+  }
+
+  String parsed;
+  bool escaped = false;
+  for (int i = quoteIndex + 1; i < json.length(); i++) {
+    char c = json[i];
+    if (escaped) {
+      parsed += c;
+      escaped = false;
+      continue;
+    }
+
+    if (c == '\\') {
+      escaped = true;
+      continue;
+    }
+
+    if (c == '"') {
+      value = parsed;
+      return true;
+    }
+
+    parsed += c;
+  }
+
+  return false;
+}
+
+void handleSetupInfo() {
+  logRequestContent("handleSetupInfo");
+
+  String body = "{";
+  body += "\"controllerId\":\"" + jsonEscape(controllerId()) + "\",";
+  body += "\"shortId\":\"" + jsonEscape(controllerShortId()) + "\",";
+  body += "\"setupMode\":" + boolString(isSetupMode());
+  body += "}";
+
+  sendJson(200, body);
+}
+
+void handleSetupNetworks() {
+  logRequestContent("handleSetupNetworks");
+
+  if (!isSetupMode()) {
+    sendJson(409, "{\"success\":false,\"error\":\"Controller is not in setup mode\"}");
+    return;
+  }
+
+  int networkCount = WiFi.scanNetworks(false, false);
+  if (networkCount < 0) {
+    sendJson(500, "{\"success\":false,\"error\":\"WiFi scan failed\"}");
+    return;
+  }
+
+  String body = "{";
+  body += "\"success\":true,";
+  body += "\"networks\":[";
+
+  bool first = true;
+  for (int i = 0; i < networkCount; i++) {
+    String ssid = WiFi.SSID(i);
+    if (ssid.length() == 0) {
+      continue;
+    }
+
+    bool seenEarlier = false;
+    int strongestRssi = WiFi.RSSI(i);
+    for (int j = 0; j < networkCount; j++) {
+      if (j < i && WiFi.SSID(j) == ssid) {
+        seenEarlier = true;
+        break;
+      }
+      if (j > i && WiFi.SSID(j) == ssid && WiFi.RSSI(j) > strongestRssi) {
+        strongestRssi = WiFi.RSSI(j);
+      }
+    }
+
+    if (seenEarlier) {
+      continue;
+    }
+
+    if (!first) {
+      body += ",";
+    }
+    first = false;
+    body += "{";
+    body += "\"ssid\":\"" + jsonEscape(ssid) + "\",";
+    body += "\"rssi\":" + String(strongestRssi);
+    body += "}";
+  }
+
+  body += "]";
+  body += "}";
+  WiFi.scanDelete();
+
+  sendJson(200, body);
+}
+
+void handleSetupWifi() {
+  logRequestContent("handleSetupWifi");
+
+  if (!isSetupMode()) {
+    sendJson(409, "{\"success\":false,\"error\":\"Controller is not in setup mode\"}");
+    return;
+  }
+
+  if (!server.hasArg("plain")) {
+    sendJson(400, "{\"success\":false,\"error\":\"JSON body required\"}");
+    return;
+  }
+
+  String body = server.arg("plain");
+  String ssid;
+  String password;
+  if (!getJsonStringField(body, "ssid", ssid) || ssid.length() == 0) {
+    sendJson(400, "{\"success\":false,\"error\":\"ssid is required\"}");
+    return;
+  }
+  if (!getJsonStringField(body, "password", password)) {
+    password = "";
+  }
+
+  String assignedIP;
+  if (!connectProvisionedWiFi(ssid, password, assignedIP)) {
+    sendJson(400, "{\"success\":false,\"error\":\"Could not connect to WiFi\"}");
+    return;
+  }
+
+  String response = "{";
+  response += "\"success\":true,";
+  response += "\"controllerId\":\"" + jsonEscape(controllerId()) + "\",";
+  response += "\"shortId\":\"" + jsonEscape(controllerShortId()) + "\",";
+  response += "\"ip\":\"" + jsonEscape(assignedIP) + "\",";
+  response += "\"token\":\"" + jsonEscape(PAIRING_TOKEN) + "\"";
+  response += "}";
+
+  sendJson(200, response);
 }
 
 void handlePairComplete() {
@@ -543,6 +710,9 @@ void setupRoutes() {
   server.on("/power/on", HTTP_GET, handlePowerOn);
   server.on("/power/off", HTTP_GET, handlePowerOff);
   server.on("/wifi", HTTP_GET, handleWifi);
+  server.on("/setup/info", HTTP_GET, handleSetupInfo);
+  server.on("/setup/networks", HTTP_GET, handleSetupNetworks);
+  server.on("/setup/wifi", HTTP_POST, handleSetupWifi);
   server.onNotFound(handleDynamicRoute);
 }
 

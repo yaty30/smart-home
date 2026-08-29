@@ -25,6 +25,7 @@ void setup() {
 void loop() {
   handleHttpClient();
   handleWebSocketServer();
+  handleWiFiManager();
   handlePairingButton();
   processQueuedIR();
   handleScheduleExecution();

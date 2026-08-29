@@ -78,6 +78,26 @@ void savePairingState(bool paired) {
   preferences.putBool("paired", paired);
 }
 
+bool loadWiFiCredentials(String& ssid, String& password) {
+  if (!storageReady) {
+    return false;
+  }
+
+  ssid = preferences.getString("wifi_ssid", "");
+  password = preferences.getString("wifi_pass", "");
+  return ssid.length() > 0;
+}
+
+void saveWiFiCredentials(const String& ssid, const String& password) {
+  if (!storageReady) {
+    return;
+  }
+
+  preferences.putUChar("version", STORAGE_VERSION);
+  preferences.putString("wifi_ssid", ssid);
+  preferences.putString("wifi_pass", password);
+}
+
 void saveSchedule(const AcSchedule& schedule) {
   if (!storageReady) {
     return;
