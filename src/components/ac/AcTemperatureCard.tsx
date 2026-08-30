@@ -1,4 +1,13 @@
-import { AirVent, Moon, Power, PowerOff, Zap } from "lucide-react-native";
+import {
+  Moon,
+  Power,
+  PowerOff,
+  Wifi,
+  WifiHigh,
+  WifiLow,
+  WifiZero,
+  Zap,
+} from "lucide-react-native";
 import { useMemo } from "react";
 import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
 
@@ -7,8 +16,9 @@ import { ArcTemperatureGauge } from "../ArcTemperatureGauge";
 import { Section } from "../Section";
 
 type AcTemperatureCardProps = {
-  title: string;
   subtitle: string;
+  connectionStatus: "connecting" | "connected" | "disconnected";
+  connectionLatencyMs: number | null;
   temperature: number;
   minTemperature: number;
   maxTemperature: number;
@@ -28,8 +38,9 @@ type AcTemperatureCardProps = {
 };
 
 export function AcTemperatureCard({
-  title,
   subtitle,
+  connectionStatus,
+  connectionLatencyMs,
   temperature,
   minTemperature,
   maxTemperature,
@@ -49,15 +60,96 @@ export function AcTemperatureCard({
 }: AcTemperatureCardProps) {
   const theme = useTheme();
   const styles = useMemo(() => createStyles(theme), [theme]);
+  const connectionPill = useMemo(() => {
+    if (connectionStatus === "disconnected") {
+      return {
+        Icon: WifiZero,
+        backgroundColor: theme.powerAccentMuted,
+        borderColor: theme.powerButton.borderDanger,
+        color: theme.powerAccent,
+        label: "Offline",
+      };
+    }
+
+    if (connectionStatus === "connecting") {
+      return {
+        Icon: WifiLow,
+        backgroundColor: theme.powerAccentMuted,
+        borderColor: theme.powerButton.borderDanger,
+        color: theme.powerAccent,
+        label: "Connecting",
+      };
+    }
+
+    if (connectionLatencyMs === null) {
+      return {
+        Icon: WifiZero,
+        backgroundColor: theme.powerAccentMuted,
+        borderColor: theme.powerButton.borderDanger,
+        color: theme.powerAccent,
+        label: "No ping",
+      };
+    }
+
+    const latency = connectionLatencyMs;
+    const label = `${latency} ms`;
+
+    if (latency > 1000) {
+      return {
+        Icon: WifiLow,
+        backgroundColor: theme.powerAccentMuted,
+        borderColor: theme.powerButton.borderDanger,
+        color: theme.powerAccent,
+        label,
+      };
+    }
+
+    if (latency > 350) {
+      return {
+        Icon: WifiHigh,
+        backgroundColor: theme.powerfulAccentMuted,
+        borderColor: theme.powerfulAccent,
+        color: theme.powerfulAccent,
+        label,
+      };
+    }
+
+    return {
+      Icon: Wifi,
+      backgroundColor: theme.statusColors.onlineMuted,
+      borderColor: theme.statusColors.onlineBorder,
+      color: theme.statusColors.online,
+      label,
+    };
+  }, [connectionLatencyMs, connectionStatus, theme]);
+  const ConnectionIcon = connectionPill.Icon;
 
   return (
     <Section>
       <View style={styles.temperatureHeader}>
         <View style={styles.temperatureTitleGroup}>
-          <View style={styles.temperatureTitleContainer}>
-            <AirVent color={theme.text} />
-            <Text style={styles.cardTitle}>{title}</Text>
-          </View>
+          {/* commentted out for future fix. */}
+          {/* <View
+            accessibilityLabel={`Connection latency ${connectionPill.label}`}
+            style={[
+              styles.connectionPill,
+              {
+                backgroundColor: connectionPill.backgroundColor,
+                borderColor: connectionPill.borderColor,
+              },
+            ]}
+          >
+            <ConnectionIcon
+              color={connectionPill.color}
+              size={16}
+              strokeWidth={2.5}
+            />
+            <Text
+              style={[styles.connectionPillText, { color: connectionPill.color }]}
+            >
+              {connectionPill.label}
+            </Text>
+          </View> */}
           <Text style={styles.cardSubtitle}>{subtitle}</Text>
         </View>
         <View style={styles.temperatureActions}>
@@ -118,9 +210,7 @@ export function AcTemperatureCard({
             onPress={onTogglePower}
             style={[
               styles.powerCornerButton,
-              power
-                ? styles.powerCornerButtonOn
-                : styles.powerCornerButtonOff,
+              power ? styles.powerCornerButtonOn : styles.powerCornerButtonOff,
               !canControlDevice && styles.powerCornerButtonDisabled,
             ]}
           >
@@ -161,21 +251,26 @@ const createStyles = (theme: Theme) =>
       gap: theme.spacing.xs,
       minWidth: 0,
     },
-    temperatureTitleContainer: {
-      display: "flex",
+    connectionPill: {
+      alignItems: "center",
+      alignSelf: "flex-start",
+      borderRadius: theme.radiusRound,
+      borderWidth: 1,
       flexDirection: "row",
-      gap: 6,
+      gap: theme.spacing.sm,
+      minHeight: 32,
+      paddingHorizontal: theme.spacing.md,
+      paddingVertical: 6,
+    },
+    connectionPillText: {
+      fontSize: 13,
+      fontWeight: "800",
+      letterSpacing: 0,
     },
     temperatureActions: {
       alignItems: "center",
       flexDirection: "row",
       gap: theme.spacing.sm,
-    },
-    cardTitle: {
-      color: theme.text,
-      fontSize: 17,
-      fontWeight: "800",
-      letterSpacing: 0,
     },
     cardSubtitle: {
       color: theme.textSecondary,

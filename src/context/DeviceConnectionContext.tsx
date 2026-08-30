@@ -21,6 +21,7 @@ import {
 type DeviceConnectionContextValue = {
   pairedDevice: PairedDevice | null;
   deviceConnectionStatus: DeviceConnectionStatus;
+  deviceConnectionLatencyMs: number | null;
   debugMode: boolean;
   isLoading: boolean;
   isPaired: boolean;
@@ -65,18 +66,23 @@ const debugDeviceState: DeviceStateSnapshot = {
   },
 };
 
+const WEBSOCKET_PING_INTERVAL_MS = 5000;
+const WEBSOCKET_PING_TIMEOUT_MS = 2500;
+const WEBSOCKET_OPEN_READY_STATE = 1;
+
 const isRecord = (value: unknown): value is Record<string, unknown> => {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 };
 
+const WEBSOCKET_PORT = 81;
+const WEBSOCKET_PATH = '/ws';
+
+// React Native's URL implementation exposes getters only, so the URL is
+// composed as a string instead of by mutating the parsed instance.
 const websocketUrlForDevice = (device: PairedDevice) => {
   const url = new URL(device.host);
-  url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:';
-  url.port = '81';
-  url.pathname = '/ws';
-  url.search = '';
-  url.hash = '';
-  return url.toString();
+  const scheme = url.protocol === 'https:' ? 'wss:' : 'ws:';
+  return `${scheme}//${url.hostname}:${WEBSOCKET_PORT}${WEBSOCKET_PATH}`;
 };
 
 export function DeviceConnectionProvider({
@@ -109,6 +115,8 @@ export function DeviceConnectionProvider({
 
   const [deviceConnectionStatus, setDeviceConnectionStatus] =
     useState<DeviceConnectionStatus>('disconnected');
+  const [deviceConnectionLatencyMs, setDeviceConnectionLatencyMs] =
+    useState<number | null>(null);
   const [debugState, setDebugState] =
     useState<DeviceStateSnapshot>(debugDeviceState);
   const reconnectAttempt = useRef(0);
@@ -146,11 +154,13 @@ export function DeviceConnectionProvider({
   useEffect(() => {
     if (debugMode) {
       setDeviceConnectionStatus('connected');
+      setDeviceConnectionLatencyMs(0);
       return;
     }
 
     if (!controllerIp || !controllerToken) {
       setDeviceConnectionStatus('disconnected');
+      setDeviceConnectionLatencyMs(null);
       return;
     }
 
@@ -162,7 +172,11 @@ export function DeviceConnectionProvider({
     let active = true;
     let socket: WebSocket | null = null;
     let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+    let pingInterval: ReturnType<typeof setInterval> | null = null;
+    let pingTimeout: ReturnType<typeof setTimeout> | null = null;
     let websocketAuthenticated = false;
+    let pendingPingId: string | null = null;
+    let pendingPingStartedAt = 0;
 
     const applyIncomingState = (payload: unknown) => {
       const snapshot = parseDeviceStateSnapshot(payload);
@@ -200,9 +214,68 @@ export function DeviceConnectionProvider({
           markControllerDevicesOffline(controllerId);
           updateControllerConnectionStatus(controllerId, 'offline');
           setDeviceConnectionStatus('disconnected');
+          setDeviceConnectionLatencyMs(null);
         }
         return false;
       }
+    };
+
+    const clearPingTimers = () => {
+      if (pingInterval !== null) {
+        clearInterval(pingInterval);
+        pingInterval = null;
+      }
+
+      if (pingTimeout !== null) {
+        clearTimeout(pingTimeout);
+        pingTimeout = null;
+      }
+    };
+
+    const sendPing = (currentSocket: WebSocket) => {
+      if (
+        !active ||
+        !websocketAuthenticated ||
+        pendingPingId !== null ||
+        currentSocket.readyState !== WEBSOCKET_OPEN_READY_STATE
+      ) {
+        return;
+      }
+
+      pendingPingId = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+      pendingPingStartedAt = Date.now();
+      currentSocket.send(
+        JSON.stringify({
+          requestId: pendingPingId,
+          type: 'ping',
+        }),
+      );
+      currentSocket.send(
+        JSON.stringify({
+          type: 'state.get',
+        }),
+      );
+
+      if (pingTimeout !== null) {
+        clearTimeout(pingTimeout);
+      }
+
+      pingTimeout = setTimeout(() => {
+        if (!active || pendingPingId === null) {
+          return;
+        }
+
+        pendingPingId = null;
+        setDeviceConnectionLatencyMs(null);
+      }, WEBSOCKET_PING_TIMEOUT_MS);
+    };
+
+    const startPingLoop = (currentSocket: WebSocket) => {
+      clearPingTimers();
+      sendPing(currentSocket);
+      pingInterval = setInterval(() => {
+        sendPing(currentSocket);
+      }, WEBSOCKET_PING_INTERVAL_MS);
     };
 
     const connect = () => {
@@ -212,6 +285,7 @@ export function DeviceConnectionProvider({
 
       if (!restStatusReachable.current) {
         setDeviceConnectionStatus('connecting');
+        setDeviceConnectionLatencyMs(null);
       }
       if (controllerId && !restStatusReachable.current) {
         updateControllerConnectionStatus(controllerId, 'connecting');
@@ -221,8 +295,10 @@ export function DeviceConnectionProvider({
       try {
         socket = new WebSocket(websocketUrlForDevice(pairedDevice));
         activeSocket.current = socket;
-      } catch {
+      } catch (error) {
+        console.warn('[Device] Failed to open controller WebSocket:', error);
         reconnectAttempt.current += 1;
+        setDeviceConnectionLatencyMs(null);
         const delay = Math.min(1000 * 2 ** reconnectAttempt.current, 10000);
         reconnectTimer = setTimeout(connect, delay);
         return;
@@ -251,12 +327,35 @@ export function DeviceConnectionProvider({
               if (controllerId) {
                 updateControllerOnlineStatus(controllerId, true);
               }
+              startPingLoop(currentSocket);
               void loadRestStatus();
             }
             return;
           }
 
+          if (isRecord(payload) && payload.type === 'pong') {
+            const requestId =
+              typeof payload.requestId === 'string' ? payload.requestId : null;
+            if (requestId !== null && requestId === pendingPingId) {
+              if (pingTimeout !== null) {
+                clearTimeout(pingTimeout);
+                pingTimeout = null;
+              }
+              pendingPingId = null;
+              setDeviceConnectionLatencyMs(Date.now() - pendingPingStartedAt);
+            }
+            return;
+          }
+
           if (isRecord(payload) && payload.type === 'state') {
+            if (pendingPingId !== null) {
+              if (pingTimeout !== null) {
+                clearTimeout(pingTimeout);
+                pingTimeout = null;
+              }
+              pendingPingId = null;
+              setDeviceConnectionLatencyMs(Date.now() - pendingPingStartedAt);
+            }
             applyIncomingState(payload);
           }
         } catch {
@@ -278,6 +377,9 @@ export function DeviceConnectionProvider({
         }
         websocketAuthenticated = false;
         reconnectAttempt.current += 1;
+        pendingPingId = null;
+        clearPingTimers();
+        setDeviceConnectionLatencyMs(null);
         const delay = Math.min(1000 * 2 ** reconnectAttempt.current, 10000);
         reconnectTimer = setTimeout(() => {
           void loadRestStatus().finally(connect);
@@ -294,6 +396,7 @@ export function DeviceConnectionProvider({
       if (reconnectTimer !== null) {
         clearTimeout(reconnectTimer);
       }
+      clearPingTimers();
       socket?.close();
       if (activeSocket.current === socket) {
         activeSocket.current = null;
@@ -324,6 +427,7 @@ export function DeviceConnectionProvider({
 
   const reportDeviceUnreachable = useCallback(() => {
     setDeviceConnectionStatus('disconnected');
+    setDeviceConnectionLatencyMs(null);
     activeSocket.current?.close();
     if (controllerId) {
       updateControllerConnectionStatus(controllerId, 'offline');
@@ -367,6 +471,7 @@ export function DeviceConnectionProvider({
     () => ({
       debugMode,
       disconnectDevice,
+      deviceConnectionLatencyMs,
       deviceConnectionStatus,
       deviceState,
       isDeviceConnected: deviceConnectionStatus === 'connected',
@@ -379,6 +484,7 @@ export function DeviceConnectionProvider({
     }),
     [
       debugMode,
+      deviceConnectionLatencyMs,
       deviceConnectionStatus,
       deviceState,
       disconnectDevice,
