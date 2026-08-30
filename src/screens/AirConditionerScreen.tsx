@@ -1,6 +1,11 @@
 import * as Haptics from "expo-haptics";
 import { useNavigation } from "@react-navigation/native";
-import { CalendarClock, Ellipsis, Star } from "lucide-react-native";
+import {
+  CalendarClock,
+  Ellipsis,
+  Star,
+  ChartSpline,
+} from "lucide-react-native";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Alert,
@@ -58,6 +63,7 @@ export function AirConditionerScreen({
   onBackPress,
 }: AirConditionerScreenProps) {
   const {
+    deviceConnectionLatencyMs,
     deviceConnectionStatus,
     deviceState,
     isDeviceConnected,
@@ -502,7 +508,9 @@ export function AirConditionerScreen({
     [devices, deviceId],
   );
   const existingFavourite = useMemo(
-    () => devices.find((d) => d.state.favourite === true && d.id !== deviceId) ?? null,
+    () =>
+      devices.find((d) => d.state.favourite === true && d.id !== deviceId) ??
+      null,
     [devices, deviceId],
   );
 
@@ -520,17 +528,23 @@ export function AirConditionerScreen({
 
     if (existingFavourite !== null) {
       Alert.alert(
-        'Replace Favourite?',
+        "Replace Favourite?",
         `"${existingFavourite.name}" is currently your home hero. Replace it with this device?`,
         [
-          { text: 'Cancel', style: 'cancel' },
-          { text: 'Replace', style: 'destructive', onPress: doSet },
+          { text: "Cancel", style: "cancel" },
+          { text: "Replace", style: "destructive", onPress: doSet },
         ],
       );
     } else {
       doSet();
     }
-  }, [clearFavouriteDevice, deviceId, existingFavourite, isFavourite, setFavouriteDevice]);
+  }, [
+    clearFavouriteDevice,
+    deviceId,
+    existingFavourite,
+    isFavourite,
+    setFavouriteDevice,
+  ]);
 
   const handleBackPress = useCallback(() => {
     if (isLeavingScreen.current) {
@@ -545,11 +559,7 @@ export function AirConditionerScreen({
 
     // Start screen navigation immediately
     onBackPress();
-  }, [
-    animateBottomNavOut,
-    onBackPress,
-    triggerPressHaptic,
-  ]);
+  }, [animateBottomNavOut, onBackPress, triggerPressHaptic]);
 
   const handleTemperatureInteractionEnd = useCallback(() => {
     setIsAdjustingTemperature(false);
@@ -640,7 +650,7 @@ export function AirConditionerScreen({
             <HeaderIconButton
               accessibilityLabel="More options"
               framed
-              onPress={() => { }}
+              onPress={() => {}}
             >
               <Ellipsis color={theme.accent} size={24} strokeWidth={2.6} />
             </HeaderIconButton>
@@ -661,6 +671,8 @@ export function AirConditionerScreen({
 
           <AcTemperatureCard
             canControlDevice={canControlDevice}
+            connectionLatencyMs={deviceConnectionLatencyMs}
+            connectionStatus={deviceConnectionStatus}
             gaugeSize={gaugeSize}
             maxTemperature={temperatureRange.max}
             minTemperature={temperatureRange.min}
@@ -676,7 +688,6 @@ export function AirConditionerScreen({
             quiet={quiet}
             quietControlEnabled={quietControlEnabled}
             subtitle={`${selectedRoomName} · ${powerStatusText}`}
-            title={selectedDeviceName}
             temperature={temperature}
           />
 
@@ -726,22 +737,27 @@ export function AirConditionerScreen({
             onPress: () => setIsScheduleSheetVisible(true),
           },
           {
-            active: isFavourite,
             icon: (
-              isFavourite ? (
-                <Star
-                  color={theme.accent}
-                  size={22}
-                  strokeWidth={2.2}
-                  fill={theme.accent}
-                />
-              ) : (
-                <Star
-                  color={theme.accentMuted}
-                  size={22}
-                  strokeWidth={2.2}
-                />
-              )
+              <ChartSpline
+                color={theme.modeColors.dry}
+                size={22}
+                strokeWidth={2.2}
+              />
+            ),
+            label: "Schedule",
+            onPress: () => setIsScheduleSheetVisible(true),
+          },
+          {
+            active: isFavourite,
+            icon: isFavourite ? (
+              <Star
+                color={theme.accent}
+                size={22}
+                strokeWidth={2.2}
+                fill={theme.accent}
+              />
+            ) : (
+              <Star color={theme.accentMuted} size={22} strokeWidth={2.2} />
             ),
             label: isFavourite ? "Remove Favourite" : "Set Favourite",
             onPress: handleSetFavourite,
@@ -752,21 +768,23 @@ export function AirConditionerScreen({
   );
 }
 
-const createStyles = (theme: Theme) => StyleSheet.create({
-  content: {
-    flexGrow: 1,
-    paddingBottom: SCREEN_BOTTOM_SAFE_PADDING + theme.spacing.xl + BOTTOM_NAV_CLEARANCE,
-  },
-  body: {
-    gap: theme.spacing.md,
-    marginHorizontal: theme.spacing.lg,
-    paddingTop: theme.spacing.sm,
-  },
-  connectionStatus: {
-    color: theme.textSecondary,
-    fontSize: theme.typography.body,
-    fontWeight: "700",
-    letterSpacing: 0,
-    textAlign: "center",
-  },
-});
+const createStyles = (theme: Theme) =>
+  StyleSheet.create({
+    content: {
+      flexGrow: 1,
+      paddingBottom:
+        SCREEN_BOTTOM_SAFE_PADDING + theme.spacing.xl + BOTTOM_NAV_CLEARANCE,
+    },
+    body: {
+      gap: theme.spacing.md,
+      marginHorizontal: theme.spacing.lg,
+      paddingTop: theme.spacing.sm,
+    },
+    connectionStatus: {
+      color: theme.textSecondary,
+      fontSize: theme.typography.body,
+      fontWeight: "700",
+      letterSpacing: 0,
+      textAlign: "center",
+    },
+  });

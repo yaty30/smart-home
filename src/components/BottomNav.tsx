@@ -55,7 +55,7 @@ export function BottomNav({
   const styles = useMemo(() => createStyles(activeTheme), [activeTheme]);
   const blurTint = colorScheme === "dark" ? "dark" : "light";
   const barBackground = colorScheme === "dark"
-    ? "rgba(22, 18, 16, 0.5)"
+    ? "rgba(80, 66, 59, 0.5)"
     : "rgba(255, 253, 248, 0.5)";
   const visibleProgress = useRef(new Animated.Value(visible ? 1 : 0)).current;
   const activeProgress = useRef(
