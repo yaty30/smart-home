@@ -32,7 +32,7 @@ export const AirflowIcon = ({
     { top: 10, right: 4, size: 13, pl: 4 },
     { top: 13, right: 7, size: 12, pl: 5 },
   ];
-  
+
   const option = types[type - 1] ?? defaultAirConWindPosition;
 
   return (
@@ -219,7 +219,7 @@ export function VerticalAirflowSelector({
       isDisabled={isDisabled}
       isPowered={isPowered}
       label="Vertical Airflow"
-      labelAccessory={<View style={{transform: 'rotate(-90deg)'}}><DraftingCompass color={theme.text} size={18} /></View>}
+      labelAccessory={<View style={{ transform: 'rotate(-65deg)' }}><DraftingCompass color={theme.text} size={18}/></View>}
       onChange={handleChange}
       options={verticalAirflowOptions}
       selectedValue={isAuto ? "auto" : selectedLevel}

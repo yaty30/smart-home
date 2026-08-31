@@ -1,7 +1,5 @@
 import {
   Moon,
-  Power,
-  PowerOff,
   Wifi,
   WifiHigh,
   WifiLow,
@@ -34,11 +32,9 @@ type AcTemperatureCardProps = {
   onInteractionEnd: () => void;
   onToggleQuiet: () => void;
   onTogglePowerful: () => void;
-  onTogglePower: () => void;
 };
 
 export function AcTemperatureCard({
-  subtitle,
   connectionStatus,
   connectionLatencyMs,
   temperature,
@@ -56,7 +52,6 @@ export function AcTemperatureCard({
   onInteractionEnd,
   onToggleQuiet,
   onTogglePowerful,
-  onTogglePower,
 }: AcTemperatureCardProps) {
   const theme = useTheme();
   const styles = useMemo(() => createStyles(theme), [theme]);
@@ -129,28 +124,30 @@ export function AcTemperatureCard({
       <View style={styles.temperatureHeader}>
         <View style={styles.temperatureTitleGroup}>
           {/* commentted out for future fix. */}
-          {/* <View
-            accessibilityLabel={`Connection latency ${connectionPill.label}`}
-            style={[
-              styles.connectionPill,
-              {
-                backgroundColor: connectionPill.backgroundColor,
-                borderColor: connectionPill.borderColor,
-              },
-            ]}
-          >
-            <ConnectionIcon
-              color={connectionPill.color}
-              size={16}
-              strokeWidth={2.5}
-            />
-            <Text
-              style={[styles.connectionPillText, { color: connectionPill.color }]}
+          {power &&
+            <View
+              accessibilityLabel={`Connection latency ${connectionPill.label}`}
+              style={[
+                styles.connectionPill,
+                {
+                  // backgroundColor: connectionPill.backgroundColor,
+                  // borderColor: connectionPill.borderColor,
+                },
+              ]}
             >
-              {connectionPill.label}
-            </Text>
-          </View> */}
-          <Text style={styles.cardSubtitle}>{subtitle}</Text>
+              <ConnectionIcon
+                color={connectionPill.color}
+                size={16}
+                strokeWidth={2.5}
+              />
+              <Text
+                style={[styles.connectionPillText, { color: connectionPill.color }]}
+              >
+                {connectionPill.label}
+              </Text>
+            </View>
+          }
+          {/* <Text style={styles.cardSubtitle}>{subtitle}</Text> */}
         </View>
         <View style={styles.temperatureActions}>
           <TouchableOpacity
@@ -198,28 +195,6 @@ export function AcTemperatureCard({
               strokeWidth={2.4}
             />
           </TouchableOpacity>
-          <TouchableOpacity
-            activeOpacity={0.75}
-            accessibilityLabel="Toggle air conditioner power"
-            accessibilityRole="switch"
-            accessibilityState={{
-              checked: power,
-              disabled: !canControlDevice,
-            }}
-            disabled={!canControlDevice}
-            onPress={onTogglePower}
-            style={[
-              styles.powerCornerButton,
-              power ? styles.powerCornerButtonOn : styles.powerCornerButtonOff,
-              !canControlDevice && styles.powerCornerButtonDisabled,
-            ]}
-          >
-            {power ? (
-              <PowerOff color={theme.powerAccent} size={20} strokeWidth={2.4} />
-            ) : (
-              <Power color={theme.accent} size={20} strokeWidth={2.4} />
-            )}
-          </TouchableOpacity>
         </View>
       </View>
 
@@ -254,13 +229,9 @@ const createStyles = (theme: Theme) =>
     connectionPill: {
       alignItems: "center",
       alignSelf: "flex-start",
-      borderRadius: theme.radiusRound,
-      borderWidth: 1,
       flexDirection: "row",
       gap: theme.spacing.sm,
       minHeight: 32,
-      paddingHorizontal: theme.spacing.md,
-      paddingVertical: 6,
     },
     connectionPillText: {
       fontSize: 13,

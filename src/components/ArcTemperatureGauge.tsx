@@ -218,8 +218,17 @@ export function ArcTemperatureGauge({
         </Svg>
 
         <View pointerEvents="none" style={styles.centerBlock}>
-          <Text style={styles.temperatureValue}>{roundedTemperature}°C</Text>
-          <Text style={styles.temperatureLabel}>Temperature</Text>
+          {isPowered ?
+            <View>
+              <Text style={styles.temperatureValue}>{roundedTemperature}°C</Text>
+              <Text style={styles.temperatureLabel}>Temperature</Text>
+            </View>
+            :
+            <View>
+              <Text style={styles.temperatureValue}>OFF</Text>
+              <Text style={styles.temperatureLabel}></Text>
+            </View>
+          }
         </View>
 
         <Text

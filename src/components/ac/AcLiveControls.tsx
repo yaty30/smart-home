@@ -1,8 +1,12 @@
 import { useMemo } from "react";
-import { StyleSheet, View } from "react-native";
+import { Animated, StyleSheet, View } from "react-native";
 
 import { type Theme, useTheme } from "../../theme/theme";
-import type { AirflowLevel, FanSpeed } from "../../types/airConditioner";
+import type {
+  AirConditionerMode,
+  AirflowLevel,
+  FanSpeed,
+} from "../../types/airConditioner";
 import {
   HorizontalAirflowSelector,
   VerticalAirflowSelector,
@@ -10,6 +14,14 @@ import {
 import { CollapsibleView } from "../CollapsibleView";
 import { FanSpeedControl } from "../FanSpeedControl";
 import { Section } from "../Section";
+import { AcModePillRow } from "./AcModePillRow";
+
+type AcModePillRowConfig = {
+  dimStyle: { opacity: Animated.AnimatedInterpolation<string | number> };
+  enabled: boolean;
+  mode: AirConditionerMode;
+  onSelectMode: (nextMode: AirConditionerMode) => void;
+};
 
 type AcLiveControlsProps = {
   power: boolean;
@@ -20,6 +32,7 @@ type AcLiveControlsProps = {
   horizontalAirflowAuto: boolean;
   verticalAirflow: AirflowLevel;
   verticalAirflowAuto: boolean;
+  acModePill: AcModePillRowConfig;
   onChangeFanSpeed: (speed: FanSpeed) => void;
   onChangeFanAuto: (auto: boolean) => void;
   onChangeHorizontalAirflow: (level: AirflowLevel) => void;
@@ -37,6 +50,7 @@ export function AcLiveControls({
   horizontalAirflowAuto,
   verticalAirflow,
   verticalAirflowAuto,
+  acModePill,
   onChangeFanSpeed,
   onChangeFanAuto,
   onChangeHorizontalAirflow,
@@ -50,6 +64,15 @@ export function AcLiveControls({
   return (
     <CollapsibleView visible={power}>
       <View style={styles.liveControlSections}>
+        <Section>
+          <AcModePillRow
+            dimStyle={acModePill.dimStyle}
+            enabled={acModePill.enabled}
+            mode={acModePill.mode}
+            onSelectMode={acModePill.onSelectMode}
+          />
+        </Section>
+        
         <Section>
           <FanSpeedControl
             isAuto={fanAuto}
