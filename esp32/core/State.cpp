@@ -3,10 +3,10 @@
 AcState acState = {
   true,
   24,
-  kPanasonicAcCool,
-  kPanasonicAcFanAuto,
-  kPanasonicAcSwingVAuto,
-  kPanasonicAcSwingHAuto,
+  AC_MODE_COOL,
+  AC_FAN_AUTO,
+  AC_SWING_V_AUTO,
+  AC_SWING_H_AUTO,
   false,
   false
 };
@@ -53,113 +53,66 @@ String powerString(bool power) {
 
 String modeString(uint8_t mode) {
   switch (mode) {
-    case kPanasonicAcAuto:
-      return "auto";
-    case kPanasonicAcCool:
-      return "cool";
-    case kPanasonicAcDry:
-      return "dry";
-    case kPanasonicAcFan:
-      return "fan";
-    case kPanasonicAcHeat:
-      return "heat";
-    default:
-      return "unknown";
+    case AC_MODE_AUTO: return "auto";
+    case AC_MODE_COOL: return "cool";
+    case AC_MODE_DRY:  return "dry";
+    case AC_MODE_FAN:  return "fan";
+    case AC_MODE_HEAT: return "heat";
+    default:           return "unknown";
   }
 }
 
 String modeDisplayLabel(uint8_t mode) {
   switch (mode) {
-    case kPanasonicAcAuto:
-      return "Auto";
-    case kPanasonicAcCool:
-      return "Cool";
-    case kPanasonicAcDry:
-      return "Dry";
-    case kPanasonicAcFan:
-      return "Fan";
-    case kPanasonicAcHeat:
-      return "Heat";
-    default:
-      return "Mode";
+    case AC_MODE_AUTO: return "Auto";
+    case AC_MODE_COOL: return "Cool";
+    case AC_MODE_DRY:  return "Dry";
+    case AC_MODE_FAN:  return "Fan";
+    case AC_MODE_HEAT: return "Heat";
+    default:           return "Mode";
   }
 }
 
 String modeDisplayIcon(uint8_t mode) {
   switch (mode) {
-    case kPanasonicAcAuto:
-      return "A";
-    case kPanasonicAcCool:
-      return "*";
-    case kPanasonicAcDry:
-      return "~";
-    case kPanasonicAcFan:
-      return "F";
-    case kPanasonicAcHeat:
-      return "O";
-    default:
-      return "-";
+    case AC_MODE_AUTO: return "A";
+    case AC_MODE_COOL: return "*";
+    case AC_MODE_DRY:  return "~";
+    case AC_MODE_FAN:  return "F";
+    case AC_MODE_HEAT: return "O";
+    default:           return "-";
   }
 }
 
 String fanString(uint8_t fan) {
-  if (fan == kPanasonicAcFanAuto) {
-    return "auto";
-  }
-
-  if (fan >= kPanasonicAcFanMin && fan <= kPanasonicAcFanMax) {
-    return String(fan + 1);
-  }
-
+  if (fan == AC_FAN_AUTO) return "auto";
+  if (fan >= AC_FAN_1 && fan <= AC_FAN_5) return String(fan);
   return "unknown";
 }
 
 String fanDisplayLabel(uint8_t fan) {
-  if (fan == kPanasonicAcFanAuto) {
-    return "Auto";
-  }
-
-  if (fan >= kPanasonicAcFanMin && fan <= kPanasonicAcFanMax) {
-    return "Fan " + String(fan + 1);
-  }
-
+  if (fan == AC_FAN_AUTO) return "Auto";
+  if (fan >= AC_FAN_1 && fan <= AC_FAN_5) return "Fan " + String(fan);
   return "Fan";
 }
 
 String swingVerticalString(uint8_t swingVertical) {
-  if (swingVertical == kPanasonicAcSwingVAuto) {
-    return "auto";
-  }
-
-  return String(swingVertical);
+  if (swingVertical == AC_SWING_V_AUTO) return "auto";
+  if (swingVertical >= AC_SWING_V_HIGHEST && swingVertical <= AC_SWING_V_LOWEST)
+    return String(swingVertical);
+  return "unknown";
 }
 
 String swingHorizontalString(uint8_t swingHorizontal) {
-  if (swingHorizontal == kPanasonicAcSwingHAuto) {
-    return "auto";
+  switch (swingHorizontal) {
+    case AC_SWING_H_AUTO:       return "auto";
+    case AC_SWING_H_FULL_LEFT:  return "1";
+    case AC_SWING_H_LEFT:       return "2";
+    case AC_SWING_H_MIDDLE:     return "3";
+    case AC_SWING_H_RIGHT:      return "4";
+    case AC_SWING_H_FULL_RIGHT: return "5";
+    default:                    return "unknown";
   }
-
-  if (swingHorizontal == kPanasonicAcSwingHFullLeft) {
-    return "1";
-  }
-
-  if (swingHorizontal == kPanasonicAcSwingHLeft) {
-    return "2";
-  }
-
-  if (swingHorizontal == kPanasonicAcSwingHMiddle) {
-    return "3";
-  }
-
-  if (swingHorizontal == kPanasonicAcSwingHRight) {
-    return "4";
-  }
-
-  if (swingHorizontal == kPanasonicAcSwingHFullRight) {
-    return "5";
-  }
-
-  return "unknown";
 }
 
 String acStateJson() {
@@ -178,199 +131,89 @@ String acStateJson() {
 }
 
 bool parsePower(const String& value, bool& power) {
-  if (value == "on") {
-    power = true;
-    return true;
-  }
-
-  if (value == "off") {
-    power = false;
-    return true;
-  }
-
+  if (value == "on")  { power = true;  return true; }
+  if (value == "off") { power = false; return true; }
   return false;
 }
 
 bool parseToggle(const String& value, bool& enabled) {
-  if (value == "on" || value == "true" || value == "1") {
-    enabled = true;
-    return true;
-  }
-
-  if (value == "off" || value == "false" || value == "0") {
-    enabled = false;
-    return true;
-  }
-
+  if (value == "on" || value == "true" || value == "1") { enabled = true;  return true; }
+  if (value == "off" || value == "false" || value == "0") { enabled = false; return true; }
   return false;
 }
 
 bool parseTemperatureValue(int value, int& temp) {
-  if (value < 16 || value > 30) {
-    return false;
-  }
-
+  if (value < 16 || value > 30) return false;
   temp = value;
   return true;
 }
 
 bool parseTemperature(const String& value, int& temp) {
-  if (value.length() == 0) {
-    return false;
-  }
-
+  if (value.length() == 0) return false;
   for (size_t i = 0; i < value.length(); i++) {
-    if (!isDigit(value[i])) {
-      return false;
-    }
+    if (!isDigit(value[i])) return false;
   }
-
   return parseTemperatureValue(value.toInt(), temp);
 }
 
 bool parseMode(const String& value, uint8_t& mode) {
-  if (value == "auto") {
-    mode = kPanasonicAcAuto;
-    return true;
-  }
-
-  if (value == "cool" || value == "cold") {
-    mode = kPanasonicAcCool;
-    return true;
-  }
-
-  if (value == "dry") {
-    mode = kPanasonicAcDry;
-    return true;
-  }
-
-  if (value == "fan") {
-    mode = kPanasonicAcFan;
-    return true;
-  }
-
-  if (value == "heat") {
-    mode = kPanasonicAcHeat;
-    return true;
-  }
-
+  if (value == "auto")               { mode = AC_MODE_AUTO; return true; }
+  if (value == "cool" || value == "cold") { mode = AC_MODE_COOL; return true; }
+  if (value == "dry")                { mode = AC_MODE_DRY;  return true; }
+  if (value == "fan")                { mode = AC_MODE_FAN;  return true; }
+  if (value == "heat")               { mode = AC_MODE_HEAT; return true; }
   return false;
 }
 
 bool parseFan(const String& value, uint8_t& fan) {
-  if (value == "auto") {
-    fan = kPanasonicAcFanAuto;
-    return true;
-  }
-
-  if (value.length() == 0) {
-    return false;
-  }
-
+  if (value == "auto") { fan = AC_FAN_AUTO; return true; }
+  if (value.length() == 0) return false;
   for (size_t i = 0; i < value.length(); i++) {
-    if (!isDigit(value[i])) {
-      return false;
-    }
+    if (!isDigit(value[i])) return false;
   }
-
-  int numericFan = value.toInt();
-  if (numericFan < 1 || numericFan > 5) {
-    return false;
-  }
-
-  fan = static_cast<uint8_t>(numericFan - 1);
+  int v = value.toInt();
+  if (v < 1 || v > 5) return false;
+  fan = static_cast<uint8_t>(v);
   return true;
 }
 
 bool parseSwingVertical(const String& value, uint8_t& swingVertical) {
-  if (value == "auto") {
-    swingVertical = kPanasonicAcSwingVAuto;
-    return true;
-  }
+  if (value == "auto")    { swingVertical = AC_SWING_V_AUTO;    return true; }
+  if (value == "highest") { swingVertical = AC_SWING_V_HIGHEST; return true; }
+  if (value == "high")    { swingVertical = AC_SWING_V_HIGH;    return true; }
+  if (value == "middle")  { swingVertical = AC_SWING_V_MIDDLE;  return true; }
+  if (value == "low")     { swingVertical = AC_SWING_V_LOW;     return true; }
+  if (value == "lowest")  { swingVertical = AC_SWING_V_LOWEST;  return true; }
 
-  if (value == "highest" || value == "high" || value == "middle" || value == "low" || value == "lowest") {
-    if (value == "highest") {
-      swingVertical = kPanasonicAcSwingVHighest;
-    } else if (value == "high") {
-      swingVertical = kPanasonicAcSwingVHigh;
-    } else if (value == "middle") {
-      swingVertical = kPanasonicAcSwingVMiddle;
-    } else if (value == "low") {
-      swingVertical = kPanasonicAcSwingVLow;
-    } else {
-      swingVertical = kPanasonicAcSwingVLowest;
-    }
-    return true;
-  }
-
-  if (value.length() == 0) {
-    return false;
-  }
-
+  if (value.length() == 0) return false;
   for (size_t i = 0; i < value.length(); i++) {
-    if (!isDigit(value[i])) {
-      return false;
-    }
+    if (!isDigit(value[i])) return false;
   }
-
-  int numericSwing = value.toInt();
-  if (numericSwing < 1 || numericSwing > 5) {
-    return false;
-  }
-
-  swingVertical = static_cast<uint8_t>(numericSwing);
+  int v = value.toInt();
+  if (v < 1 || v > 5) return false;
+  swingVertical = static_cast<uint8_t>(v);
   return true;
 }
 
 bool parseSwingHorizontal(const String& value, uint8_t& swingHorizontal) {
-  if (value == "auto") {
-    swingHorizontal = kPanasonicAcSwingHAuto;
-    return true;
-  }
+  if (value == "auto")       { swingHorizontal = AC_SWING_H_AUTO;       return true; }
+  if (value == "full_left")  { swingHorizontal = AC_SWING_H_FULL_LEFT;  return true; }
+  if (value == "left")       { swingHorizontal = AC_SWING_H_LEFT;       return true; }
+  if (value == "middle")     { swingHorizontal = AC_SWING_H_MIDDLE;     return true; }
+  if (value == "right")      { swingHorizontal = AC_SWING_H_RIGHT;      return true; }
+  if (value == "full_right") { swingHorizontal = AC_SWING_H_FULL_RIGHT; return true; }
 
-  if (value == "full_left" || value == "left" || value == "middle" || value == "right" || value == "full_right") {
-    if (value == "full_left") {
-      swingHorizontal = kPanasonicAcSwingHFullLeft;
-    } else if (value == "left") {
-      swingHorizontal = kPanasonicAcSwingHLeft;
-    } else if (value == "middle") {
-      swingHorizontal = kPanasonicAcSwingHMiddle;
-    } else if (value == "right") {
-      swingHorizontal = kPanasonicAcSwingHRight;
-    } else {
-      swingHorizontal = kPanasonicAcSwingHFullRight;
-    }
-    return true;
-  }
-
-  if (value.length() == 0) {
-    return false;
-  }
-
+  if (value.length() == 0) return false;
   for (size_t i = 0; i < value.length(); i++) {
-    if (!isDigit(value[i])) {
-      return false;
-    }
+    if (!isDigit(value[i])) return false;
   }
-
   switch (value.toInt()) {
-    case 1:
-      swingHorizontal = kPanasonicAcSwingHFullLeft;
-      return true;
-    case 2:
-      swingHorizontal = kPanasonicAcSwingHLeft;
-      return true;
-    case 3:
-      swingHorizontal = kPanasonicAcSwingHMiddle;
-      return true;
-    case 4:
-      swingHorizontal = kPanasonicAcSwingHRight;
-      return true;
-    case 5:
-      swingHorizontal = kPanasonicAcSwingHFullRight;
-      return true;
-    default:
-      return false;
+    case 1: swingHorizontal = AC_SWING_H_FULL_LEFT;  return true;
+    case 2: swingHorizontal = AC_SWING_H_LEFT;       return true;
+    case 3: swingHorizontal = AC_SWING_H_MIDDLE;     return true;
+    case 4: swingHorizontal = AC_SWING_H_RIGHT;      return true;
+    case 5: swingHorizontal = AC_SWING_H_FULL_RIGHT; return true;
+    default: return false;
   }
 }
 
