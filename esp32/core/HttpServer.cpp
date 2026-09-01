@@ -674,14 +674,14 @@ void handlePutSchedule() {
       return false;
     }
 
-    uint8_t nextMode = kPanasonicAcCool;
+    uint8_t nextMode = AC_MODE_COOL;
     int nextTemp = 24;
-    uint8_t nextFan = kPanasonicAcFanAuto;
-    uint8_t nextSwingV = kPanasonicAcSwingVAuto;
-    uint8_t nextSwingH = kPanasonicAcSwingHAuto;
+    uint8_t nextFan = AC_FAN_AUTO;
+    uint8_t nextSwingV = AC_SWING_V_AUTO;
+    uint8_t nextSwingH = AC_SWING_H_AUTO;
 
     if (nextType != ScheduleTypeAutoOff) {
-      if (!parseMode(modeStr, nextMode) || nextMode == kPanasonicAcFan) {
+      if (!parseMode(modeStr, nextMode) || nextMode == AC_MODE_FAN) {
         sendJson(400, "{\"success\":false,\"error\":\"Invalid mode (auto|cool|dry|heat)\"}");
         return false;
       }

@@ -12,12 +12,14 @@ import { type Theme, theme, useTheme } from '../theme/theme';
 
 type SwipeableItemProps = PropsWithChildren<{
   onDelete: () => void;
+  onEdit?: () => void;
   onRename?: () => void;
   onPress?: () => void;
   onSwipeEnd?: () => void;
   onSwipeStart?: () => void;
   style?: ViewStyle | ViewStyle[];
   contentBackground?: string;
+  editAccessibilityLabel?: string;
 }>;
 
 const SWIPE_THRESHOLD = -70;
@@ -28,12 +30,14 @@ const ACTION_BUTTON_RADIUS = theme.radiusMedium;
 export function SwipeableItem({
   children,
   onDelete,
+  onEdit,
   onRename,
   onPress,
   onSwipeEnd,
   onSwipeStart,
   style,
   contentBackground,
+  editAccessibilityLabel,
 }: SwipeableItemProps) {
   const activeTheme = useTheme();
   const styles = useMemo(() => createStyles(activeTheme), [activeTheme]);
@@ -41,10 +45,11 @@ export function SwipeableItem({
   const lastOffset = useRef(0);
   const gestureStartTime = useRef(0);
   const gestureStartPos = useRef({ x: 0, y: 0 });
-  const actionCount = onRename ? 2 : 1;
+  const editAction = onEdit ?? onRename;
+  const actionCount = editAction ? 2 : 1;
   const actionWidth =
     actionCount * ACTION_BUTTON_WIDTH +
-    (onRename ? ACTION_BUTTON_GAP * 2 : 0);
+    (editAction ? ACTION_BUTTON_GAP * 2 : 0);
 
   const panResponder = useRef(
     PanResponder.create({
@@ -138,17 +143,17 @@ export function SwipeableItem({
       <View
         style={[
           styles.actionButtonContainer,
-          onRename && styles.actionButtonContainerWithRename,
+          editAction && styles.actionButtonContainerWithEdit,
           { width: actionWidth },
         ]}
       >
-        {onRename ? (
+        {editAction ? (
           <TouchableOpacity
             activeOpacity={0.8}
             accessibilityRole="button"
-            accessibilityLabel="Rename"
-            onPress={() => handleAction(onRename)}
-            style={[styles.actionButton, styles.renameButton]}
+            accessibilityLabel={editAccessibilityLabel ?? (onEdit ? 'Edit' : 'Rename')}
+            onPress={() => handleAction(editAction)}
+            style={[styles.actionButton, styles.editButton]}
           >
             <Pencil color={activeTheme.text} size={20} strokeWidth={2.4} />
           </TouchableOpacity>
@@ -195,7 +200,7 @@ const createStyles = (theme: Theme) => StyleSheet.create({
     flexDirection: 'row',
     gap: ACTION_BUTTON_GAP,
   },
-  actionButtonContainerWithRename: {
+  actionButtonContainerWithEdit: {
     paddingLeft: ACTION_BUTTON_GAP,
   },
   actionButton: {
@@ -205,7 +210,7 @@ const createStyles = (theme: Theme) => StyleSheet.create({
     alignItems: 'center',
     borderRadius: ACTION_BUTTON_RADIUS,
   },
-  renameButton: {
+  editButton: {
     backgroundColor: theme.accent,
   },
   deleteButton: {
