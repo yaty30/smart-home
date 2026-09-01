@@ -1,7 +1,7 @@
 #pragma once
 
 #include <Arduino.h>
-#include "ac/AcTypes.h"
+#include "src/ac/AcTypes.h"
 
 // Generic AC state — brand-neutral values throughout.
 // Drivers are responsible for translating these to protocol-specific constants.
