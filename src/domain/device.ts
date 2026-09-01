@@ -4,7 +4,7 @@ export type DeviceBrand =
   | "panasonic" | "lg" | "mitsubishi" | "hitachi"
   | "toshiba" | "sharp" | "fujitsu" | "samsung" | "midea";
 
-export type DeviceTransport = "ir" | "rf";
+export type DeviceTransport = "ir" | "rf" | "network";
 
 export type DeviceCapabilities = {
   power?: boolean;
@@ -35,6 +35,7 @@ export type Device = {
 
   roomId: string;
   controllerId: string;
+  controllerDeviceId?: string;  // ID on ESP32 side (for network devices like TVs)
 
   type: DeviceType;
   brand: DeviceBrand;
@@ -77,7 +78,8 @@ export const createDevice = (
   controllerId: string,
   type: DeviceType,
   brand: DeviceBrand,
-  transport: DeviceTransport
+  transport: DeviceTransport,
+  controllerDeviceId?: string
 ): Device => ({
   id: `device-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
   name,
@@ -86,6 +88,7 @@ export const createDevice = (
   type,
   brand,
   transport,
+  ...(controllerDeviceId ? { controllerDeviceId } : {}),
   capabilities: {},
   state: {},
 });

@@ -11,8 +11,16 @@
 #include "StorageManager.h"
 #include "WebSocketServer.h"
 #include "WiFiManager.h"
+#include "src/tv/TvManager.h"
 
 WebServer server(80);
+
+// TV manager pointer (owned by main)
+static TvManager* tvManager = nullptr;
+
+void setTvManager(TvManager* manager) {
+  tvManager = manager;
+}
 
 const char* AUTH_HEADER_KEYS[] = { "Authorization" };
 
@@ -772,6 +780,263 @@ void handleDeleteSchedule() {
   sendJson(200, "{\"success\":true}");
 }
 
+// ─── TV Discovery ────────────────────────────────────────────────────────────
+
+void handleTvDiscovery() {
+  logRequestContent("handleTvDiscovery");
+
+  if (!tvManager) {
+    sendJson(503, "{\"success\":false,\"error\":\"TV manager not initialized\"}");
+    return;
+  }
+
+  if (tvManager->isDiscovering()) {
+    sendJson(409, "{\"success\":false,\"error\":\"Discovery already in progress\"}");
+    return;
+  }
+
+  tvManager->startDiscovery();
+
+  sendJson(200, "{\"success\":true,\"message\":\"Discovery started\"}");
+}
+
+void handleTvDiscoveryStatus() {
+  logRequestContent("handleTvDiscoveryStatus");
+
+  if (!tvManager) {
+    sendJson(503, "{\"success\":false,\"error\":\"TV manager not initialized\"}");
+    return;
+  }
+
+  bool scanning = tvManager->isDiscovering();
+  uint8_t count = tvManager->getDiscoveredCount();
+  const DiscoveredTv* discovered = tvManager->getDiscovered();
+
+  String body = "{";
+  body += "\"success\":true,";
+  body += "\"scanning\":" + boolString(scanning) + ",";
+  body += "\"devices\":[";
+
+  for (uint8_t i = 0; i < count; i++) {
+    if (i > 0) body += ",";
+
+    const DiscoveredTv& tv = discovered[i];
+    body += "{";
+    body += "\"id\":\"" + jsonEscape(tv.id) + "\",";
+    body += "\"name\":\"" + jsonEscape(tv.name) + "\",";
+    body += "\"brand\":\"" + jsonEscape(tv.brand) + "\",";
+    body += "\"model\":\"" + jsonEscape(tv.model) + "\",";
+    body += "\"ip\":\"" + jsonEscape(tv.ip) + "\",";
+    body += "\"mac\":\"" + jsonEscape(tv.mac) + "\",";
+    body += "\"protocol\":\"";
+    if (tv.protocol == TvProtocol::WebOS) {
+      body += "webos";
+    } else {
+      body += "unknown";
+    }
+    body += "\"";
+    body += "}";
+  }
+
+  body += "]";
+  body += "}";
+
+  sendJson(200, body);
+}
+
+// ─── TV Pairing ──────────────────────────────────────────────────────────────
+
+void handleTvPairStart() {
+  logRequestContent("handleTvPairStart");
+
+  if (!tvManager) {
+    sendJson(503, "{\"success\":false,\"error\":\"TV manager not initialized\"}");
+    return;
+  }
+
+  if (!server.hasArg("discoveryId")) {
+    sendJson(400, "{\"success\":false,\"error\":\"discoveryId required\"}");
+    return;
+  }
+
+  String discoveryId = server.arg("discoveryId");
+  if (tvManager->isTvPaired(discoveryId.c_str())) {
+    sendJson(409, "{\"success\":false,\"error\":\"TV already paired\"}");
+    return;
+  }
+
+  bool started = tvManager->startPairing(discoveryId.c_str());
+
+  if (!started) {
+    sendJson(400, "{\"success\":false,\"error\":\"Cannot start pairing\"}");
+    return;
+  }
+
+  String body = "{";
+  body += "\"success\":true,";
+  body += "\"message\":\"Pairing started. Approve on TV\"";
+  body += "}";
+
+  sendJson(200, body);
+}
+
+void handleTvPairStatus() {
+  logRequestContent("handleTvPairStatus");
+
+  if (!tvManager) {
+    sendJson(503, "{\"success\":false,\"error\":\"TV manager not initialized\"}");
+    return;
+  }
+
+  LgPairingState state = tvManager->getPairingState();
+
+  String stateStr;
+  switch (state) {
+    case LgPairingState::Idle:
+      stateStr = "idle";
+      break;
+    case LgPairingState::Connecting:
+      stateStr = "connecting";
+      break;
+    case LgPairingState::WaitingForPin:
+      stateStr = "waiting_for_pin";
+      break;
+    case LgPairingState::WaitingForApproval:
+      stateStr = "waiting_for_approval";
+      break;
+    case LgPairingState::Paired:
+      stateStr = "paired";
+      break;
+    case LgPairingState::Failed:
+      stateStr = "failed";
+      break;
+    default:
+      stateStr = "unknown";
+  }
+
+  String body = "{";
+  body += "\"success\":true,";
+  body += "\"state\":\"" + stateStr + "\"";
+  body += "}";
+
+  sendJson(200, body);
+}
+
+void handleTvPairPin() {
+  logRequestContent("handleTvPairPin");
+
+  if (!tvManager) {
+    sendJson(503, "{\"success\":false,\"error\":\"TV manager not initialized\"}");
+    return;
+  }
+
+  if (!server.hasArg("pin")) {
+    sendJson(400, "{\"success\":false,\"error\":\"pin required\"}");
+    return;
+  }
+
+  String pin = server.arg("pin");
+  pin.trim();
+  if (pin.length() == 0) {
+    sendJson(400, "{\"success\":false,\"error\":\"pin required\"}");
+    return;
+  }
+
+  bool success = tvManager->submitPairingPin(pin.c_str());
+  if (!success) {
+    sendJson(400, "{\"success\":false,\"error\":\"Cannot submit pairing PIN\"}");
+    return;
+  }
+
+  sendJson(200, "{\"success\":true,\"message\":\"PIN submitted\"}");
+}
+
+void handleTvPairComplete() {
+  logRequestContent("handleTvPairComplete");
+
+  if (!tvManager) {
+    sendJson(503, "{\"success\":false,\"error\":\"TV manager not initialized\"}");
+    return;
+  }
+
+  if (!server.hasArg("name")) {
+    sendJson(400, "{\"success\":false,\"error\":\"name required\"}");
+    return;
+  }
+
+  String name = server.arg("name");
+  bool completed = tvManager->completePairing(name.c_str());
+
+  if (!completed) {
+    sendJson(400, "{\"success\":false,\"error\":\"Cannot complete pairing\"}");
+    return;
+  }
+
+  String body = "{";
+  body += "\"success\":true,";
+  body += "\"message\":\"TV paired successfully\"";
+  body += "}";
+
+  sendJson(200, body);
+}
+
+void handleTvUnpair() {
+  logRequestContent("handleTvUnpair");
+
+  if (!tvManager) {
+    sendJson(503, "{\"success\":false,\"error\":\"TV manager not initialized\"}");
+    return;
+  }
+
+  if (!server.hasArg("tvId")) {
+    sendJson(400, "{\"success\":false,\"error\":\"tvId required\"}");
+    return;
+  }
+
+  String tvId = server.arg("tvId");
+  bool success = tvManager->unpairTv(tvId.c_str());
+
+  if (!success) {
+    sendJson(404, "{\"success\":false,\"error\":\"TV not found\"}");
+    return;
+  }
+
+  sendJson(200, "{\"success\":true,\"message\":\"TV unpaired\"}");
+}
+
+// ─── TV Control ──────────────────────────────────────────────────────────────
+
+void handleTvCommand() {
+  logRequestContent("handleTvCommand");
+
+  if (!tvManager) {
+    sendJson(503, "{\"success\":false,\"error\":\"TV manager not initialized\"}");
+    return;
+  }
+
+  if (!server.hasArg("tvId") || !server.hasArg("command")) {
+    sendJson(400, "{\"success\":false,\"error\":\"tvId and command required\"}");
+    return;
+  }
+
+  String tvId = server.arg("tvId");
+  String command = server.arg("command");
+
+  bool success = tvManager->sendTvCommand(tvId.c_str(), command.c_str());
+
+  if (!success) {
+    sendJson(400, "{\"success\":false,\"error\":\"Command failed\"}");
+    return;
+  }
+
+  String body = "{";
+  body += "\"success\":true,";
+  body += "\"message\":\"Command sent\"";
+  body += "}";
+
+  sendJson(200, body);
+}
+
 void setupRoutes() {
   server.on("/", HTTP_GET, handleRoot);
   server.on("/status", HTTP_GET, handleStatus);
@@ -783,6 +1048,17 @@ void setupRoutes() {
   server.on("/power/on", HTTP_GET, handlePowerOn);
   server.on("/power/off", HTTP_GET, handlePowerOff);
   server.on("/wifi", HTTP_GET, handleWifi);
+
+  // TV endpoints
+  server.on("/tv/discover", HTTP_POST, handleTvDiscovery);
+  server.on("/tv/discover", HTTP_GET, handleTvDiscoveryStatus);
+  server.on("/tv/pair/start", HTTP_POST, handleTvPairStart);
+  server.on("/tv/pair/pin", HTTP_POST, handleTvPairPin);
+  server.on("/tv/pair/status", HTTP_GET, handleTvPairStatus);
+  server.on("/tv/pair/complete", HTTP_POST, handleTvPairComplete);
+  server.on("/tv/unpair", HTTP_POST, handleTvUnpair);
+  server.on("/tv/command", HTTP_POST, handleTvCommand);
+
   server.onNotFound(handleDynamicRoute);
 }
 

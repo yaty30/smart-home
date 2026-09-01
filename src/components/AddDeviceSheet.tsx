@@ -40,7 +40,7 @@ export function AddDeviceSheet({ visible, onClose, onContinue }: AddDeviceSheetP
 
   const deviceTypes = [
     { type: 'ac' as DeviceType, label: 'Air Conditioner', icon: AirVent, enabled: true },
-    { type: 'tv' as DeviceType, label: 'TV', icon: Tv, enabled: false },
+    { type: 'tv' as DeviceType, label: 'TV', icon: Tv, enabled: true },
     { type: 'light' as DeviceType, label: 'Lamp', icon: Lightbulb, enabled: false },
   ];
 
@@ -101,7 +101,13 @@ export function AddDeviceSheet({ visible, onClose, onContinue }: AddDeviceSheetP
   const handleTypeSelect = (type: DeviceType, enabled: boolean) => {
     if (!enabled) return;
     setSelectedType(type);
-    setSelectedBrand(type === 'ac' ? 'panasonic' : null);
+    if (type === 'ac') {
+      setSelectedBrand('panasonic');
+    } else if (type === 'tv') {
+      setSelectedBrand('lg');
+    } else {
+      setSelectedBrand(null);
+    }
   };
 
   const handleContinue = () => {
@@ -111,7 +117,7 @@ export function AddDeviceSheet({ visible, onClose, onContinue }: AddDeviceSheetP
     }
   };
 
-  const canContinue = selectedType === 'ac' && selectedBrand != null;
+  const canContinue = (selectedType === 'ac' || selectedType === 'tv') && selectedBrand != null;
 
   return (
     // animationType="slide" lets iOS handle the entrance natively.
@@ -174,7 +180,7 @@ export function AddDeviceSheet({ visible, onClose, onContinue }: AddDeviceSheetP
                 ))}
               </View>
 
-              {selectedType === 'ac' && (
+              {(selectedType === 'ac' || selectedType === 'tv') && (
                 <>
                   <Text style={[styles.sectionLabel, styles.sectionSpacing]}>Brand</Text>
                   <View style={styles.pickerWrapper}>
