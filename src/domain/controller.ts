@@ -8,6 +8,7 @@ export type Controller = {
   id: string;
   controllerId: string;
   name: string;
+  logo?: string;
   roomId?: string;
 
   ip: string;

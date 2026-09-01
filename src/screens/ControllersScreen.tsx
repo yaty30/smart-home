@@ -1,23 +1,45 @@
 import { ChevronLeft, Plus, Wifi, WifiOff } from "lucide-react-native";
-import { StyleSheet, Text, View, ScrollView, Alert } from "react-native";
-import { useMemo } from "react";
+import { StyleSheet, Text, View, ScrollView, Alert, Image } from "react-native";
+import { useCallback, useMemo, useState } from "react";
 import { useControllers } from "../store/controllers";
 import { useDevices } from "../store/devices";
 import { useRooms } from "../store/rooms";
 import { type Theme, useTheme } from "../theme/theme";
 import type { RootStackScreenProps } from "../navigation/types";
 import { AppHeader, HeaderIconButton } from "../components/AppHeader";
-import { controllerStatusText } from "../domain/controller";
+import { controllerStatusText, type Controller } from "../domain/controller";
 import { SwipeableItem } from "../components/SwipeableItem";
+import { EditControllerSheet } from "../components/controller/EditControllerSheet";
 
 type ControllersScreenProps = RootStackScreenProps<"Controllers">;
 
 export function ControllersScreen({ navigation }: ControllersScreenProps) {
   const theme = useTheme();
   const styles = useMemo(() => createStyles(theme), [theme]);
-  const { controllers, removeController } = useControllers();
+  const { controllers, removeController, updateController } = useControllers();
   const { getDevicesByController } = useDevices();
   const { getRoomById } = useRooms();
+  const [editingController, setEditingController] = useState<Controller | null>(
+    null,
+  );
+
+  const handleOpenEditController = useCallback((controller: Controller) => {
+    setEditingController(controller);
+  }, []);
+
+  const handleCloseEditController = useCallback(() => {
+    setEditingController(null);
+  }, []);
+
+  const handleSaveController = useCallback(
+    async (
+      controllerId: string,
+      updates: { name: string; ip: string; logo: string | null },
+    ) => {
+      await updateController(controllerId, updates);
+    },
+    [updateController],
+  );
 
   const handleDeleteController = (
     controllerId: string,
@@ -99,21 +121,30 @@ export function ControllersScreen({ navigation }: ControllersScreenProps) {
               return (
                 <SwipeableItem
                   key={controller.id}
+                  editAccessibilityLabel="Edit controller"
                   onDelete={() =>
                     handleDeleteController(controller.id, controller.name)
                   }
+                  onEdit={() => handleOpenEditController(controller)}
                   style={styles.swipeableContainer}
                 >
                   <View style={styles.controllerCard}>
                     <View style={styles.controllerHeader}>
                       <View style={styles.controllerIcon}>
-                        <StatusIcon
-                          color={
-                            controller.online ? theme.accent : theme.textMuted
-                          }
-                          size={22}
-                          strokeWidth={2.2}
-                        />
+                        {controller.logo ? (
+                          <Image
+                            source={{ uri: controller.logo }}
+                            style={styles.controllerLogo}
+                          />
+                        ) : (
+                          <StatusIcon
+                            color={
+                              controller.online ? theme.accent : theme.textMuted
+                            }
+                            size={22}
+                            strokeWidth={2.2}
+                          />
+                        )}
                       </View>
                       <View style={styles.controllerInfo}>
                         <Text numberOfLines={1} style={styles.controllerName}>
@@ -166,6 +197,13 @@ export function ControllersScreen({ navigation }: ControllersScreenProps) {
           </View>
         )}
       </ScrollView>
+
+      <EditControllerSheet
+        controller={editingController}
+        onClose={handleCloseEditController}
+        onSave={handleSaveController}
+        visible={editingController !== null}
+      />
     </View>
   );
 }
@@ -230,7 +268,12 @@ const createStyles = (theme: Theme) =>
       borderWidth: 1,
       height: 48,
       justifyContent: "center",
+      overflow: "hidden",
       width: 48,
+    },
+    controllerLogo: {
+      height: "100%",
+      width: "100%",
     },
     controllerInfo: {
       flex: 1,
