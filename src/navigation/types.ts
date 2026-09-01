@@ -15,6 +15,10 @@ export type RootStackParamList = {
         roomIcon?: RoomIcon;
       }
     | undefined;
+  TvDiscovery: {
+    roomId: string;
+    controllerId: string;
+  };
 };
 
 export type RootStackScreenProps<T extends keyof RootStackParamList> =
