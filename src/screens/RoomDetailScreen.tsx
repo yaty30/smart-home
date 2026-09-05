@@ -13,6 +13,7 @@ import { BottomNav, BOTTOM_NAV_CLEARANCE } from '../components/BottomNav';
 import { controllerStatusText } from '../domain/controller';
 import { createDevice } from '../domain/device';
 import { deviceService, executeDeviceCommand } from '../services/deviceService';
+import { tvService } from '../services/tvService';
 import { SwipeableItem } from '../components/SwipeableItem';
 import { RenameDialog } from '../components/room/RenameDialog';
 import { RoomControllerCard } from '../components/room/RoomControllerCard';
@@ -79,17 +80,38 @@ export function RoomDetailScreen({ navigation, route }: RoomDetailScreenProps) {
     [updateDeviceState]
   );
 
-  const handleDeleteDevice = (deviceId: string, deviceName: string) => {
+  const unpairDeviceIfNeeded = useCallback(
+    async (device: Device) => {
+      if (device.type !== 'tv' || !device.controllerDeviceId) {
+        return;
+      }
+
+      const controller = getControllerById(device.controllerId);
+      if (!controller?.online) {
+        return;
+      }
+
+      try {
+        await tvService.unpairTv(controller, device.controllerDeviceId);
+      } catch (error) {
+        console.warn('[RoomDetail] Failed to unpair TV from controller:', error);
+      }
+    },
+    [getControllerById],
+  );
+
+  const handleDeleteDevice = (device: Device) => {
     Alert.alert(
       'Delete Device',
-      `Are you sure you want to delete ${deviceName}?`,
+      `Are you sure you want to delete ${device.name}?`,
       [
         { text: 'Cancel', style: 'cancel' },
         {
           text: 'Delete',
           style: 'destructive',
-          onPress: () => {
-            void removeDevice(deviceId);
+          onPress: async () => {
+            await unpairDeviceIfNeeded(device);
+            await removeDevice(device.id);
           },
         },
       ]
@@ -118,6 +140,7 @@ export function RoomDetailScreen({ navigation, route }: RoomDetailScreenProps) {
         text: 'Delete',
         style: 'destructive',
         onPress: async () => {
+          await Promise.all(devices.map(unpairDeviceIfNeeded));
           await removeDevicesByRoom(roomId);
           removeRoom(roomId);
           if (navigation.canGoBack()) {
@@ -128,7 +151,15 @@ export function RoomDetailScreen({ navigation, route }: RoomDetailScreenProps) {
         },
       },
     ]);
-  }, [devices.length, navigation, removeDevicesByRoom, removeRoom, room, roomId]);
+  }, [
+    devices,
+    navigation,
+    removeDevicesByRoom,
+    removeRoom,
+    room,
+    roomId,
+    unpairDeviceIfNeeded,
+  ]);
 
   const handleOpenRename = useCallback(() => {
     if (!room) {
@@ -191,6 +222,18 @@ export function RoomDetailScreen({ navigation, route }: RoomDetailScreenProps) {
         return;
       }
 
+      setShowAddDeviceSheet(false);
+
+      // TV requires discovery flow
+      if (deviceType === 'tv') {
+        navigation.navigate('TvDiscovery', {
+          roomId,
+          controllerId: roomController.id,
+        });
+        return;
+      }
+
+      // AC and other devices use direct creation
       const deviceName =
         deviceType === 'ac' ? 'Air Conditioner' : deviceType.toUpperCase();
 
@@ -215,7 +258,6 @@ export function RoomDetailScreen({ navigation, route }: RoomDetailScreenProps) {
       }
 
       await addDevice(device);
-      setShowAddDeviceSheet(false);
 
       Alert.alert('Device Added', `${deviceName} has been added successfully.`, [
         {
@@ -309,7 +351,7 @@ export function RoomDetailScreen({ navigation, route }: RoomDetailScreenProps) {
               return (
                 <SwipeableItem
                   key={device.id}
-                  onDelete={() => handleDeleteDevice(device.id, device.name)}
+                  onDelete={() => handleDeleteDevice(device)}
                   onRename={() => handleOpenDeviceRename(device)}
                   onSwipeEnd={() => setScrollEnabled(true)}
                   onSwipeStart={() => setScrollEnabled(false)}
@@ -319,7 +361,7 @@ export function RoomDetailScreen({ navigation, route }: RoomDetailScreenProps) {
                     device={device}
                     controllerOnline={roomController?.online === true}
                     onOpen={() => {
-                      if (device.type === 'ac') {
+                      if (device.type === 'ac' || device.type === 'tv') {
                         navigation.navigate('DeviceControl', { deviceId: device.id });
                       }
                     }}
