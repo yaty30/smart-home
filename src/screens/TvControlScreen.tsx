@@ -1,6 +1,6 @@
 import { StyleSheet, View, ScrollView } from 'react-native';
 import { useMemo, useCallback } from 'react';
-import { ChevronLeft } from 'lucide-react-native';
+import { ChevronLeft, Power } from 'lucide-react-native';
 import { useDevices } from '../store/devices';
 import { useControllers } from '../store/controllers';
 import { type Theme, useTheme } from '../theme/theme';
@@ -35,6 +35,11 @@ export function TvControlScreen({ deviceId, onBackPress }: TvControlScreenProps)
         leftAction={
           <HeaderIconButton accessibilityLabel="Back" onPress={handleBackPress}>
             <ChevronLeft color={theme.accent} size={26} strokeWidth={2.35} />
+          </HeaderIconButton>
+        }
+        rightAction={
+          <HeaderIconButton accessibilityLabel="Back" onPress={() => {}}>
+            <Power color={theme.accent} size={26} strokeWidth={2.35} />
           </HeaderIconButton>
         }
         title={device.name}

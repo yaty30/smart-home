@@ -274,7 +274,7 @@ bool TvManager::sendTvCommand(const char* tvId, const char* command) {
     return lgTv.sendRight();
   } else if (strcmp(command, "ok") == 0 || strcmp(command, "enter") == 0) {
     return lgTv.sendOk();
-  } else if (strcmp(command, "back") == 0) {
+  } else if (strcmp(command, "back") == 0 || strcmp(command, "exit") == 0) {
     return lgTv.sendBack();
   } else if (strcmp(command, "home") == 0) {
     return lgTv.sendHome();
