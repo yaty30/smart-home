@@ -6,6 +6,9 @@
 #include "StorageManager.h"
 #include "WebSocketServer.h"
 #include "WiFiManager.h"
+#include "src/tv/TvManager.h"
+
+TvManager tvManager;
 
 void setup() {
   Serial.begin(115200);
@@ -20,6 +23,11 @@ void setup() {
   initHttpServer();
   initWebSocketServer();
   initScheduleManager();
+
+  // Initialize TV manager
+  setTvManager(&tvManager);
+  tvManager.loadPairedTvs();
+  Serial.println("[Setup] TV manager initialized");
 }
 
 void loop() {
@@ -28,5 +36,6 @@ void loop() {
   handlePairingButton();
   processQueuedIR();
   handleScheduleExecution();
+  tvManager.handle();
   delay(1);
 }

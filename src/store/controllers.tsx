@@ -4,11 +4,21 @@ import type { Controller, ControllerConnectionStatus } from '../domain/controlle
 import { isDebugMode } from '../config/debug';
 import { DEBUG_CONTROLLERS } from './debugData';
 
+export type ControllerUpdateInput = {
+  ip?: string;
+  name?: string;
+  logo?: string | null;
+};
+
 type ControllersContextValue = {
   controllers: Controller[];
   isLoading: boolean;
   addController: (controller: Controller) => Promise<void>;
   removeController: (controllerId: string) => Promise<void>;
+  updateController: (
+    controllerId: string,
+    updates: ControllerUpdateInput,
+  ) => Promise<void>;
   updateControllerOnlineStatus: (controllerId: string, online: boolean) => void;
   updateControllerConnectionStatus: (
     controllerId: string,
@@ -35,7 +45,11 @@ const isControllerArray = (value: unknown): value is Controller[] => {
       typeof item.name === 'string' &&
       typeof item.ip === 'string' &&
       typeof item.token === 'string' &&
-      typeof item.online === 'boolean'
+      typeof item.online === 'boolean' &&
+      (
+        (item as { logo?: unknown }).logo === undefined ||
+        typeof (item as { logo?: unknown }).logo === 'string'
+      )
   );
 };
 
@@ -131,6 +145,41 @@ export function ControllersProvider({ children }: PropsWithChildren) {
     [controllers, persistControllers]
   );
 
+  const updateController = useCallback(
+    async (controllerId: string, updates: ControllerUpdateInput) => {
+      const updated = controllers.map((controller) => {
+        if (controller.id !== controllerId) {
+          return controller;
+        }
+
+        const nextController: Controller = { ...controller };
+
+        if (updates.name !== undefined) {
+          nextController.name = updates.name.trim();
+        }
+
+        if (updates.ip !== undefined) {
+          nextController.ip = updates.ip.trim();
+        }
+
+        if (updates.logo !== undefined) {
+          const nextLogo = updates.logo?.trim() ?? '';
+          if (nextLogo.length > 0) {
+            nextController.logo = nextLogo;
+          } else {
+            delete nextController.logo;
+          }
+        }
+
+        return nextController;
+      });
+
+      setControllers(updated);
+      await persistControllers(updated);
+    },
+    [controllers, persistControllers],
+  );
+
   const updateControllerOnlineStatus = useCallback((controllerId: string, online: boolean) => {
     setControllers((current) =>
       current.map((c) => {
@@ -188,6 +237,7 @@ export function ControllersProvider({ children }: PropsWithChildren) {
       isLoading,
       addController,
       removeController,
+      updateController,
       updateControllerOnlineStatus,
       updateControllerConnectionStatus,
       getControllerById,
@@ -198,6 +248,7 @@ export function ControllersProvider({ children }: PropsWithChildren) {
       isLoading,
       addController,
       removeController,
+      updateController,
       updateControllerOnlineStatus,
       updateControllerConnectionStatus,
       getControllerById,

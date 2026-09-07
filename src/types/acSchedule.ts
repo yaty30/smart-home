@@ -3,14 +3,19 @@ import type { AirConditionerMode, AirflowLevel, FanSpeed } from "./airConditione
 export type ScheduleAirflow = "auto" | AirflowLevel;
 export type ScheduleRepeatFrequency = "one-time" | "weekly" | "bi-weekly";
 export type ScheduleFanSpeed = "auto" | FanSpeed;
+export type ScheduleType = "schedule_time" | "auto_on" | "auto_off";
+
+export const MAX_AC_SCHEDULES = 8;
 
 export type AcSchedule = {
+  id: string;
+  type: ScheduleType;
   enabled: boolean;
-  // Both times are optional, but at least one must be set: a schedule may turn
-  // the AC on, off, or both.
+  // Required fields depend on schedule type. Legacy schedules without a type are
+  // normalized by their populated trigger times when loaded.
   startTime: string | null;
   endTime: string | null;
-  // Mon–Sun, index 0 = Monday. Not yet persisted to ESP32; defaults to all true.
+  // Mon-Sun, index 0 = Monday.
   days: boolean[];
   mode: Exclude<AirConditionerMode, "fan">;
   temperature: number;

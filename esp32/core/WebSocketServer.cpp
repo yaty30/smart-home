@@ -52,6 +52,16 @@ String commandAckJson(const String& requestId, bool ok, const String& error = ""
   return body;
 }
 
+String pongJson(const String& requestId) {
+  String body = "{";
+  body += "\"type\":\"pong\"";
+  if (requestId.length() > 0) {
+    body += ",\"requestId\":\"" + jsonEscape(requestId) + "\"";
+  }
+  body += "}";
+  return body;
+}
+
 int jsonStringStart(const String& json, const String& key) {
   String pattern = "\"" + key + "\"";
   int keyIndex = json.indexOf(pattern);
@@ -349,6 +359,13 @@ void handleTextMessage(uint8_t clientId, const String& message) {
 
   if (type == "state.get") {
     sendText(clientId, deviceStateJson());
+    return;
+  }
+
+  if (type == "ping") {
+    String requestId;
+    getJsonString(message, "requestId", requestId);
+    sendText(clientId, pongJson(requestId));
     return;
   }
 

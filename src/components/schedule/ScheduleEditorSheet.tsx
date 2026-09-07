@@ -28,6 +28,10 @@ import { ScheduleModeSection } from "./ScheduleModeSection";
 import { ScheduleRepeatSection } from "./ScheduleRepeatSection";
 import { ScheduleTemperatureSection } from "./ScheduleTemperatureSection";
 import { ScheduleTimeSection } from "./ScheduleTimeSection";
+import {
+  normalizeScheduleForType,
+  scheduleTypeLabels,
+} from "./scheduleConstants";
 import { createSheetChromeStyles } from "./sheetChromeStyles";
 
 type ScheduleEditorSheetProps = {
@@ -56,12 +60,10 @@ export function ScheduleEditorSheet({
     isDirty,
     activeTimePicker,
     temperatureRange,
-    hasAnyTime,
+    canSave,
     handleTimeChange,
     handleSelectStartTime,
     handleSelectEndTime,
-    handleClearStartTime,
-    handleClearEndTime,
     handleToggleQuiet,
     handleTogglePowerful,
     handleToggleDay,
@@ -153,16 +155,17 @@ export function ScheduleEditorSheet({
                   scrollEventThrottle={16}
                   showsVerticalScrollIndicator={false}
                 >
-                  <Text style={s.editorTitle}>AC Schedule</Text>
+                  <Text style={s.editorTitle}>
+                    {scheduleTypeLabels[draft.type]}
+                  </Text>
 
                   <ScheduleTimeSection
                     activeTimePicker={activeTimePicker}
+                    scheduleType={draft.type}
                     startTime={draft.startTime}
                     endTime={draft.endTime}
                     onSelectStartTime={handleSelectStartTime}
                     onSelectEndTime={handleSelectEndTime}
-                    onClearStartTime={handleClearStartTime}
-                    onClearEndTime={handleClearEndTime}
                     onTimeChange={handleTimeChange}
                   />
 
@@ -175,42 +178,46 @@ export function ScheduleEditorSheet({
                       onSelectDayGroup={handleSelectDayGroup}
                     />
 
-                    <ScheduleModeSection
-                      mode={draft.mode}
-                      onSelectMode={handleSelectMode}
-                    />
+                    {draft.type !== "auto_off" && (
+                      <>
+                        <ScheduleModeSection
+                          mode={draft.mode}
+                          onSelectMode={handleSelectMode}
+                        />
 
-                    <ScheduleTemperatureSection
-                      temperature={draft.temperature}
-                      minTemperature={temperatureRange.min}
-                      maxTemperature={temperatureRange.max}
-                      quiet={Boolean(draft.quiet)}
-                      powerful={Boolean(draft.powerful)}
-                      onChangeTemperature={handleChangeTemperature}
-                      onToggleQuiet={handleToggleQuiet}
-                      onTogglePowerful={handleTogglePowerful}
-                      onInteractionStart={() =>
-                        setIsAdjustingTemperature(true)
-                      }
-                      onInteractionEnd={() =>
-                        setIsAdjustingTemperature(false)
-                      }
-                    />
+                        <ScheduleTemperatureSection
+                          temperature={draft.temperature}
+                          minTemperature={temperatureRange.min}
+                          maxTemperature={temperatureRange.max}
+                          quiet={Boolean(draft.quiet)}
+                          powerful={Boolean(draft.powerful)}
+                          onChangeTemperature={handleChangeTemperature}
+                          onToggleQuiet={handleToggleQuiet}
+                          onTogglePowerful={handleTogglePowerful}
+                          onInteractionStart={() =>
+                            setIsAdjustingTemperature(true)
+                          }
+                          onInteractionEnd={() =>
+                            setIsAdjustingTemperature(false)
+                          }
+                        />
 
-                    <ScheduleFanSpeedSection
-                      fanSpeed={draft.fanSpeed}
-                      onChangeFanSpeed={handleChangeFanSpeed}
-                    />
+                        <ScheduleFanSpeedSection
+                          fanSpeed={draft.fanSpeed}
+                          onChangeFanSpeed={handleChangeFanSpeed}
+                        />
 
-                    <ScheduleVerticalAirflowSection
-                      airflow={draft.verticalAirflow}
-                      onChangeAirflow={handleChangeVerticalAirflow}
-                    />
+                        <ScheduleVerticalAirflowSection
+                          airflow={draft.verticalAirflow}
+                          onChangeAirflow={handleChangeVerticalAirflow}
+                        />
 
-                    <ScheduleHorizontalAirflowSection
-                      airflow={draft.horizontalAirflow}
-                      onChangeAirflow={handleChangeHorizontalAirflow}
-                    />
+                        <ScheduleHorizontalAirflowSection
+                          airflow={draft.horizontalAirflow}
+                          onChangeAirflow={handleChangeHorizontalAirflow}
+                        />
+                      </>
+                    )}
                   </View>
                 </ScrollView>
               </View>
@@ -218,8 +225,8 @@ export function ScheduleEditorSheet({
               <View style={chrome.footer}>
                 <AppButton
                   label={saving ? "Saving…" : "Save Schedule"}
-                  onPress={() => onSave(draft)}
-                  disabled={saving || !hasAnyTime}
+                  onPress={() => onSave(normalizeScheduleForType(draft))}
+                  disabled={saving || !canSave}
                 />
               </View>
             </SafeAreaView>

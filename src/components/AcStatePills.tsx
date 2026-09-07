@@ -124,6 +124,7 @@ const createStyles = (theme: Theme) =>
       minHeight: 28,
       paddingHorizontal: 8,
       paddingVertical: 4,
+      width: 80
     },
     pillText: {
       color: theme.textSecondary,

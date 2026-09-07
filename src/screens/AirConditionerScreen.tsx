@@ -1,6 +1,12 @@
 import * as Haptics from "expo-haptics";
 import { useNavigation } from "@react-navigation/native";
-import { CalendarClock, Ellipsis, Star } from "lucide-react-native";
+import {
+  CalendarClock,
+  Power,
+  PowerOff,
+  Rocket,
+  Star,
+} from "lucide-react-native";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Alert,
@@ -10,6 +16,7 @@ import {
   ScrollView,
   StyleSheet,
   Text,
+  TouchableOpacity,
   useWindowDimensions,
   View,
 } from "react-native";
@@ -18,7 +25,8 @@ import { ACHeader } from "../components/ACHeader";
 import { useBottomNavAnimation } from "../hooks/useBottomNavAnimation";
 import type { RootStackNavigationProp } from "../navigation/types";
 import { AcLiveControls } from "../components/ac/AcLiveControls";
-import { AcModePillRow } from "../components/ac/AcModePillRow";
+import { AcPresetSheet } from "../components/ac/AcPresetSheet";
+import { AcPresetShortcutRow } from "../components/ac/AcPresetShortcutRow";
 import { AcTemperatureCard } from "../components/ac/AcTemperatureCard";
 import { AnimatedBottomNav } from "../components/AnimatedBottomNav";
 import {
@@ -28,6 +36,7 @@ import {
 import { BOTTOM_NAV_CLEARANCE } from "../components/BottomNav";
 import { useDeviceConnection } from "../context/DeviceConnectionContext";
 import { useAcCommands } from "../hooks/useAcCommands";
+import { useAcPresets } from "../hooks/useAcPresets";
 import { useAcSchedule } from "../hooks/useAcSchedule";
 import { AcScheduleSheet } from "../components/AcScheduleSheet";
 import { type Theme, useTheme } from "../theme/theme";
@@ -36,7 +45,8 @@ import type {
   AirflowLevel,
   FanSpeed,
 } from "../types/airConditioner";
-import type { EspFanSpeed } from "../types/device";
+import { MAX_AC_PRESETS, type AcPreset } from "../types/acPreset";
+import type { EspAirflow, EspFanSpeed } from "../types/device";
 import { temperatureRangeForMode } from "../constants/acModes";
 import {
   acSnapshotToUiState,
@@ -44,19 +54,26 @@ import {
   modeToEspMode,
 } from "../utils/acProtocol";
 import { normalizeTemperature } from "../utils/temperatureGauge";
-import { HeaderIconButton } from "../components/AppHeader";
 import { useDevices } from "../store/devices";
+import { useRooms } from "../store/rooms";
 
 type AirConditionerScreenProps = {
   deviceId: string;
   onBackPress: () => void;
 };
 
+const airflowToEsp = (value: AcPreset["horizontalAirflow"]): EspAirflow =>
+  value === "auto" ? "auto" : airflowLevelToEspPosition[value];
+
+const fanSpeedToEsp = (value: AcPreset["fanSpeed"]): EspFanSpeed =>
+  value === "auto" ? "auto" : (String(value) as EspFanSpeed);
+
 export function AirConditionerScreen({
   deviceId,
   onBackPress,
 }: AirConditionerScreenProps) {
   const {
+    deviceConnectionLatencyMs,
     deviceConnectionStatus,
     deviceState,
     isDeviceConnected,
@@ -86,6 +103,11 @@ export function AirConditionerScreen({
   const [quiet, setQuiet] = useState(false);
   const [powerful, setPowerful] = useState(false);
   const [isAdjustingTemperature, setIsAdjustingTemperature] = useState(false);
+  const [isPresetSheetVisible, setIsPresetSheetVisible] = useState(false);
+  const [isSavingPreset, setIsSavingPreset] = useState(false);
+  const [activePresetDraft, setActivePresetDraft] = useState<AcPreset | null>(
+    null,
+  );
   const [isScheduleSheetVisible, setIsScheduleSheetVisible] = useState(false);
   const [isHeaderScrolled, setIsHeaderScrolled] = useState(false);
   const latestTemperature = useRef(temperature);
@@ -137,9 +159,52 @@ export function AirConditionerScreen({
     deleteSchedule: handleDeleteSchedule,
     isScheduleLoading,
     saveSchedule: handleSaveSchedule,
-    schedule,
+    schedules,
     toggleScheduleEnabled: handleToggleScheduleEnabled,
   } = useAcSchedule();
+  const {
+    deletePreset: handleDeletePreset,
+    presets,
+    savePreset: handleSavePreset,
+  } = useAcPresets();
+  const { getRoomById } = useRooms();
+  const selectedDevice = devices.find((device) => device.id === deviceId);
+  const selectedRoom = selectedDevice
+    ? getRoomById(selectedDevice.roomId)
+    : undefined;
+  const selectedDeviceName = selectedDevice?.name ?? "Air Conditioner";
+  const selectedRoomName = selectedRoom?.name ?? "Room";
+  const createPresetDraft = useCallback((): AcPreset => {
+    const presetMode = mode === "fan" ? "auto" : mode;
+    const range = temperatureRangeForMode(presetMode);
+
+    return {
+      id: `preset-${Date.now()}`,
+      fanSpeed: fanAuto ? "auto" : fanSpeed,
+      horizontalAirflow: horizontalAirflowAuto ? "auto" : horizontalAirflow,
+      mode: presetMode,
+      name: "",
+      powerful,
+      quiet,
+      temperature: normalizeTemperature(
+        temperature,
+        range.min,
+        range.max,
+      ),
+      verticalAirflow: verticalAirflowAuto ? "auto" : verticalAirflow,
+    };
+  }, [
+    fanAuto,
+    fanSpeed,
+    horizontalAirflow,
+    horizontalAirflowAuto,
+    mode,
+    powerful,
+    quiet,
+    temperature,
+    verticalAirflow,
+    verticalAirflowAuto,
+  ]);
 
   useEffect(() => {
     Animated.timing(controlEnabledProgress, {
@@ -489,12 +554,122 @@ export function AirConditionerScreen({
     updateAcSnapshot,
   ]);
 
+  const handleOpenPresetSheet = useCallback(() => {
+    if (presets.length >= MAX_AC_PRESETS) {
+      Alert.alert(
+        "Preset Limit Reached",
+        `You can keep up to ${MAX_AC_PRESETS} presets. Long press a preset to delete it.`,
+      );
+      return;
+    }
+
+    triggerPressHaptic();
+    setActivePresetDraft(createPresetDraft());
+    setIsPresetSheetVisible(true);
+  }, [createPresetDraft, presets.length, triggerPressHaptic]);
+
+  const handleSavePresetShortcut = useCallback(
+    async (preset: AcPreset) => {
+      setIsSavingPreset(true);
+
+      try {
+        await handleSavePreset(preset);
+        setIsPresetSheetVisible(false);
+        setActivePresetDraft(null);
+        void Haptics.notificationAsync(
+          Haptics.NotificationFeedbackType.Success,
+        );
+      } catch (error) {
+        Alert.alert(
+          "Preset Not Saved",
+          error instanceof Error ? error.message : "Please try again.",
+        );
+      } finally {
+        setIsSavingPreset(false);
+      }
+    },
+    [handleSavePreset],
+  );
+
+  const handleApplyPreset = useCallback(
+    (preset: AcPreset) => {
+      if (!canControlDevice) {
+        logDroppedCommand(`preset=${preset.name}`);
+        return;
+      }
+
+      const nextFan = fanSpeedToEsp(preset.fanSpeed);
+      const nextHorizontalAirflow = airflowToEsp(preset.horizontalAirflow);
+      const nextVerticalAirflow = airflowToEsp(preset.verticalAirflow);
+      const nextRange = temperatureRangeForMode(preset.mode);
+      const nextTemperature = normalizeTemperature(
+        preset.temperature,
+        nextRange.min,
+        nextRange.max,
+      );
+
+      triggerPressHaptic();
+      clearTemperatureCommandTimer();
+      latestTemperature.current = nextTemperature;
+      modeTemperatures.current[preset.mode] = nextTemperature;
+      setPower(true);
+      setMode(preset.mode);
+      setTemperature(nextTemperature);
+      setQuiet(preset.quiet);
+      setPowerful(preset.powerful);
+      setFanAuto(preset.fanSpeed === "auto");
+      if (preset.fanSpeed !== "auto") {
+        latestFanSpeed.current = preset.fanSpeed;
+        setFanSpeed(preset.fanSpeed);
+      }
+      setHorizontalAirflowAuto(preset.horizontalAirflow === "auto");
+      if (preset.horizontalAirflow !== "auto") {
+        setHorizontalAirflow(preset.horizontalAirflow);
+      }
+      setVerticalAirflowAuto(preset.verticalAirflow === "auto");
+      if (preset.verticalAirflow !== "auto") {
+        setVerticalAirflow(preset.verticalAirflow);
+      }
+
+      updateAcSnapshot({
+        fan: nextFan,
+        mode: modeToEspMode(preset.mode),
+        power: true,
+        powerful: preset.powerful,
+        quiet: preset.quiet,
+        swingHorizontal: nextHorizontalAirflow,
+        swingVertical: nextVerticalAirflow,
+        temperature: nextTemperature,
+      });
+      void sendAcCommand({
+        fan: preset.fanSpeed,
+        mode: modeToEspMode(preset.mode),
+        power: "on",
+        powerful: preset.powerful ? "on" : "off",
+        quiet: preset.quiet ? "on" : "off",
+        swingHorizontal: nextHorizontalAirflow,
+        swingVertical: nextVerticalAirflow,
+        temp: nextTemperature,
+      });
+    },
+    [
+      canControlDevice,
+      clearTemperatureCommandTimer,
+      logDroppedCommand,
+      sendAcCommand,
+      triggerPressHaptic,
+      updateAcSnapshot,
+    ],
+  );
+
   const isFavourite = useMemo(
     () => devices.find((d) => d.id === deviceId)?.state.favourite === true,
     [devices, deviceId],
   );
   const existingFavourite = useMemo(
-    () => devices.find((d) => d.state.favourite === true && d.id !== deviceId) ?? null,
+    () =>
+      devices.find((d) => d.state.favourite === true && d.id !== deviceId) ??
+      null,
     [devices, deviceId],
   );
 
@@ -512,17 +687,23 @@ export function AirConditionerScreen({
 
     if (existingFavourite !== null) {
       Alert.alert(
-        'Replace Favourite?',
+        "Replace Favourite?",
         `"${existingFavourite.name}" is currently your home hero. Replace it with this device?`,
         [
-          { text: 'Cancel', style: 'cancel' },
-          { text: 'Replace', style: 'destructive', onPress: doSet },
+          { text: "Cancel", style: "cancel" },
+          { text: "Replace", style: "destructive", onPress: doSet },
         ],
       );
     } else {
       doSet();
     }
-  }, [clearFavouriteDevice, deviceId, existingFavourite, isFavourite, setFavouriteDevice]);
+  }, [
+    clearFavouriteDevice,
+    deviceId,
+    existingFavourite,
+    isFavourite,
+    setFavouriteDevice,
+  ]);
 
   const handleBackPress = useCallback(() => {
     if (isLeavingScreen.current) {
@@ -537,11 +718,7 @@ export function AirConditionerScreen({
 
     // Start screen navigation immediately
     onBackPress();
-  }, [
-    animateBottomNavOut,
-    onBackPress,
-    triggerPressHaptic,
-  ]);
+  }, [animateBottomNavOut, onBackPress, triggerPressHaptic]);
 
   const handleTemperatureInteractionEnd = useCallback(() => {
     setIsAdjustingTemperature(false);
@@ -624,18 +801,39 @@ export function AirConditionerScreen({
         stickyHeaderIndices={[0]}
       >
         <ACHeader
-          eyebrow="Living Room"
+          eyebrow={selectedRoomName}
           isScrolled={isHeaderScrolled}
           onBackPress={handleBackPress}
-          title="Air Conditioner"
+          title={selectedDeviceName}
           rightAccessory={
-            <HeaderIconButton
-              accessibilityLabel="More options"
-              framed
-              onPress={() => { }}
+            <TouchableOpacity
+              activeOpacity={0.75}
+              accessibilityLabel="Toggle air conditioner power"
+              accessibilityRole="switch"
+              accessibilityState={{
+                checked: power,
+                disabled: !canControlDevice,
+              }}
+              disabled={!canControlDevice}
+              onPress={handleTogglePower}
+              style={[
+                styles.headerPowerButton,
+                power
+                  ? styles.headerPowerButtonOn
+                  : styles.headerPowerButtonOff,
+                !canControlDevice && styles.headerPowerButtonDisabled,
+              ]}
             >
-              <Ellipsis color={theme.accent} size={24} strokeWidth={2.6} />
-            </HeaderIconButton>
+              {power ? (
+                <PowerOff
+                  color={theme.powerAccent}
+                  size={20}
+                  strokeWidth={2.4}
+                />
+              ) : (
+                <Power color={theme.accent} size={20} strokeWidth={2.4} />
+              )}
+            </TouchableOpacity>
           }
         />
 
@@ -644,22 +842,24 @@ export function AirConditionerScreen({
             <Text style={styles.connectionStatus}>{unavailableStatusText}</Text>
           ) : null}
 
-          <AcModePillRow
-            dimStyle={liveLabelDimStyle}
-            enabled={liveControlsEnabled}
-            mode={mode}
-            onSelectMode={handleModeChange}
+          <AcPresetShortcutRow
+            presets={presets}
+            onDeletePreset={(id) => {
+              void handleDeletePreset(id);
+            }}
+            onPressPreset={handleApplyPreset}
           />
 
           <AcTemperatureCard
             canControlDevice={canControlDevice}
+            connectionLatencyMs={deviceConnectionLatencyMs}
+            connectionStatus={deviceConnectionStatus}
             gaugeSize={gaugeSize}
             maxTemperature={temperatureRange.max}
             minTemperature={temperatureRange.min}
             onChangeTemperature={handleTemperatureChange}
             onInteractionEnd={handleTemperatureInteractionEnd}
             onInteractionStart={() => setIsAdjustingTemperature(true)}
-            onTogglePower={handleTogglePower}
             onTogglePowerful={() => handlePowerfulChange(!powerful)}
             onToggleQuiet={() => handleQuietChange(!quiet)}
             power={power}
@@ -667,8 +867,7 @@ export function AirConditionerScreen({
             powerfulControlEnabled={powerfulControlEnabled}
             quiet={quiet}
             quietControlEnabled={quietControlEnabled}
-            subtitle={`Living Room · ${powerStatusText}`}
-            title="Air Conditioner"
+            subtitle={`${selectedRoomName} · ${powerStatusText}`}
             temperature={temperature}
           />
 
@@ -687,6 +886,12 @@ export function AirConditionerScreen({
             power={power}
             verticalAirflow={verticalAirflow}
             verticalAirflowAuto={verticalAirflowAuto}
+            acModePill={{
+              dimStyle: liveLabelDimStyle,
+              enabled: liveControlsEnabled,
+              mode: mode,
+              onSelectMode: handleModeChange,
+            }}
           />
         </View>
       </ScrollView>
@@ -697,9 +902,20 @@ export function AirConditionerScreen({
         onSaveSchedule={handleSaveSchedule}
         onDeleteSchedule={handleDeleteSchedule}
         onToggleScheduleEnabled={handleToggleScheduleEnabled}
-        schedule={schedule}
+        schedules={schedules}
         visible={isScheduleSheetVisible}
       />
+
+      {activePresetDraft ? (
+        <AcPresetSheet
+          count={presets.length}
+          initial={activePresetDraft}
+          saving={isSavingPreset}
+          visible={isPresetSheetVisible}
+          onClose={() => setIsPresetSheetVisible(false)}
+          onSave={handleSavePresetShortcut}
+        />
+      ) : null}
 
       {/* Bottom nav enters with this screen and also exits during swipe-back. */}
       <AnimatedBottomNav
@@ -718,22 +934,27 @@ export function AirConditionerScreen({
             onPress: () => setIsScheduleSheetVisible(true),
           },
           {
-            active: isFavourite,
             icon: (
-              isFavourite ? (
-                <Star
-                  color={theme.accent}
-                  size={22}
-                  strokeWidth={2.2}
-                  fill={theme.accent}
-                />
-              ) : (
-                <Star
-                  color={theme.accentMuted}
-                  size={22}
-                  strokeWidth={2.2}
-                />
-              )
+              <Rocket
+                color={theme.modeColors.dry}
+                size={22}
+                strokeWidth={2.2}
+              />
+            ),
+            label: "New Preset",
+            onPress: handleOpenPresetSheet,
+          },
+          {
+            active: isFavourite,
+            icon: isFavourite ? (
+              <Star
+                color={theme.accent}
+                size={22}
+                strokeWidth={2.2}
+                fill={theme.accent}
+              />
+            ) : (
+              <Star color={theme.accentMuted} size={22} strokeWidth={2.2} />
             ),
             label: isFavourite ? "Remove Favourite" : "Set Favourite",
             onPress: handleSetFavourite,
@@ -744,21 +965,42 @@ export function AirConditionerScreen({
   );
 }
 
-const createStyles = (theme: Theme) => StyleSheet.create({
-  content: {
-    flexGrow: 1,
-    paddingBottom: SCREEN_BOTTOM_SAFE_PADDING + theme.spacing.xl + BOTTOM_NAV_CLEARANCE,
-  },
-  body: {
-    gap: theme.spacing.md,
-    marginHorizontal: theme.spacing.lg,
-    paddingTop: theme.spacing.sm,
-  },
-  connectionStatus: {
-    color: theme.textSecondary,
-    fontSize: theme.typography.body,
-    fontWeight: "700",
-    letterSpacing: 0,
-    textAlign: "center",
-  },
-});
+const createStyles = (theme: Theme) =>
+  StyleSheet.create({
+    content: {
+      flexGrow: 1,
+      paddingBottom:
+        SCREEN_BOTTOM_SAFE_PADDING + theme.spacing.xl + BOTTOM_NAV_CLEARANCE,
+    },
+    body: {
+      gap: theme.spacing.md,
+      marginHorizontal: theme.spacing.lg,
+      paddingTop: theme.spacing.sm,
+    },
+    connectionStatus: {
+      color: theme.textSecondary,
+      fontSize: theme.typography.body,
+      fontWeight: "700",
+      letterSpacing: 0,
+      textAlign: "center",
+    },
+    headerPowerButton: {
+      alignItems: "center",
+      borderRadius: 16,
+      borderWidth: 1,
+      height: 44,
+      justifyContent: "center",
+      width: 44,
+    },
+    headerPowerButtonOn: {
+      backgroundColor: theme.powerAccentMuted,
+      borderColor: theme.powerButton.borderOn,
+    },
+    headerPowerButtonOff: {
+      backgroundColor: theme.surfaceWarm,
+      borderColor: theme.borderActive,
+    },
+    headerPowerButtonDisabled: {
+      opacity: 0.44,
+    },
+  });

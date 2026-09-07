@@ -1,34 +1,51 @@
 #pragma once
 
 #include <Arduino.h>
-#include <ir_Panasonic.h>
+#include "src/ac/AcTypes.h"
 
+// Generic AC state — brand-neutral values throughout.
+// Drivers are responsible for translating these to protocol-specific constants.
 struct AcState {
-  bool power;
-  int temperature;
-  uint8_t mode;
-  uint8_t fan;
-  uint8_t swingVertical;
-  uint8_t swingHorizontal;
-  bool quiet;
-  bool powerful;
+  bool    power;
+  int     temperature;
+  uint8_t mode;             // AC_MODE_*
+  uint8_t fan;              // AC_FAN_*
+  uint8_t swingVertical;    // AC_SWING_V_*
+  uint8_t swingHorizontal;  // AC_SWING_H_*
+  bool    quiet;
+  bool    powerful;
 };
 
+enum ScheduleType : uint8_t {
+  ScheduleTypeScheduleTime = 0,
+  ScheduleTypeAutoOn = 1,
+  ScheduleTypeAutoOff = 2
+};
+
+constexpr uint8_t MAX_AC_SCHEDULES = 8;
+
 struct AcSchedule {
-  bool valid;
-  bool enabled;
-  char startTime[6];    // "HH:MM"
-  char endTime[6];      // "HH:MM", or empty for no automatic off
+  bool    valid;
+  char    id[40];
+  bool    enabled;
+  uint8_t type;
+  char    startTime[6];    // "HH:MM"
+  char    endTime[6];      // "HH:MM", or empty for no automatic off
+  bool    days[7];         // Mon-Sun, index 0 = Monday
+  bool    repeatEnabled;
+  char    repeatFrequency[12];
   uint8_t mode;
-  int temperature;
-  bool quiet;
-  bool powerful;
+  int     temperature;
+  uint8_t fan;
+  bool    quiet;
+  bool    powerful;
   uint8_t swingVertical;
   uint8_t swingHorizontal;
 };
 
 extern AcState acState;
-extern AcSchedule acSchedule;
+extern AcSchedule acSchedules[MAX_AC_SCHEDULES];
+extern uint8_t acScheduleCount;
 extern bool pendingIR;
 extern AcState pendingState;
 extern unsigned long pendingIRQueuedAt;
