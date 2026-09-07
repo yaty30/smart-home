@@ -192,7 +192,7 @@ export function TvDiscoveryScreen({ navigation, route }: TvDiscoveryScreenProps)
               // Complete pairing and create device
               tvService
                 .completePairing(controller, tv.name)
-                .then(async () => {
+                .then(async (pairedTvId) => {
                   const device = createDevice(
                     tv.name,
                     roomId,
@@ -200,7 +200,7 @@ export function TvDiscoveryScreen({ navigation, route }: TvDiscoveryScreenProps)
                     'tv',
                     tv.brand.toLowerCase() as DeviceBrand,
                     'network',
-                    tv.id
+                    pairedTvId ?? tv.id
                   );
 
                   device.capabilities = {

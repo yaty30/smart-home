@@ -4,6 +4,15 @@ import { isDebugMode } from '../config/debug';
 
 const DISCOVERY_TIMEOUT_MS = 5000;
 const PAIRING_STATUS_POLL_INTERVAL_MS = 1000;
+const TV_SESSION_RENEW_INTERVAL_MS = 30000;
+const TV_SESSION_READY_TIMEOUT_MS = 12000;
+const TV_SESSION_STATUS_POLL_INTERVAL_MS = 400;
+
+type TvSessionStatus = {
+  active: boolean;
+  ready: boolean;
+  state: string;
+};
 
 const isRecord = (value: unknown): value is Record<string, unknown> => {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -84,9 +93,17 @@ const parsePairingState = (value: unknown): TvPairingState => {
   return 'idle';
 };
 
+const delay = (ms: number): Promise<void> =>
+  new Promise((resolve) => {
+    setTimeout(resolve, ms);
+  });
+
 export class TvService {
   private discoveryAbortController: AbortController | null = null;
   private pairingPollInterval: NodeJS.Timeout | null = null;
+  private sessionRenewInterval: NodeJS.Timeout | null = null;
+  private currentSessionControllerKey: string | null = null;
+  private currentSessionTvId: string | null = null;
 
   async startDiscovery(controller: Controller): Promise<void> {
     if (isDebugMode) {
@@ -293,10 +310,10 @@ export class TvService {
   async completePairing(
     controller: Controller,
     tvName: string
-  ): Promise<void> {
+  ): Promise<string | null> {
     if (isDebugMode) {
       console.log('[TvService] Debug: Skipping pairing completion');
-      return;
+      return null;
     }
 
     if (!controller.online) {
@@ -316,6 +333,167 @@ export class TvService {
     if (!response.ok) {
       const error = await response.json().catch(() => ({ error: 'Unknown error' }));
       throw new Error(error.error || 'Failed to complete pairing');
+    }
+
+    const data = (await response.json().catch(() => null)) as unknown;
+    if (isRecord(data) && isRecord(data.tv) && typeof data.tv.id === 'string') {
+      return data.tv.id;
+    }
+
+    return null;
+  }
+
+  async startTvSession(controller: Controller, tvId: string): Promise<void> {
+    if (isDebugMode) {
+      console.log(`[TvService] Debug: Starting TV session for ${tvId}`);
+      return;
+    }
+
+    if (!controller.online) {
+      throw new Error('Controller is offline');
+    }
+
+    const controllerKey = controller.controllerId || controller.id;
+    if (
+      this.currentSessionControllerKey === controllerKey &&
+      this.currentSessionTvId === tvId
+    ) {
+      return;
+    }
+
+    this.stopSessionRenewal();
+    this.clearCurrentSession();
+
+    const host = controller.ip.replace(/\/+$/, '');
+    const params = new URLSearchParams({ tvId });
+
+    const response = await fetch(`${host}/tv/session/start?${params.toString()}`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${controller.token}`,
+      },
+    });
+
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ error: 'Unknown error' }));
+      throw new Error(error.error || 'Failed to start TV session');
+    }
+
+    await this.waitForTvSessionReady(controller, tvId);
+
+    this.currentSessionControllerKey = controllerKey;
+    this.currentSessionTvId = tvId;
+    this.sessionRenewInterval = setInterval(() => {
+      void this.renewTvSession(controller, tvId).catch((error) => {
+        console.warn('[TvService] Failed to renew TV session:', error);
+      });
+    }, TV_SESSION_RENEW_INTERVAL_MS);
+  }
+
+  async getTvSessionStatus(
+    controller: Controller,
+    tvId: string
+  ): Promise<TvSessionStatus> {
+    if (isDebugMode) {
+      return { active: true, ready: true, state: 'ready' };
+    }
+
+    if (!controller.online) {
+      throw new Error('Controller is offline');
+    }
+
+    const host = controller.ip.replace(/\/+$/, '');
+    const params = new URLSearchParams({ tvId });
+
+    const response = await fetch(`${host}/tv/session/status?${params.toString()}`, {
+      method: 'GET',
+      headers: {
+        Authorization: `Bearer ${controller.token}`,
+      },
+    });
+
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ error: 'Unknown error' }));
+      throw new Error(error.error || 'Failed to get TV session status');
+    }
+
+    const data = (await response.json()) as unknown;
+    return {
+      active: isRecord(data) && data.active === true,
+      ready: isRecord(data) && data.ready === true,
+      state: isRecord(data) && typeof data.state === 'string' ? data.state : 'unknown',
+    };
+  }
+
+  private async waitForTvSessionReady(
+    controller: Controller,
+    tvId: string
+  ): Promise<void> {
+    const startedAt = Date.now();
+    let lastState = 'unknown';
+
+    while (Date.now() - startedAt < TV_SESSION_READY_TIMEOUT_MS) {
+      const status = await this.getTvSessionStatus(controller, tvId);
+      lastState = status.state;
+
+      if (status.ready) {
+        return;
+      }
+
+      if (status.state === 'failed') {
+        throw new Error('TV session failed');
+      }
+
+      await delay(TV_SESSION_STATUS_POLL_INTERVAL_MS);
+    }
+
+    throw new Error(`TV session not ready (${lastState})`);
+  }
+
+  async renewTvSession(controller: Controller, tvId: string): Promise<void> {
+    if (isDebugMode) {
+      return;
+    }
+
+    if (!controller.online) {
+      throw new Error('Controller is offline');
+    }
+
+    const host = controller.ip.replace(/\/+$/, '');
+    const params = new URLSearchParams({ tvId });
+
+    const response = await fetch(`${host}/tv/session/renew?${params.toString()}`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${controller.token}`,
+      },
+    });
+
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ error: 'Unknown error' }));
+      throw new Error(error.error || 'Failed to renew TV session');
+    }
+  }
+
+  async stopTvSession(controller: Controller, tvId: string): Promise<void> {
+    this.stopSessionRenewal();
+    this.clearCurrentSession(tvId);
+
+    if (isDebugMode || !controller.online) {
+      return;
+    }
+
+    const host = controller.ip.replace(/\/+$/, '');
+    const response = await fetch(`${host}/tv/session/stop`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${controller.token}`,
+      },
+    });
+
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ error: 'Unknown error' }));
+      throw new Error(error.error || 'Failed to stop TV session');
     }
   }
 
@@ -376,6 +554,20 @@ export class TvService {
     }
   }
 
+  private stopSessionRenewal(): void {
+    if (this.sessionRenewInterval) {
+      clearInterval(this.sessionRenewInterval);
+      this.sessionRenewInterval = null;
+    }
+  }
+
+  private clearCurrentSession(tvId?: string): void {
+    if (tvId === undefined || this.currentSessionTvId === tvId) {
+      this.currentSessionControllerKey = null;
+      this.currentSessionTvId = null;
+    }
+  }
+
   cancelDiscovery(): void {
     this.discoveryAbortController?.abort();
     this.discoveryAbortController = null;
@@ -384,6 +576,7 @@ export class TvService {
   cleanup(): void {
     this.cancelDiscovery();
     this.stopPairingStatusPolling();
+    this.stopSessionRenewal();
   }
 }
 

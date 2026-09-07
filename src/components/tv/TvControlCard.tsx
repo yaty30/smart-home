@@ -8,15 +8,13 @@ import {
   type StyleProp,
   type ViewStyle,
 } from 'react-native';
-import { useCallback, useMemo, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import {
   ChevronUp,
   ChevronDown,
   Settings,
-  Triangle,
   VolumeOff,
   Power,
-  Cast,
   Grid3x3,
   SkipBack,
   Play,
@@ -41,6 +39,35 @@ const REMOTE_BG_DARK = '#1A1A1C';
 const REMOTE_BG_MEDIUM = '#242426';
 const REMOTE_BG_LIGHT = '#2F2F32';
 
+const remoteCommandFor = (
+  command: string,
+  isPowerOn: boolean,
+  isPlaying: boolean,
+  isSessionReady: boolean
+): string => {
+  if (command === 'power') {
+    return !isSessionReady || !isPowerOn ? 'power_on' : 'power_off';
+  }
+
+  if (command === 'play_pause') {
+    return isPlaying ? 'pause' : 'play';
+  }
+
+  if (command === 'apps') {
+    return 'home';
+  }
+
+  if (command === 'previous') {
+    return 'rewind';
+  }
+
+  if (command === 'next') {
+    return 'fast_forward';
+  }
+
+  return command;
+};
+
 export function TvControlCard({ device, controller }: TvControlCardProps) {
   const theme = useTheme();
   const { width: windowWidth } = useWindowDimensions();
@@ -48,22 +75,79 @@ export function TvControlCard({ device, controller }: TvControlCardProps) {
   const styles = useMemo(() => createStyles(theme, remotePadSize), [theme, remotePadSize]);
 
   const [sendingCommand, setSendingCommand] = useState<string | null>(null);
-  const [isPowerOn, setIsPowerOn] = useState(true);
+  const [isSessionStarting, setIsSessionStarting] = useState(false);
+  const [isSessionReady, setIsSessionReady] = useState(false);
+  const [isPowerOn, setIsPowerOn] = useState(device.state.power !== false);
   const [isPlaying, setIsPlaying] = useState(false);
+  const tvId = device.controllerDeviceId;
+
+  useEffect(() => {
+    if (!controller.online || !tvId) {
+      return undefined;
+    }
+
+    let didCancel = false;
+    setIsSessionReady(false);
+    setIsSessionStarting(true);
+
+    tvService
+      .startTvSession(controller, tvId)
+      .then(() => {
+        if (!didCancel) {
+          setIsSessionReady(true);
+        }
+      })
+      .catch((error) => {
+        if (!didCancel) {
+          setIsSessionReady(false);
+        }
+        console.error('Failed to start TV session:', error);
+      })
+      .finally(() => {
+        if (!didCancel) {
+          setIsSessionStarting(false);
+        }
+      });
+
+    return () => {
+      didCancel = true;
+      setIsSessionReady(false);
+      void tvService.stopTvSession(controller, tvId).catch((error) => {
+        console.warn('Failed to stop TV session:', error);
+      });
+    };
+  }, [controller, tvId]);
 
   const sendCommand = useCallback(
     async (command: string) => {
-      if (!controller.online || sendingCommand) {
+      const isPowerCommand = command === 'power';
+      if (
+        !controller.online ||
+        sendingCommand ||
+        !tvId ||
+        (!isPowerCommand && (isSessionStarting || !isSessionReady))
+      ) {
         return;
       }
 
       setSendingCommand(command);
 
       try {
-        await tvService.sendTvCommand(controller, device.controllerDeviceId!, command);
+        const tvCommand = remoteCommandFor(
+          command,
+          isPowerOn,
+          isPlaying,
+          isSessionReady
+        );
+
+        await tvService.sendTvCommand(controller, tvId, tvCommand);
 
         if (command === 'power') {
-          setIsPowerOn(prev => !prev);
+          if (isSessionReady) {
+            setIsPowerOn(prev => !prev);
+          } else {
+            setIsPowerOn(true);
+          }
         } else if (command === 'play_pause') {
           setIsPlaying(prev => !prev);
         }
@@ -73,7 +157,15 @@ export function TvControlCard({ device, controller }: TvControlCardProps) {
         setSendingCommand(null);
       }
     },
-    [controller, device.controllerDeviceId, sendingCommand]
+    [
+      controller,
+      isPlaying,
+      isPowerOn,
+      isSessionReady,
+      isSessionStarting,
+      sendingCommand,
+      tvId,
+    ]
   );
 
   const renderKey = useCallback(
@@ -84,7 +176,12 @@ export function TvControlCard({ device, controller }: TvControlCardProps) {
       keyStyle?: StyleProp<ViewStyle>
     ) => {
       const isActive = sendingCommand === command;
-      const disabled = !controller.online || !!sendingCommand;
+      const isPowerCommand = command === 'power';
+      const disabled =
+        !controller.online ||
+        !!sendingCommand ||
+        !tvId ||
+        (!isPowerCommand && (isSessionStarting || !isSessionReady));
 
       return (
         <TouchableOpacity
@@ -107,8 +204,19 @@ export function TvControlCard({ device, controller }: TvControlCardProps) {
         </TouchableOpacity>
       );
     },
-    [controller.online, sendingCommand, sendCommand, styles]
+    [
+      controller.online,
+      isSessionReady,
+      isSessionStarting,
+      sendingCommand,
+      sendCommand,
+      styles,
+      tvId,
+    ]
   );
+
+  const controlsDisabled =
+    !controller.online || isSessionStarting || !isSessionReady || !!sendingCommand || !tvId;
 
   return (
     <View style={styles.card}>
@@ -164,8 +272,13 @@ export function TvControlCard({ device, controller }: TvControlCardProps) {
       <View style={styles.remotePad}>
         {/* UP */}
         <TouchableOpacity
-          style={[styles.directionButton, styles.directionUp]}
+          style={[
+            styles.directionButton,
+            styles.directionUp,
+            controlsDisabled && styles.buttonDisabled,
+          ]}
           onPress={() => void sendCommand('up')}
+          disabled={controlsDisabled}
           activeOpacity={0.5}
         >
           <ChevronUp
@@ -177,8 +290,13 @@ export function TvControlCard({ device, controller }: TvControlCardProps) {
 
         {/* RIGHT */}
         <TouchableOpacity
-          style={[styles.directionButton, styles.directionRight]}
+          style={[
+            styles.directionButton,
+            styles.directionRight,
+            controlsDisabled && styles.buttonDisabled,
+          ]}
           onPress={() => void sendCommand('right')}
+          disabled={controlsDisabled}
           activeOpacity={0.5}
         >
           <ChevronRight
@@ -190,8 +308,13 @@ export function TvControlCard({ device, controller }: TvControlCardProps) {
 
         {/* DOWN */}
         <TouchableOpacity
-          style={[styles.directionButton, styles.directionDown]}
+          style={[
+            styles.directionButton,
+            styles.directionDown,
+            controlsDisabled && styles.buttonDisabled,
+          ]}
           onPress={() => void sendCommand('down')}
+          disabled={controlsDisabled}
           activeOpacity={0.5}
         >
           <ChevronDown
@@ -203,8 +326,13 @@ export function TvControlCard({ device, controller }: TvControlCardProps) {
 
         {/* LEFT */}
         <TouchableOpacity
-          style={[styles.directionButton, styles.directionLeft]}
+          style={[
+            styles.directionButton,
+            styles.directionLeft,
+            controlsDisabled && styles.buttonDisabled,
+          ]}
           onPress={() => void sendCommand('left')}
+          disabled={controlsDisabled}
           activeOpacity={0.5}
         >
           <ChevronLeft
@@ -216,8 +344,12 @@ export function TvControlCard({ device, controller }: TvControlCardProps) {
 
         {/* CENTER / OK */}
         <TouchableOpacity
-          style={styles.remoteCenterKey}
+          style={[
+            styles.remoteCenterKey,
+            controlsDisabled && styles.buttonDisabled,
+          ]}
           onPress={() => void sendCommand('ok')}
+          disabled={controlsDisabled}
           activeOpacity={0.7}
         >
           <Text style={styles.okText}>OK</Text>
@@ -280,7 +412,6 @@ const createStyles = (theme: Theme, remotePadSize: number) => {
   const verticalKeyHeight = remotePadSize * 0.30;
   const horizontalKeyWidth = remotePadSize * 0.30;
   const horizontalKeyHeight = roundKeySize;
-  const centerKeySize = remotePadSize * 0.26;
 
   return StyleSheet.create({
     card: {

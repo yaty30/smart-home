@@ -33,6 +33,17 @@ public:
   // Send commands to paired TV
   bool sendTvCommand(const char* tvId, const char* command);
 
+  // Session management
+  bool startTvSession(const char* tvId);
+  void renewTvSession(const char* tvId);
+  void stopTvSession();
+  bool hasActiveSession() const;
+  bool isSessionActiveForTv(const char* tvId) const;
+  bool isSessionReadyForTv(const char* tvId) const;
+  const char* getActiveSessionTvId() const { return activeTvId; }
+  LgConnectionState getConnectionState() const { return lgTv.getConnectionState(); }
+  unsigned long getSessionTimeRemaining() const;
+
   // Must be called regularly from main loop
   void handle();
 
@@ -50,7 +61,13 @@ private:
   char currentPairingDiscoveryId[64];
   bool pairingInProgress;
 
+  // Session management
+  char activeTvId[40];
+  unsigned long sessionLastRenewal;
+  static constexpr unsigned long SESSION_TIMEOUT_MS = 60000;  // 60 seconds
+
   const DiscoveredTv* findDiscoveredTv(const char* discoveryId) const;
-  bool connectToTv(const PairedTv* tv);
+  bool ensureTvReady(const PairedTv* tv);
+  bool sendCommandToLgTv(const char* command);
   bool rediscoverAndUpdateIp(PairedTv* tv);
 };

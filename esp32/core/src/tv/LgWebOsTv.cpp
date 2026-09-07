@@ -5,6 +5,7 @@
 
 constexpr uint16_t LG_WEBOS_PORT = 3000;
 constexpr unsigned long PAIRING_TIMEOUT_MS = 60000;  // 60 seconds
+constexpr unsigned long POWER_OFF_GRACE_MS = 5000;   // 5 seconds before marking SLEEPING
 
 LgWebOsTv* LgWebOsTv::instance = nullptr;
 
@@ -12,18 +13,26 @@ LgWebOsTv::LgWebOsTv()
     : ws(nullptr),
       pointerWs(nullptr),
       pairingState(LgPairingState::Idle),
-      pairingTimeout(0),
-      connected(false),
+      connectionState(LgConnectionState::Idle),
+      wsConnected(false),
       pointerConnected(false),
-      requestId(0) {
+      registrationSent(false),
+      pairingTimeout(0),
+      lastSuccessfulResponse(0),
+      reconnectAttemptTime(0),
+      reconnectAttempts(0),
+      requestId(0),
+      powerOffSent(false),
+      powerOffTime(0) {
   clientKey[0] = '\0';
   tvIp[0] = '\0';
+  tvMac[0] = '\0';
   pointerSocketPath[0] = '\0';
   instance = this;
 }
 
 LgWebOsTv::~LgWebOsTv() {
-  disconnect();
+  stopSession();
   if (ws) {
     delete ws;
     ws = nullptr;
@@ -35,94 +44,174 @@ LgWebOsTv::~LgWebOsTv() {
   instance = nullptr;
 }
 
-void LgWebOsTv::startPairing(const char* ip) {
-  if (pairingState == LgPairingState::WaitingForApproval) {
+void LgWebOsTv::startPairing(const char* ip, const char* mac) {
+  if (pairingState == LgPairingState::WaitingForApproval ||
+      pairingState == LgPairingState::WaitingForPin) {
     Serial.println("[LG webOS] Pairing already in progress");
     return;
   }
 
-  disconnect();
+  stopSession();
+  resetReconnectState();
 
   strncpy(tvIp, ip, sizeof(tvIp) - 1);
   tvIp[sizeof(tvIp) - 1] = '\0';
 
-  if (!ws) {
-    ws = new WebSocketsClient();
+  if (mac && strlen(mac) > 0) {
+    strncpy(tvMac, mac, sizeof(tvMac) - 1);
+    tvMac[sizeof(tvMac) - 1] = '\0';
   }
 
-  pairingState = LgPairingState::Connecting;
   clientKey[0] = '\0';
+  pairingState = LgPairingState::Connecting;
+  connectionState = LgConnectionState::Connecting;
+  powerOffSent = false;
 
-  Serial.print("[LG webOS] Connecting to ");
+  Serial.print("[LG webOS] Starting first-time pairing with ");
   Serial.print(ip);
   Serial.println(":3000");
 
-  ws->begin(ip, LG_WEBOS_PORT, "/");
-  ws->onEvent([](WStype_t type, uint8_t* payload, size_t length) {
-    if (instance) {
-      instance->onWebSocketEvent(static_cast<int>(type), payload, length);
-    }
-  });
-
+  initiateConnection();
   pairingTimeout = millis() + PAIRING_TIMEOUT_MS;
 }
 
-bool LgWebOsTv::connect(const char* ip, const char* storedClientKey) {
-  if (connected && isPaired()) {
-    return true;
+void LgWebOsTv::startSession(const char* ip, const char* storedClientKey, const char* mac) {
+  if (connectionState == LgConnectionState::Connecting ||
+      connectionState == LgConnectionState::Registering) {
+    Serial.println("[LG webOS] Session start already in progress");
+    return;
   }
+
+  stopSession();
+  resetReconnectState();
 
   strncpy(tvIp, ip, sizeof(tvIp) - 1);
   tvIp[sizeof(tvIp) - 1] = '\0';
+
   strncpy(clientKey, storedClientKey, sizeof(clientKey) - 1);
   clientKey[sizeof(clientKey) - 1] = '\0';
 
-  if (!ws) {
-    ws = new WebSocketsClient();
+  if (mac && strlen(mac) > 0) {
+    strncpy(tvMac, mac, sizeof(tvMac) - 1);
+    tvMac[sizeof(tvMac) - 1] = '\0';
   }
 
-  ws->begin(ip, LG_WEBOS_PORT, "/");
-  ws->onEvent([](WStype_t type, uint8_t* payload, size_t length) {
-    if (instance) {
-      instance->onWebSocketEvent(static_cast<int>(type), payload, length);
-    }
-  });
+  pairingState = LgPairingState::Idle;  // Not a pairing flow
+  connectionState = LgConnectionState::Connecting;
+  powerOffSent = false;
 
-  pairingState = LgPairingState::Connecting;
-  Serial.println("[LG webOS] Reconnecting with stored credentials");
+  Serial.print("[LG webOS] Starting session with ");
+  Serial.print(ip);
+  Serial.println(" using stored credentials");
 
-  return true;
+  initiateConnection();
 }
 
-void LgWebOsTv::disconnect() {
+void LgWebOsTv::stopSession() {
+  Serial.println("[LG webOS] Stopping session");
+
   if (ws) {
     ws->disconnect();
   }
   if (pointerWs) {
     pointerWs->disconnect();
   }
-  connected = false;
+
+  wsConnected = false;
   pointerConnected = false;
+  registrationSent = false;
+
+  // Keep credential and MAC, mark transport as idle
+  if (connectionState != LgConnectionState::Idle) {
+    connectionState = LgConnectionState::Idle;
+  }
+
+  // Reset pairing state only if not already paired
   if (pairingState != LgPairingState::Paired) {
     pairingState = LgPairingState::Idle;
   }
+
+  powerOffSent = false;
+  resetReconnectState();
+}
+
+void LgWebOsTv::disconnect() {
+  // Alias for stopSession - preserves credential
+  stopSession();
+}
+
+void LgWebOsTv::initiateConnection() {
+  if (!ws) {
+    ws = new WebSocketsClient();
+  }
+
+  ws->begin(tvIp, LG_WEBOS_PORT, "/");
+  ws->onEvent([](WStype_t type, uint8_t* payload, size_t length) {
+    if (instance) {
+      instance->onWebSocketEvent(static_cast<int>(type), payload, length);
+    }
+  });
+
+  registrationSent = false;
+  Serial.println("[LG webOS] WebSocket connection initiated");
 }
 
 void LgWebOsTv::onWebSocketEvent(int type, uint8_t* payload, size_t length) {
   WStype_t wsType = static_cast<WStype_t>(type);
 
   switch (wsType) {
-    case WStype_CONNECTED:
+    case WStype_CONNECTED: {
       Serial.println("[LG webOS] WebSocket connected");
-      connected = true;
-      if (pairingState == LgPairingState::Connecting) {
-        sendRegisterRequest(clientKey[0] == '\0', clientKey[0] == '\0');
+      wsConnected = true;
+      registrationSent = false;
+
+      bool isFirstTimePairing = (pairingState == LgPairingState::Connecting);
+      bool hasStoredKey = (clientKey[0] != '\0');
+
+      connectionState = LgConnectionState::Registering;
+
+      if (isFirstTimePairing) {
+        // First-time pairing: request new credential
+        sendRegisterRequest(true, false);
+      } else if (hasStoredKey) {
+        // Session reconnect: use stored credential
+        sendRegisterRequest(false, false);
+      } else {
+        Serial.println("[LG webOS] ERROR: Connected without pairing flow or stored key");
+        markConnectionFailed();
       }
       break;
+    }
 
     case WStype_DISCONNECTED:
       Serial.println("[LG webOS] WebSocket disconnected");
-      connected = false;
+      wsConnected = false;
+      registrationSent = false;
+
+      // If we recently sent power_off, this is expected
+      if (powerOffSent && (millis() - powerOffTime < POWER_OFF_GRACE_MS)) {
+        Serial.println("[LG webOS] Expected disconnect after power_off");
+        markSleeping();
+        return;
+      }
+
+      // Only schedule reconnect if we have a valid credential and session is active
+      if (clientKey[0] != '\0' &&
+          connectionState != LgConnectionState::Idle &&
+          connectionState != LgConnectionState::Sleeping &&
+          connectionState != LgConnectionState::Failed) {
+        connectionState = LgConnectionState::Reconnecting;
+        scheduleReconnect();
+      } else {
+        if (pairingState == LgPairingState::Connecting ||
+            pairingState == LgPairingState::WaitingForPin ||
+            pairingState == LgPairingState::WaitingForApproval) {
+          pairingState = LgPairingState::Failed;
+        }
+        if (connectionState != LgConnectionState::Sleeping) {
+          connectionState = LgConnectionState::Failed;
+        }
+      }
       break;
 
     case WStype_TEXT:
@@ -138,6 +227,7 @@ void LgWebOsTv::onWebSocketEvent(int type, uint8_t* payload, size_t length) {
           pairingState == LgPairingState::WaitingForApproval) {
         pairingState = LgPairingState::Failed;
       }
+      markConnectionFailed();
       break;
 
     default:
@@ -146,7 +236,7 @@ void LgWebOsTv::onWebSocketEvent(int type, uint8_t* payload, size_t length) {
 }
 
 bool LgWebOsTv::submitPin(const char* pin) {
-  if (!connected || !ws || pairingState != LgPairingState::WaitingForPin) {
+  if (!wsConnected || !ws || pairingState != LgPairingState::WaitingForPin) {
     Serial.println("[LG webOS] Cannot submit PIN: pairing is not waiting for PIN");
     return false;
   }
@@ -208,17 +298,18 @@ void LgWebOsTv::sendRegisterRequest(bool forcePairing, bool usePin) {
   String output;
   serializeJson(doc, output);
 
-  if (ws && connected) {
+  if (ws && wsConnected) {
     ws->sendTXT(output);
+    registrationSent = true;
+
     if (usePin) {
-      Serial.println("[LG webOS] Sent PIN pairing request. Enter the TV code in the app.");
+      Serial.println("[LG webOS] Sent PIN pairing request");
       pairingState = LgPairingState::WaitingForPin;
     } else if (forcePairing) {
-      Serial.println("[LG webOS] Sent pairing request. Approve the prompt on the TV.");
+      Serial.println("[LG webOS] Sent pairing request - approve on TV");
       pairingState = LgPairingState::WaitingForApproval;
     } else {
-      Serial.println("[LG webOS] Sent registration request with stored client key");
-      pairingState = LgPairingState::WaitingForApproval;
+      Serial.println("[LG webOS] Sent registration with stored client key");
     }
   }
 }
@@ -236,24 +327,37 @@ void LgWebOsTv::processMessage(const char* payload) {
   const char* type = doc["type"];
   const char* id = doc["id"];
 
+  lastSuccessfulResponse = millis();
+
   if (type && strcmp(type, "registered") == 0) {
     const char* key = doc["payload"]["client-key"];
     if (key) {
       strncpy(clientKey, key, sizeof(clientKey) - 1);
       clientKey[sizeof(clientKey) - 1] = '\0';
       pairingState = LgPairingState::Paired;
-      Serial.println("[LG webOS] Pairing successful!");
-      Serial.print("[LG webOS] Client key: ");
-      Serial.println(clientKey);
+      connectionState = LgConnectionState::Ready;
+
+      resetReconnectState();
+
+      Serial.println("[LG webOS] Registration successful - connection READY");
 
       // Request pointer socket for navigation
       connectPointerSocket();
+
+      // Try to get MAC address if we don't have it
+      if (tvMac[0] == '\0') {
+        requestNetworkInfo();
+      }
     }
   } else if (type && strcmp(type, "error") == 0) {
+    const char* errorMsg = doc["error"];
     Serial.print("[LG webOS] Error response: ");
-    Serial.println(payload);
-    if (pairingState != LgPairingState::Paired) {
-      pairingState = LgPairingState::Failed;
+    Serial.println(errorMsg ? errorMsg : payload);
+
+    // If registration failed, the stored key might be revoked
+    if (id && strcmp(id, "register_0") == 0) {
+      Serial.println("[LG webOS] Registration failed - stored key may be revoked");
+      markConnectionFailed();
     }
   } else if (type && strcmp(type, "response") == 0) {
     if (id && strcmp(id, "register_0") == 0 &&
@@ -284,14 +388,33 @@ void LgWebOsTv::processMessage(const char* payload) {
       }
     }
 
-    // Command response
-    Serial.print("[LG webOS] Command response: ");
-    Serial.println(id ? id : "unknown");
+    // Check for network info response (to extract MAC)
+    if (id && strcmp(id, "network_info") == 0) {
+      const char* wiredMac = doc["payload"]["wiredInfo"]["macAddress"];
+      const char* wirelessMac = doc["payload"]["wifiInfo"]["macAddress"];
+      const char* ethernetMac = doc["payload"]["ethernet"]["macAddress"];
+
+      const char* foundMac = nullptr;
+      if (wiredMac && strlen(wiredMac) > 0) {
+        foundMac = wiredMac;
+      } else if (ethernetMac && strlen(ethernetMac) > 0) {
+        foundMac = ethernetMac;
+      } else if (wirelessMac && strlen(wirelessMac) > 0) {
+        foundMac = wirelessMac;
+      }
+
+      if (foundMac && tvMac[0] == '\0') {
+        strncpy(tvMac, foundMac, sizeof(tvMac) - 1);
+        tvMac[sizeof(tvMac) - 1] = '\0';
+        Serial.print("[LG webOS] Obtained MAC address: ");
+        Serial.println(tvMac);
+      }
+    }
   }
 }
 
 void LgWebOsTv::connectPointerSocket() {
-  if (!connected || !ws) {
+  if (!wsConnected || !ws) {
     return;
   }
 
@@ -299,10 +422,7 @@ void LgWebOsTv::connectPointerSocket() {
 
   JsonDocument doc;
   doc["type"] = "request";
-
-  char idBuf[32];
-  snprintf(idBuf, sizeof(idBuf), "pointer_socket");
-  doc["id"] = idBuf;
+  doc["id"] = "pointer_socket";
   doc["uri"] = "ssap://com.webos.service.networkinput/getPointerInputSocket";
 
   String output;
@@ -310,6 +430,23 @@ void LgWebOsTv::connectPointerSocket() {
 
   ws->sendTXT(output);
   Serial.println("[LG webOS] Requested pointer input socket");
+}
+
+void LgWebOsTv::requestNetworkInfo() {
+  if (!wsConnected || !ws) {
+    return;
+  }
+
+  JsonDocument doc;
+  doc["type"] = "request";
+  doc["id"] = "network_info";
+  doc["uri"] = "ssap://com.webos.service.connectionmanager/getInfo";
+
+  String output;
+  serializeJson(doc, output);
+
+  ws->sendTXT(output);
+  Serial.println("[LG webOS] Requested network info for MAC address");
 }
 
 void LgWebOsTv::onPointerEvent(int type, uint8_t* payload, size_t length) {
@@ -324,6 +461,12 @@ void LgWebOsTv::onPointerEvent(int type, uint8_t* payload, size_t length) {
     case WStype_DISCONNECTED:
       Serial.println("[LG webOS] Pointer socket disconnected");
       pointerConnected = false;
+
+      // Try to reconnect pointer socket if main connection is ready
+      if (connectionState == LgConnectionState::Ready && wsConnected) {
+        Serial.println("[LG webOS] Attempting pointer socket reconnect");
+        connectPointerSocket();
+      }
       break;
 
     case WStype_TEXT:
@@ -344,8 +487,6 @@ void LgWebOsTv::onPointerEvent(int type, uint8_t* payload, size_t length) {
 
 void LgWebOsTv::processPointerMessage(const char* payload) {
   // Pointer socket typically doesn't send much back
-  Serial.print("[LG webOS] Pointer message: ");
-  Serial.println(payload);
 }
 
 bool LgWebOsTv::sendPointerCommand(const char* type) {
@@ -354,19 +495,23 @@ bool LgWebOsTv::sendPointerCommand(const char* type) {
     return false;
   }
 
-  JsonDocument doc;
-  doc["type"] = type;
+  if (connectionState != LgConnectionState::Ready) {
+    Serial.println("[LG webOS] Cannot send pointer command: connection not ready");
+    return false;
+  }
 
-  String output;
-  serializeJson(doc, output);
-
-  pointerWs->sendTXT(output);
+  pointerWs->sendTXT(type);
   return true;
 }
 
 bool LgWebOsTv::sendCommand(const char* uri) {
-  if (!connected || !ws) {
+  if (!wsConnected || !ws) {
     Serial.println("[LG webOS] Cannot send command: not connected");
+    return false;
+  }
+
+  if (connectionState != LgConnectionState::Ready) {
+    Serial.println("[LG webOS] Cannot send command: connection not ready");
     return false;
   }
 
@@ -389,7 +534,26 @@ bool LgWebOsTv::sendCommand(const char* uri) {
 }
 
 bool LgWebOsTv::sendPowerOff() {
-  return sendCommand("ssap://system/turnOff");
+  bool result = sendCommand("ssap://system/turnOff");
+  if (result) {
+    powerOffSent = true;
+    powerOffTime = millis();
+    Serial.println("[LG webOS] Power off sent - will mark SLEEPING on disconnect");
+  }
+  return result;
+}
+
+void LgWebOsTv::startWakeSequence() {
+  if (connectionState == LgConnectionState::Sleeping) {
+    connectionState = LgConnectionState::Waking;
+    resetReconnectState();
+    Serial.println("[LG webOS] Starting wake sequence - will attempt reconnect");
+  }
+}
+
+void LgWebOsTv::markSleeping() {
+  connectionState = LgConnectionState::Sleeping;
+  Serial.println("[LG webOS] TV marked as SLEEPING");
 }
 
 bool LgWebOsTv::sendVolumeUp() {
@@ -401,7 +565,7 @@ bool LgWebOsTv::sendVolumeDown() {
 }
 
 bool LgWebOsTv::sendMute() {
-  return sendCommand("ssap://audio/setMute");
+  return sendCommand("ssap://audio/setMute") && sendCommand("ssap://audio/volumeMute");
 }
 
 bool LgWebOsTv::sendChannelUp() {
@@ -424,24 +588,52 @@ bool LgWebOsTv::sendStop() {
   return sendCommand("ssap://media.controls/stop");
 }
 
+bool LgWebOsTv::sendRewind() {
+  return sendCommand("ssap://media.controls/rewind");
+}
+
+bool LgWebOsTv::sendFastForward() {
+  return sendCommand("ssap://media.controls/fastForward");
+}
+
 bool LgWebOsTv::sendUp() {
-  return sendPointerCommand("move") && sendPointerCommand("button") && sendCommand("ssap://com.webos.service.ime/sendEnterKey");
+  if (!pointerConnected || !pointerWs) {
+    Serial.println("[LG webOS] Pointer socket not ready, cannot send UP");
+    return false;
+  }
+  return sendPointerCommand("type:button\n\n") && sendPointerCommand("type:move\ndx:0\ndy:-1\ndown:0\n\n");
 }
 
 bool LgWebOsTv::sendDown() {
-  return sendPointerCommand("move") && sendPointerCommand("button") && sendCommand("ssap://com.webos.service.ime/sendEnterKey");
+  if (!pointerConnected || !pointerWs) {
+    Serial.println("[LG webOS] Pointer socket not ready, cannot send DOWN");
+    return false;
+  }
+  return sendPointerCommand("type:button\n\n") && sendPointerCommand("type:move\ndx:0\ndy:1\ndown:0\n\n");
 }
 
 bool LgWebOsTv::sendLeft() {
-  return sendPointerCommand("move") && sendPointerCommand("button") && sendCommand("ssap://com.webos.service.ime/sendEnterKey");
+  if (!pointerConnected || !pointerWs) {
+    Serial.println("[LG webOS] Pointer socket not ready, cannot send LEFT");
+    return false;
+  }
+  return sendPointerCommand("type:button\n\n") && sendPointerCommand("type:move\ndx:-1\ndy:0\ndown:0\n\n");
 }
 
 bool LgWebOsTv::sendRight() {
-  return sendPointerCommand("move") && sendPointerCommand("button") && sendCommand("ssap://com.webos.service.ime/sendEnterKey");
+  if (!pointerConnected || !pointerWs) {
+    Serial.println("[LG webOS] Pointer socket not ready, cannot send RIGHT");
+    return false;
+  }
+  return sendPointerCommand("type:button\n\n") && sendPointerCommand("type:move\ndx:1\ndy:0\ndown:0\n\n");
 }
 
 bool LgWebOsTv::sendOk() {
-  return sendPointerCommand("click");
+  if (!pointerConnected || !pointerWs) {
+    Serial.println("[LG webOS] Pointer socket not ready, cannot send OK/CLICK");
+    return false;
+  }
+  return sendPointerCommand("type:click\n\n");
 }
 
 bool LgWebOsTv::sendBack() {
@@ -453,11 +645,11 @@ bool LgWebOsTv::sendHome() {
 }
 
 bool LgWebOsTv::sendMenu() {
-  return sendCommand("ssap://com.webos.applicationManager/getForegroundAppInfo");
+  return sendCommand("ssap://com.webos.service.menu/getMenu");
 }
 
 bool LgWebOsTv::sendInput() {
-  return sendCommand("ssap://com.webos.applicationManager/launch") && sendCommand("ssap://system/turnOff");
+  return sendCommand("ssap://tv/switchInput");
 }
 
 void LgWebOsTv::handle() {
@@ -469,13 +661,72 @@ void LgWebOsTv::handle() {
     pointerWs->loop();
   }
 
-  // Check pairing timeout
+  // Check pairing timeout (first-time pairing only)
   if (pairingState == LgPairingState::WaitingForPin ||
       pairingState == LgPairingState::WaitingForApproval) {
     if (millis() > pairingTimeout) {
       Serial.println("[LG webOS] Pairing timeout");
       pairingState = LgPairingState::Failed;
-      disconnect();
+      markConnectionFailed();
     }
   }
+
+  // Handle automatic reconnect (non-blocking)
+  handleReconnect();
+}
+
+void LgWebOsTv::handleReconnect() {
+  // Only reconnect if in Reconnecting or Waking state
+  if (connectionState != LgConnectionState::Reconnecting &&
+      connectionState != LgConnectionState::Waking) {
+    return;
+  }
+
+  if (clientKey[0] == '\0') {
+    // No credential to use for reconnect
+    return;
+  }
+
+  unsigned long now = millis();
+
+  // Check if it's time to attempt reconnect
+  if (now < reconnectAttemptTime) {
+    return;
+  }
+
+  reconnectAttempts++;
+  Serial.print("[LG webOS] Reconnect attempt ");
+  Serial.println(reconnectAttempts);
+
+  connectionState = LgConnectionState::Connecting;
+  initiateConnection();
+
+  // Schedule next attempt in case this one fails
+  scheduleReconnect();
+}
+
+void LgWebOsTv::scheduleReconnect() {
+  unsigned long delay = getReconnectDelay();
+  reconnectAttemptTime = millis() + delay;
+
+  Serial.print("[LG webOS] Next reconnect in ");
+  Serial.print(delay / 1000);
+  Serial.println(" seconds");
+}
+
+unsigned long LgWebOsTv::getReconnectDelay() const {
+  // Exponential backoff: 2s, 4s, 8s, 16s, 30s (capped)
+  unsigned long delay = RECONNECT_INITIAL_DELAY_MS * (1 << reconnectAttempts);
+  return min(delay, RECONNECT_MAX_DELAY_MS);
+}
+
+void LgWebOsTv::resetReconnectState() {
+  reconnectAttempts = 0;
+  reconnectAttemptTime = 0;
+}
+
+void LgWebOsTv::markConnectionFailed() {
+  connectionState = LgConnectionState::Failed;
+  stopSession();
+  Serial.println("[LG webOS] Connection marked as FAILED");
 }
