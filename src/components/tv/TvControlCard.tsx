@@ -22,6 +22,8 @@ import {
   Play,
   Pause,
   SkipForward,
+  ChevronLeft,
+  ChevronRight,
 } from 'lucide-react-native';
 import { type Theme, useTheme } from '../../theme/theme';
 import type { Device } from '../../domain/device';
@@ -110,33 +112,6 @@ export function TvControlCard({ device, controller }: TvControlCardProps) {
 
   return (
     <View style={styles.card}>
-      <View style={styles.header}>
-        {renderKey(
-          'Cast',
-          'cast',
-          <Cast color={REMOTE_ACCENT} size={22} strokeWidth={2} />,
-          styles.headerButton
-        )}
-        <View style={styles.headerCenter}>
-          <Text style={styles.deviceName} numberOfLines={1}>
-            {device.name}
-          </Text>
-          <Text style={styles.deviceModel} numberOfLines={1}>
-            {device.modelId || 'TV Remote'}
-          </Text>
-        </View>
-        {renderKey(
-          'Power',
-          'power',
-          <Power
-            color={isPowerOn ? '#EF4444' : REMOTE_TEXT}
-            size={22}
-            strokeWidth={2}
-          />,
-          styles.headerButton
-        )}
-      </View>
-
       <View style={styles.remoteControlRow}>
         <View style={styles.rocker}>
           {renderKey(
@@ -187,83 +162,66 @@ export function TvControlCard({ device, controller }: TvControlCardProps) {
       </View>
 
       <View style={styles.remotePad}>
-        {renderKey(
-          'Menu',
-          'menu',
-          <Text style={styles.remoteText}>MENU</Text>,
-          [styles.remoteRoundKey, styles.remoteMenuKey]
-        )}
-        {renderKey(
-          'Up',
-          'up',
-          <Triangle
-            color={REMOTE_ACCENT}
-            fill={REMOTE_ACCENT}
-            size={16}
-            strokeWidth={0}
-          />,
-          [styles.remoteVerticalKey, styles.remoteUpKey]
-        )}
-        {renderKey(
-          'Back',
-          'back',
-          <Text style={styles.remoteText}>BACK</Text>,
-          [styles.remoteRoundKey, styles.remoteBackKey]
-        )}
-        {renderKey(
-          'Left',
-          'left',
-          <Triangle
-            color={REMOTE_ACCENT}
-            fill={REMOTE_ACCENT}
-            size={16}
-            strokeWidth={0}
-            style={styles.arrowLeft}
-          />,
-          [styles.remoteHorizontalKey, styles.remoteLeftKey]
-        )}
-        {renderKey(
-          'OK',
-          'ok',
-          <Text style={styles.okText}>OK</Text>,
-          [styles.remoteCenterKey]
-        )}
-        {renderKey(
-          'Right',
-          'right',
-          <Triangle
-            color={REMOTE_ACCENT}
-            fill={REMOTE_ACCENT}
-            size={16}
-            strokeWidth={0}
-            style={styles.arrowRight}
-          />,
-          [styles.remoteHorizontalKey, styles.remoteRightKey]
-        )}
-        {renderKey(
-          'Input',
-          'input',
-          <Text style={styles.remoteText}>INPUT</Text>,
-          [styles.remoteRoundKey, styles.remoteInputKey]
-        )}
-        {renderKey(
-          'Down',
-          'down',
-          <Triangle
-            color={REMOTE_ACCENT}
-            fill={REMOTE_ACCENT}
-            size={16}
-            strokeWidth={0}
-            style={styles.arrowDown}
-          />,
-          [styles.remoteVerticalKey, styles.remoteDownKey]
-        )}
-        {renderKey(
-          'Exit',
-          'exit',
-          <Text style={styles.remoteText}>EXIT</Text>,
-          [styles.remoteRoundKey, styles.remoteExitKey]
-        )}
+        {/* UP */}
+        <TouchableOpacity
+          style={[styles.directionButton, styles.directionUp]}
+          onPress={() => void sendCommand('up')}
+          activeOpacity={0.5}
+        >
+          <ChevronUp
+            color={REMOTE_TEXT}
+            size={26}
+            strokeWidth={2.5}
+          />
+        </TouchableOpacity>
+
+        {/* RIGHT */}
+        <TouchableOpacity
+          style={[styles.directionButton, styles.directionRight]}
+          onPress={() => void sendCommand('right')}
+          activeOpacity={0.5}
+        >
+          <ChevronRight
+            color={REMOTE_TEXT}
+            size={26}
+            strokeWidth={2.5}
+          />
+        </TouchableOpacity>
+
+        {/* DOWN */}
+        <TouchableOpacity
+          style={[styles.directionButton, styles.directionDown]}
+          onPress={() => void sendCommand('down')}
+          activeOpacity={0.5}
+        >
+          <ChevronDown
+            color={REMOTE_TEXT}
+            size={26}
+            strokeWidth={2.5}
+          />
+        </TouchableOpacity>
+
+        {/* LEFT */}
+        <TouchableOpacity
+          style={[styles.directionButton, styles.directionLeft]}
+          onPress={() => void sendCommand('left')}
+          activeOpacity={0.5}
+        >
+          <ChevronLeft
+            color={REMOTE_TEXT}
+            size={26}
+            strokeWidth={2.5}
+          />
+        </TouchableOpacity>
+
+        {/* CENTER / OK */}
+        <TouchableOpacity
+          style={styles.remoteCenterKey}
+          onPress={() => void sendCommand('ok')}
+          activeOpacity={0.7}
+        >
+          <Text style={styles.okText}>OK</Text>
+        </TouchableOpacity>
       </View>
 
       <View style={styles.mediaControls}>
@@ -422,12 +380,59 @@ const createStyles = (theme: Theme, remotePadSize: number) => {
       alignSelf: 'center',
       position: 'relative',
       backgroundColor: REMOTE_BG_MEDIUM,
-      borderRadius: remotePadSize * 0.18,
+      borderRadius: remotePadSize / 2,
+      borderWidth: 1,
+      borderColor: 'rgba(255, 255, 255, 0.05)',
       shadowColor: '#000000',
-      shadowOffset: { width: 0, height: 12 },
+      shadowOffset: {
+        width: 0,
+        height: 12,
+      },
       shadowOpacity: 0.4,
       shadowRadius: 24,
       elevation: 10,
+    },
+    directionButton: {
+      position: 'absolute',
+      width: remotePadSize * 0.34,
+      height: remotePadSize * 0.34,
+      alignItems: 'center',
+      justifyContent: 'center',
+      borderRadius: remotePadSize * 0.17,
+    },
+    directionUp: {
+      top: remotePadSize * 0.02,
+      left: remotePadSize * 0.33,
+    },
+    directionDown: {
+      bottom: remotePadSize * 0.02,
+      left: remotePadSize * 0.33,
+    },
+    directionLeft: {
+      left: remotePadSize * 0.02,
+      top: remotePadSize * 0.33,
+    },
+    directionRight: {
+      right: remotePadSize * 0.02,
+      top: remotePadSize * 0.33,
+    },
+    remoteCenterKey: {
+      position: 'absolute',
+      width: remotePadSize * 0.38,
+      height: remotePadSize * 0.38,
+      left: remotePadSize * 0.31,
+      top: remotePadSize * 0.31,
+      borderRadius: remotePadSize * 0.19,
+      backgroundColor: '#202023',
+      borderWidth: 1.5,
+      borderColor: 'rgba(255, 255, 255, 0.10)',
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    okText: {
+      color: REMOTE_TEXT,
+      fontSize: 15,
+      fontWeight: '700',
     },
     remoteRoundKey: {
       width: roundKeySize,
@@ -449,19 +454,6 @@ const createStyles = (theme: Theme, remotePadSize: number) => {
       borderRadius: horizontalKeyHeight / 2,
       position: 'absolute',
       backgroundColor: REMOTE_BG_LIGHT,
-    },
-    remoteCenterKey: {
-      width: centerKeySize,
-      height: centerKeySize,
-      borderRadius: centerKeySize / 2,
-      left: (remotePadSize - centerKeySize) / 2,
-      top: (remotePadSize - centerKeySize) / 2,
-      position: 'absolute',
-      backgroundColor: '#27272A',
-      borderWidth: 1.5,
-      borderColor: 'rgba(255, 255, 255, 0.12)',
-      alignItems: 'center',
-      justifyContent: 'center',
     },
     remoteMenuKey: {
       left: remotePadSize * 0.12,
@@ -500,12 +492,6 @@ const createStyles = (theme: Theme, remotePadSize: number) => {
       fontSize: 11,
       fontWeight: '700',
       letterSpacing: 0.3,
-    },
-    okText: {
-      color: REMOTE_TEXT,
-      fontSize: 19,
-      fontWeight: '800',
-      letterSpacing: 0.5,
     },
     arrowLeft: {
       transform: [{ rotate: '-90deg' }],
