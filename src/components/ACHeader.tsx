@@ -1,6 +1,12 @@
 import { BlurView } from "expo-blur";
 import { ChevronLeft } from "lucide-react-native";
-import { useEffect, useMemo, useRef, type ReactNode } from "react";
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  type ReactNode,
+  type RefObject,
+} from "react";
 import {
   Animated,
   StyleSheet,
@@ -12,6 +18,7 @@ import {
 import { type Theme, useTheme } from "../theme/theme";
 
 type ACHeaderProps = {
+  blurTarget?: RefObject<View | null>;
   eyebrow?: string;
   isScrolled: boolean;
   onBackPress?: () => void;
@@ -20,6 +27,7 @@ type ACHeaderProps = {
 };
 
 export function ACHeader({
+  blurTarget,
   eyebrow,
   isScrolled,
   onBackPress,
@@ -28,6 +36,10 @@ export function ACHeader({
 }: ACHeaderProps) {
   const theme = useTheme();
   const styles = useMemo(() => createStyles(theme), [theme]);
+  const blurTint =
+    theme.mode === "dark"
+      ? "systemChromeMaterialDark"
+      : "systemChromeMaterialLight";
   const glassOpacity = useRef(new Animated.Value(isScrolled ? 1 : 0)).current;
 
   useEffect(() => {
@@ -46,10 +58,11 @@ export function ACHeader({
           style={[styles.glassLayer, { opacity: glassOpacity }]}
         >
           <BlurView
-            experimentalBlurMethod="dimezisBlurView"
+            blurMethod={blurTarget ? "dimezisBlurView" : undefined}
+            blurTarget={blurTarget}
             intensity={28}
             style={StyleSheet.absoluteFill}
-            tint="systemChromeMaterialDark"
+            tint={blurTint}
           />
           <View style={styles.glassTint} />
           <View style={styles.topSeal} />
@@ -105,13 +118,13 @@ const createStyles = (theme: Theme) => StyleSheet.create({
     width: "100%",
   },
   glassLayer: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     borderBottomColor: theme.border,
     borderBottomWidth: 1,
     overflow: "hidden",
   },
   glassTint: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     backgroundColor: theme.overlays.glassTint,
   },
   topSeal: {

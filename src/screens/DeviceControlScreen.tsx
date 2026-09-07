@@ -60,6 +60,11 @@ export function DeviceControlScreen({ navigation, route }: DeviceControlScreenPr
         deviceId={deviceId}
         onBackPress={() => navigation.goBack()}
       />
+      // <View style={styles.screen}>
+      //   <Text style={styles.errorText}>
+      //     Control screen for {device.type} not implemented yet
+      //   </Text>
+      // </View>
     );
   }
 

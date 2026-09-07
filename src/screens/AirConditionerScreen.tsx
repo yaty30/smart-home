@@ -1,4 +1,5 @@
 import * as Haptics from "expo-haptics";
+import { BlurTargetView } from "expo-blur";
 import { useNavigation } from "@react-navigation/native";
 import {
   CalendarClock,
@@ -113,6 +114,7 @@ export function AirConditionerScreen({
   const latestTemperature = useRef(temperature);
   const latestFanSpeed = useRef<FanSpeed>(fanSpeed);
   const latestHeaderScrolled = useRef(false);
+  const headerBlurTargetRef = useRef<View | null>(null);
   const controlEnabledProgress = useRef(new Animated.Value(1)).current;
   const modeTemperatures = useRef<Partial<Record<AirConditionerMode, number>>>({
     auto: 24,
@@ -801,6 +803,7 @@ export function AirConditionerScreen({
         stickyHeaderIndices={[0]}
       >
         <ACHeader
+          blurTarget={headerBlurTargetRef}
           eyebrow={selectedRoomName}
           isScrolled={isHeaderScrolled}
           onBackPress={handleBackPress}
@@ -837,7 +840,7 @@ export function AirConditionerScreen({
           }
         />
 
-        <View style={styles.body}>
+        <BlurTargetView ref={headerBlurTargetRef} style={styles.body}>
           {!canControlDevice ? (
             <Text style={styles.connectionStatus}>{unavailableStatusText}</Text>
           ) : null}
@@ -893,7 +896,7 @@ export function AirConditionerScreen({
               onSelectMode: handleModeChange,
             }}
           />
-        </View>
+        </BlurTargetView>
       </ScrollView>
 
       <AcScheduleSheet
