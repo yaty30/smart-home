@@ -76,8 +76,6 @@ export class ControllerClient {
     switch (device.type) {
       case 'ac':
         return '/ac';
-      case 'tv':
-        return '/tv';
       case 'light':
         return '/light';
       default:

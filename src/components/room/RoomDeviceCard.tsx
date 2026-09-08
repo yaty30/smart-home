@@ -1,4 +1,4 @@
-import { AirVent, Lightbulb, Power, Tv } from 'lucide-react-native';
+import { AirVent, Lightbulb, Power } from 'lucide-react-native';
 import type { ComponentType } from 'react';
 import { useMemo } from 'react';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
@@ -19,7 +19,6 @@ type IconComponent = ComponentType<{
 const iconByDeviceType: Record<DeviceType, IconComponent> = {
   ac: AirVent,
   light: Lightbulb,
-  tv: Tv,
   fan: AirVent,
 };
 

@@ -35,7 +35,7 @@ export function AnimatedBottomNav({
 const createStyles = () =>
   StyleSheet.create({
     layer: {
-      ...StyleSheet.absoluteFillObject,
+      ...StyleSheet.absoluteFill,
       zIndex: 30,
     },
   });

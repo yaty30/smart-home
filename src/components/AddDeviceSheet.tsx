@@ -1,5 +1,5 @@
 import { Picker } from '@react-native-picker/picker';
-import { AirVent, Lightbulb, Tv } from 'lucide-react-native';
+import { AirVent, Lightbulb } from 'lucide-react-native';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Animated,
@@ -14,7 +14,7 @@ import { useSheetDismiss } from '../hooks/useSheetDismiss';
 import { type Theme, useTheme } from '../theme/theme';
 import { AppButton } from './AppButton';
 
-type DeviceType = 'ac' | 'tv' | 'light';
+type DeviceType = 'ac' | 'light';
 type DeviceBrand =
   | 'panasonic' | 'lg' | 'mitsubishi' | 'hitachi'
   | 'toshiba' | 'sharp' | 'fujitsu' | 'samsung' | 'midea';
@@ -40,7 +40,6 @@ export function AddDeviceSheet({ visible, onClose, onContinue }: AddDeviceSheetP
 
   const deviceTypes = [
     { type: 'ac' as DeviceType, label: 'Air Conditioner', icon: AirVent, enabled: true },
-    { type: 'tv' as DeviceType, label: 'TV', icon: Tv, enabled: true },
     { type: 'light' as DeviceType, label: 'Lamp', icon: Lightbulb, enabled: false },
   ];
 
@@ -103,8 +102,6 @@ export function AddDeviceSheet({ visible, onClose, onContinue }: AddDeviceSheetP
     setSelectedType(type);
     if (type === 'ac') {
       setSelectedBrand('panasonic');
-    } else if (type === 'tv') {
-      setSelectedBrand('lg');
     } else {
       setSelectedBrand(null);
     }
@@ -117,7 +114,7 @@ export function AddDeviceSheet({ visible, onClose, onContinue }: AddDeviceSheetP
     }
   };
 
-  const canContinue = (selectedType === 'ac' || selectedType === 'tv') && selectedBrand != null;
+  const canContinue = selectedType === 'ac' && selectedBrand != null;
 
   return (
     // animationType="slide" lets iOS handle the entrance natively.
@@ -180,7 +177,7 @@ export function AddDeviceSheet({ visible, onClose, onContinue }: AddDeviceSheetP
                 ))}
               </View>
 
-              {(selectedType === 'ac' || selectedType === 'tv') && (
+              {selectedType === 'ac' && (
                 <>
                   <Text style={[styles.sectionLabel, styles.sectionSpacing]}>Brand</Text>
                   <View style={styles.pickerWrapper}>
@@ -214,7 +211,7 @@ const createStyles = (theme: Theme) => StyleSheet.create({
     flex: 1,
   },
   positioner: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     justifyContent: 'flex-end',
   },
   sheet: {

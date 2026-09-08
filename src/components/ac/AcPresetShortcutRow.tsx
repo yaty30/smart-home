@@ -1,4 +1,3 @@
-import { Snowflake } from "lucide-react-native";
 import { useMemo } from "react";
 import {
   Alert,
@@ -9,7 +8,6 @@ import {
   View,
 } from "react-native";
 
-import { MODE_ICONS } from "../../constants/acModes";
 import type { DeviceState } from "../../domain/device";
 import { type Theme, useTheme } from "../../theme/theme";
 import type { AcPreset } from "../../types/acPreset";
@@ -41,7 +39,6 @@ export function AcPresetShortcutRow({
 }: AcPresetShortcutRowProps) {
   const theme = useTheme();
   const styles = useMemo(() => createStyles(theme), [theme]);
-  const modeIcons = useMemo(() => MODE_ICONS(theme), [theme]);
 
   if (presets.length === 0) {
     return null;

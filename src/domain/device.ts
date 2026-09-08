@@ -1,4 +1,4 @@
-export type DeviceType = "ac" | "tv" | "light" | "fan";
+export type DeviceType = "ac" | "light" | "fan";
 
 export type DeviceBrand =
   | "panasonic" | "lg" | "mitsubishi" | "hitachi"
@@ -35,7 +35,7 @@ export type Device = {
 
   roomId: string;
   controllerId: string;
-  controllerDeviceId?: string;  // ID on ESP32 side (for network devices like TVs)
+  controllerDeviceId?: string;
 
   type: DeviceType;
   brand: DeviceBrand;

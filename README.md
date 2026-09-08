@@ -2,8 +2,6 @@
 
 Smart Home AC Controller is a React Native app and ESP32 firmware pair for controlling room devices from a phone. The first-class use case is an infrared air-conditioner controller: the app gives the user a polished AC remote, schedule editor, room/device organization, and controller status, while an ESP32 on the same LAN translates those commands into IR signals.
 
-The firmware also includes early support for network TV discovery, pairing, and commands, so the ESP32 can act as a small room controller instead of only an IR blaster.
-
 ## Why this exists
 
 Most split AC units still expose their best control surface through an IR remote. That makes them awkward to integrate into a modern smart home because the current state lives in the remote, schedules are usually limited, and phone control depends on brand-specific cloud integrations.
@@ -21,12 +19,11 @@ This project keeps control local:
 The app lets a user:
 
 - Create rooms and assign controllers to them.
-- Add AC, TV, light, and fan devices.
+- Add AC, light, and fan devices.
 - Control AC power, temperature, mode, fan speed, vertical airflow, horizontal airflow, quiet mode, and powerful mode.
 - Save AC presets for common comfort settings.
 - Create AC schedules with start/end behavior, repeat days, temperature, mode, fan, and airflow.
 - See whether each controller/device is online, syncing, offline, or connected.
-- Discover and pair supported TVs through the ESP32 controller.
 
 ## Architecture
 
@@ -41,11 +38,11 @@ The app is organized around React contexts and domain services:
 
 - `App.tsx` wires navigation, theme, room/controller/device providers, and background controller status polling.
 - `src/store/` owns in-app room, controller, device, and debug state.
-- `src/domain/` defines the core room, device, TV, and controller models.
-- `src/screens/` contains product flows such as home, rooms, controller pairing, AC control, TV discovery, and settings.
+- `src/domain/` defines the core room, device, and controller models.
+- `src/screens/` contains product flows such as home, rooms, controller pairing, AC control, and settings.
 - `src/context/DeviceConnectionContext.tsx` manages live controller connectivity for a selected device. It fetches REST status, opens a WebSocket, authenticates, keeps a ping loop, applies incoming device state, and marks devices offline when the controller is unreachable.
 - `src/api/` contains focused API clients for AC commands and AC schedules.
-- `src/services/` contains controller, pairing, status, health, TV, and device services.
+- `src/services/` contains controller, pairing, status, health, and device services.
 
 The app currently pairs controllers manually by asking for the ESP32 host/IP address and token. The intended BLE provisioning flow is documented in [esp32_connection.md](./esp32_connection.md).
 
@@ -58,13 +55,13 @@ The firmware runs an Arduino-style loop:
 3. Connect to Wi-Fi.
 4. Start the HTTP server on port `80`.
 5. Start the WebSocket server on port `81` at `/ws`.
-6. Initialize AC schedule execution and TV management.
-7. Continuously handle HTTP, WebSocket, pairing button, queued IR commands, schedules, and TV events.
+6. Initialize AC schedule execution.
+7. Continuously handle HTTP, WebSocket, pairing button, queued IR commands, and schedules.
 
 Important firmware files:
 
 - `esp32/core/core.ino`: firmware entrypoint.
-- `esp32/core/HttpServer.cpp`: REST endpoints for status, AC control, schedules, pairing completion, Wi-Fi info, and TV operations.
+- `esp32/core/HttpServer.cpp`: REST endpoints for status, AC control, schedules, pairing completion, and Wi-Fi info.
 - `esp32/core/WebSocketServer.cpp`: live state, auth, ping/pong, and command message handling.
 - `esp32/core/ACController.cpp`: queues IR state changes before sending.
 - `esp32/core/src/ac/`: brand-specific AC drivers built on `IRremoteESP8266`.
@@ -84,7 +81,7 @@ The app and ESP32 communicate locally over LAN after the controller has joined W
 
 App REST requests include `Authorization: Bearer <token>`. The WebSocket requires an auth message containing the same token before it accepts state or command traffic.
 
-Implementation note: the checked-in firmware visibly enforces token auth for WebSocket traffic and `/pair/complete`. The REST clients already send bearer auth for status, AC, schedule, and TV APIs, so the firmware should enforce that header on all private endpoints before this is used outside a trusted development network.
+Implementation note: the checked-in firmware visibly enforces token auth for WebSocket traffic and `/pair/complete`. The REST clients already send bearer auth for status, AC, and schedule APIs, so the firmware should enforce that header on all private endpoints before this is used outside a trusted development network.
 
 More detail:
 

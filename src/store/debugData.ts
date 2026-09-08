@@ -69,17 +69,6 @@ export const DEBUG_DEVICES: Device[] = [
     },
   },
   {
-    id: 'debug-device-living-tv',
-    name: 'TV',
-    roomId: 'debug-room-living',
-    controllerId: 'debug-controller-living',
-    type: 'tv',
-    brand: 'lg',
-    transport: 'ir',
-    capabilities: { power: true },
-    state: { power: false, syncStatus: 'synced' },
-  },
-  {
     id: 'debug-device-living-lamp',
     name: 'Floor Lamp',
     roomId: 'debug-room-living',

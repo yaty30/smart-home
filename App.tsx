@@ -28,7 +28,6 @@ import { DeviceControlScreen } from "./src/screens/DeviceControlScreen";
 import { SettingsScreen } from "./src/screens/SettingsScreen";
 import { ControllersScreen } from "./src/screens/ControllersScreen";
 import { PairControllerScreen } from "./src/screens/PairControllerScreen";
-import { TvDiscoveryScreen } from "./src/screens/TvDiscoveryScreen";
 import {
   ThemeProvider,
   type Theme,
@@ -190,7 +189,6 @@ function AppStack() {
       <Stack.Screen component={DeviceControlScreen} name="DeviceControl" />
       <Stack.Screen component={ControllersScreen} name="Controllers" />
       <Stack.Screen component={PairControllerScreen} name="PairController" />
-      <Stack.Screen component={TvDiscoveryScreen} name="TvDiscovery" />
     </Stack.Navigator>
   );
 }

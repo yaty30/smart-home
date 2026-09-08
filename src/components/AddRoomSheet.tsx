@@ -238,7 +238,7 @@ const createStyles = (theme: Theme) =>
       flex: 1,
     },
     keyboardAvoiding: {
-      ...StyleSheet.absoluteFillObject,
+      ...StyleSheet.absoluteFill,
       justifyContent: "flex-end",
     },
     sheet: {
