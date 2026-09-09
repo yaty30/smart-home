@@ -233,6 +233,7 @@ const createStyles = (theme: Theme) => StyleSheet.create({
   },
   content: {
     paddingHorizontal: 24,
+    paddingVertical: 14,
   },
   title: {
     fontSize: 24,
