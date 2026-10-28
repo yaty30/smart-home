@@ -9,7 +9,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Animated,
   AppState,
-  type AppStateStatus,
   type LayoutChangeEvent,
   StatusBar,
   StyleSheet,
@@ -231,7 +230,7 @@ function DeviceStatusSynchronizer() {
     markControllerDevicesOffline,
     markControllerDevicesSyncing,
   } = useDevices();
-  const appState = useRef<AppStateStatus>(AppState.currentState);
+  const appState = useRef<string | null | undefined>(AppState.currentState);
   const controllersRef = useRef(controllers);
   const loadingRef = useRef(controllersLoading || devicesLoading);
   const lastRefreshStartedAt = useRef(0);
@@ -367,9 +366,7 @@ function AppRoot() {
   return (
     <View style={styles.appRoot}>
       <StatusBar
-        backgroundColor={theme.root}
         barStyle={mode === "light" ? "dark-content" : "light-content"}
-        translucent={false}
       />
       <RoomsProvider>
         <ControllersProvider>

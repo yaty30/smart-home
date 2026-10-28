@@ -4,6 +4,7 @@ import {
   useEffect,
   useMemo,
   useRef,
+  type ComponentRef,
   type ReactNode,
   type RefObject,
 } from "react";
@@ -18,7 +19,7 @@ import {
 import { type Theme, useTheme } from "../theme/theme";
 
 type ACHeaderProps = {
-  blurTarget?: RefObject<View | null>;
+  blurTarget?: RefObject<ComponentRef<typeof View> | null>;
   eyebrow?: string;
   isScrolled: boolean;
   onBackPress?: () => void;

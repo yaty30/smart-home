@@ -8,7 +8,14 @@ import {
   Rocket,
   Star,
 } from "lucide-react-native";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ComponentRef,
+} from "react";
 import {
   Alert,
   Animated,
@@ -114,7 +121,7 @@ export function AirConditionerScreen({
   const latestTemperature = useRef(temperature);
   const latestFanSpeed = useRef<FanSpeed>(fanSpeed);
   const latestHeaderScrolled = useRef(false);
-  const headerBlurTargetRef = useRef<View | null>(null);
+  const headerBlurTargetRef = useRef<ComponentRef<typeof View>>(null);
   const controlEnabledProgress = useRef(new Animated.Value(1)).current;
   const modeTemperatures = useRef<Partial<Record<AirConditionerMode, number>>>({
     auto: 24,

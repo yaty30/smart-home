@@ -3,7 +3,7 @@ import type { Controller } from '../domain/controller';
 import { isDebugMode } from '../config/debug';
 
 export class ControllerHealthService {
-  private intervalId: NodeJS.Timeout | null = null;
+  private intervalId: ReturnType<typeof setInterval> | null = null;
   private healthCheckInterval = 30000; // 30 seconds
 
   start(
