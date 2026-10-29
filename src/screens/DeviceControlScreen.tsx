@@ -5,7 +5,6 @@ import { useControllers } from '../store/controllers';
 import { type Theme, useTheme } from '../theme/theme';
 import type { RootStackScreenProps } from '../navigation/types';
 import { AirConditionerScreen } from './AirConditionerScreen';
-import { TvControlScreen } from './TvControlScreen';
 import { useEffect } from 'react';
 import { deviceService } from '../services/deviceService';
 import { DeviceConnectionProvider } from '../context/DeviceConnectionContext';
@@ -51,15 +50,6 @@ export function DeviceControlScreen({ navigation, route }: DeviceControlScreenPr
           onBackPress={() => navigation.goBack()}
         />
       </DeviceConnectionProvider>
-    );
-  }
-
-  if (device.type === 'tv') {
-    return (
-      <TvControlScreen
-        deviceId={deviceId}
-        onBackPress={() => navigation.goBack()}
-      />
     );
   }
 

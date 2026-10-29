@@ -9,3 +9,6 @@ yarn-error.log*
 
 .env
 /mi_py
+
+.pio/
+esp32/.pio/

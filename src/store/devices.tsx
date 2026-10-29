@@ -1,6 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { createContext, type PropsWithChildren, useCallback, useContext, useEffect, useMemo, useState } from 'react';
-import type { Device } from '../domain/device';
+import type { Device, DeviceType } from '../domain/device';
 import { isDebugMode } from '../config/debug';
 import { DEBUG_DEVICES } from './debugData';
 import {
@@ -32,23 +32,35 @@ type DevicesContextValue = {
 const DevicesContext = createContext<DevicesContextValue | null>(null);
 
 const DEVICES_STORAGE_KEY = 'smartHome.devices';
+const SUPPORTED_DEVICE_TYPES: readonly DeviceType[] = ['ac', 'light', 'fan'];
 
-const isDeviceArray = (value: unknown): value is Device[] => {
-  if (!Array.isArray(value)) {
+const isSupportedDeviceType = (value: unknown): value is DeviceType =>
+  typeof value === 'string' &&
+  SUPPORTED_DEVICE_TYPES.includes(value as DeviceType);
+
+const isDevice = (value: unknown): value is Device => {
+  if (typeof value !== 'object' || value === null) {
     return false;
   }
-  return value.every(
-    (item) =>
-      typeof item === 'object' &&
-      item !== null &&
-      typeof item.id === 'string' &&
-      typeof item.name === 'string' &&
-      typeof item.roomId === 'string' &&
-      typeof item.controllerId === 'string' &&
-      typeof item.type === 'string' &&
-      typeof item.brand === 'string' &&
-      typeof item.transport === 'string'
+
+  const item = value as Partial<Device>;
+  return (
+    typeof item.id === 'string' &&
+    typeof item.name === 'string' &&
+    typeof item.roomId === 'string' &&
+    typeof item.controllerId === 'string' &&
+    isSupportedDeviceType(item.type) &&
+    typeof item.brand === 'string' &&
+    typeof item.transport === 'string'
   );
+};
+
+const parseDeviceArray = (value: unknown): Device[] | null => {
+  if (!Array.isArray(value)) {
+    return null;
+  }
+
+  return value.filter(isDevice);
 };
 
 const persistedDeviceState = (device: Device): Device['state'] => ({
@@ -103,8 +115,9 @@ export function DevicesProvider({ children }: PropsWithChildren) {
         const stored = await AsyncStorage.getItem(DEVICES_STORAGE_KEY);
         if (stored && isMounted) {
           const parsed = JSON.parse(stored) as unknown;
-          if (isDeviceArray(parsed)) {
-            const sanitized = parsed.map(sanitizeDeviceForRuntime);
+          const parsedDevices = parseDeviceArray(parsed);
+          if (parsedDevices) {
+            const sanitized = parsedDevices.map(sanitizeDeviceForRuntime);
             setDevices(sanitized);
             void AsyncStorage.setItem(
               DEVICES_STORAGE_KEY,
