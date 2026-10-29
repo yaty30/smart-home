@@ -9,7 +9,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Animated,
   AppState,
-  type AppStateStatus,
   type LayoutChangeEvent,
   StatusBar,
   StyleSheet,
@@ -28,7 +27,6 @@ import { DeviceControlScreen } from "./src/screens/DeviceControlScreen";
 import { SettingsScreen } from "./src/screens/SettingsScreen";
 import { ControllersScreen } from "./src/screens/ControllersScreen";
 import { PairControllerScreen } from "./src/screens/PairControllerScreen";
-import { TvDiscoveryScreen } from "./src/screens/TvDiscoveryScreen";
 import {
   ThemeProvider,
   type Theme,
@@ -190,7 +188,6 @@ function AppStack() {
       <Stack.Screen component={DeviceControlScreen} name="DeviceControl" />
       <Stack.Screen component={ControllersScreen} name="Controllers" />
       <Stack.Screen component={PairControllerScreen} name="PairController" />
-      <Stack.Screen component={TvDiscoveryScreen} name="TvDiscovery" />
     </Stack.Navigator>
   );
 }
@@ -233,7 +230,7 @@ function DeviceStatusSynchronizer() {
     markControllerDevicesOffline,
     markControllerDevicesSyncing,
   } = useDevices();
-  const appState = useRef<AppStateStatus>(AppState.currentState);
+  const appState = useRef<string | null | undefined>(AppState.currentState);
   const controllersRef = useRef(controllers);
   const loadingRef = useRef(controllersLoading || devicesLoading);
   const lastRefreshStartedAt = useRef(0);
@@ -369,9 +366,7 @@ function AppRoot() {
   return (
     <View style={styles.appRoot}>
       <StatusBar
-        backgroundColor={theme.root}
         barStyle={mode === "light" ? "dark-content" : "light-content"}
-        translucent={false}
       />
       <RoomsProvider>
         <ControllersProvider>

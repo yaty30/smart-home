@@ -163,7 +163,6 @@ The main firmware loop in `esp32/core/core.ino` repeatedly calls:
 - `handlePairingButton()`
 - `processQueuedIR()`
 - `handleScheduleExecution()`
-- `tvManager.handle()`
 
 For AC control, the important path is:
 
