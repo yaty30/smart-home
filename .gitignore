@@ -10,6 +10,5 @@ yarn-error.log*
 .env
 /mi_py
 
-# PlatformIO build artifacts
 .pio/
 esp32/.pio/
